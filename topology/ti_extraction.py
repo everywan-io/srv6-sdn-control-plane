@@ -92,6 +92,8 @@ def topology_information_extraction(opts):
 		mgmtip_to_routerid = dict()
 		# Mapping (routerid, intf) to ip address
 		intf_to_ip = dict()
+		# Mapping interface name to the associated prefix
+		intf_to_prefix = dict()
 
 		# Edges set
 		edges = set()
@@ -377,6 +379,7 @@ def topology_information_extraction(opts):
 			# Get interface prefixes of the router
 			if routerid_to_interfaces.get(r) != None:
 				prefixes = routerid_to_interfaces[r]
+				intf_to_prefix[r] = {v : k for (k,v) in prefixes.iteritems()}
 			# Get loopback ip address of the router
 			if routerid_to_loopbackip.get(r) != None:
 				loopbackip = routerid_to_loopbackip[r]
@@ -386,7 +389,7 @@ def topology_information_extraction(opts):
 			# Get interface IPs of the router
 			if intf_to_ip.get(r) != None:
 				interfaces = intf_to_ip[r]
-			G.add_node(r, fillcolor="red", style="filled", shape="ellipse", prefixes= prefixes, interfaces=interfaces,
+			G.add_node(r, fillcolor="red", style="filled", shape="ellipse", prefixes=prefixes, interfaces=interfaces,
 				loopbackip=loopbackip, mgmtip=mgmtip, type="router")
 
 		# Add stub networks to the graph
@@ -404,26 +407,24 @@ def topology_information_extraction(opts):
 			if edge_to_netprefix.get(e) != None:
 				net = edge_to_netprefix[e]
 			# Get the name of the left interface
-			if routerid_to_interfaces.get(e[0]) != None:
-				lhs_intf = routerid_to_interfaces[e[0]]
-				lhs_intf = lhs_intf.keys()[lhs_intf.values().index(net)]
+			if intf_to_prefix.get(e[0]) != None and intf_to_prefix[e[0]].get(net) != None :
+				lhs_intf = intf_to_prefix[e[0]][net]
 			# Get the ip address of the left interface
 			if intf_to_ip.get(e[0]) and intf_to_ip[e[0]].get(lhs_intf):
 				lhs_ip = intf_to_ip[e[0]][lhs_intf]
 			# Get the name of the right interface
-			if routerid_to_interfaces.get(e[1]) != None:
-				rhs_intf = routerid_to_interfaces[e[1]]
-				rhs_intf = rhs_intf.keys()[rhs_intf.values().index(net)]
+			if intf_to_prefix.get(e[1]) != None and intf_to_prefix[e[1]].get(net) != None :
+				rhs_intf = intf_to_prefix[e[1]][net]
 			# Get the ip address of the right interface
 			if intf_to_ip.get(e[1]) and intf_to_ip[e[1]].get(rhs_intf):
 				rhs_ip = intf_to_ip[e[1]][rhs_intf]
 			# Add edge to the graph
 			if (e[0] in nodes and e[1] in stub_networks.keys()) or (e[1] in nodes and e[0] in stub_networks.keys()):
 				# This is a stub network, no label on the edge
-				G.add_edge(*e, label="", lhs_intf=lhs_intf, lhs_ip=lhs_ip, rhs_intf=rhs_intf, rhs_ip=rhs_ip, net=net)
+				G.add_edge(*e, label="", fontsize=9, lhs_intf=lhs_intf, lhs_ip=lhs_ip, rhs_intf=rhs_intf, rhs_ip=rhs_ip, net=net)
 			elif (e[0] in nodes and e[1] in nodes):
 				# This is a transit network, put a label on the edge
-				G.add_edge(*e, label=net, lhs_intf=lhs_intf, lhs_ip=lhs_ip, rhs_intf=rhs_intf, rhs_ip=rhs_ip, net=net)
+				G.add_edge(*e, label=net, fontsize=9, lhs_intf=lhs_intf, lhs_ip=lhs_ip, rhs_intf=rhs_intf, rhs_ip=rhs_ip, net=net)
 
 		# Dump relevant information of the network graph
 		dump_topo(G)
