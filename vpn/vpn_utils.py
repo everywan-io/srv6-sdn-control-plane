@@ -79,7 +79,7 @@ def reconfigure_addressing_plan(router, port, intf, old_prefix, new_prefix, old_
 		tn.write("q" + "\r\n")
 		# Close privileged mode
 		tn.write("q" + "\r\n")
-		print tn.read_all()
+		#print tn.read_all()
 		# Close telnet
 		tn.close()
 	except socket.error:

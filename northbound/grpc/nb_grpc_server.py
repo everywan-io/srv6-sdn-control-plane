@@ -37,30 +37,36 @@ import grpc
 import os
 from itertools import islice
 
-# Folder of the dump
-VPN_FOLDER = "../../vpn"
+# Folders
+CONTROL_PLANE_FOLDER = "/home/user/repos/srv6-sdn-control-plane/"
+VPN_FOLDER = CONTROL_PLANE_FOLDER + "vpn/"
+SB_GRPC_FOLDER = CONTROL_PLANE_FOLDER + "southbound/grpc/"
+PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
 
 # Add path of gRPC APIs
 import sys
-# Add path of gRPC APIs
-sys.path.append("../../grpc")
+# Add path of proto files
+sys.path.append(PROTO_FOLDER)
 # Add path of VPN APIs
 sys.path.append(VPN_FOLDER)
+# Add path of VPN APIs
+sys.path.append(SB_GRPC_FOLDER)
 
 from vpn_utils import *
 
 import srv6_vpn_pb2_grpc
 import srv6_vpn_pb2
 
+from sb_grpc_client import *
+
+# ipaddress
 from ipaddress import IPv6Address
 from ipaddress import IPv6Network
 from ipaddress import IPv6Interface
 
+# NetworkX
 import networkx as nx
 from networkx.readwrite import json_graph
-
-from grpc_client import *
-
 
 
 # Global variables definition
@@ -86,7 +92,7 @@ TOPOLOGY_FILE = "../../topology/topo_extraction/topology.json"
 # Loopback prefix used by routers
 LOOPBACK_PREFIX = 'fdff::/16'
 # VPN file
-VPN_FILE = "%s/vpn.json" % (VPN_FOLDER)
+VPN_FILE = "%svpn.json" % (VPN_FOLDER)
 # Linux kernel supports up to 2^32 different tables
 MAX_TABLE_ID = 2**32  # 2^32
 

@@ -3,6 +3,15 @@
 import grpc
 import json
 
+
+# Folders
+CONTROL_PLANE_FOLDER = "~/repos/srv6-sdn-control-plane/"
+PROTO_FOLDER = CONTROL_PLANE_FOLDER + "~/repos/srv6-sdn-proto/"
+
+import sys
+# Add path of proto files
+sys.path.append(PROTO_FOLDER)
+
 import srv6_explicit_path_pb2_grpc
 import srv6_explicit_path_pb2
 

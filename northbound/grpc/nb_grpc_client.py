@@ -27,14 +27,10 @@ import grpc
 
 import sys
 # Add path of gRPC APIs
-sys.path.append("../../grpc")
-# Add path of VPN APIs
-sys.path.append("../../vpn")
+sys.path.append("/home/user/repos/srv6-sdn-proto/")
 
 import srv6_vpn_pb2_grpc
 import srv6_vpn_pb2
-
-from vpn_utils import *
 
 # Define wheter to use SSL or not
 SECURE = False
@@ -131,31 +127,3 @@ def print_vpns():
             print intf
         print
         i += 1
-
-
-if __name__ == '__main__':
-     # Create VPNs for testing purposes
-
-    name = 'research'
-    interfaces = [('0.0.0.1', 'ads1-eth3', '1111::1/64'),('0.0.0.2', 'ads2-eth3', '1211::1/64')]
-    tenant_id = 10
-    intent = VPNIntent(name, interfaces, tenant_id)
-    create_vpn(intent)
-
-    name = 'research'
-    interfaces = [('0.0.0.1', 'ads1-eth4', '2111::1/64'),('0.0.0.3', 'sur1-eth3', '2211::1/64'), ('0.0.0.3', 'sur1-eth4', '2311::1/64')]
-    tenant_id = 20
-    intent = VPNIntent(name, interfaces, tenant_id)
-    create_vpn(intent)
-
-    '''
-    remove_vpn('research', 20)
-
-    name = 'research'
-    interfaces = [('0.0.0.1', 'ads1-eth4', '3111::1/64'),('0.0.0.2', 'ads2-eth4', '3211::1/64'), ('0.0.0.3', 'sur1-eth4', '3311::1/64')]
-    tenant_id = 20
-    intent = VPNIntent(name, interfaces, tenant_id)
-    create_vpn(intent)
-    '''
-
-    print_vpns()
