@@ -49,13 +49,16 @@ import sys
 sys.path.append(PROTO_FOLDER)
 # Add path of VPN APIs
 sys.path.append(VPN_FOLDER)
-# Add path of VPN APIs
+# Add path of gRPC APIs
 sys.path.append(SB_GRPC_FOLDER)
 
 from vpn_utils import *
 
-import srv6_vpn_pb2_grpc
-import srv6_vpn_pb2
+import srv6_vpn_nb_pb2_grpc
+import srv6_vpn_nb_pb2
+
+import srv6_vpn_msg_pb2_grpc
+import srv6_vpn_msg_pb2
 
 from sb_grpc_client import *
 
@@ -88,29 +91,31 @@ CERTIFICATE = "cert_server.pem"
 KEY = "key_server.pem"
 
 # Topology file
-TOPOLOGY_FILE = "../../topology/topo_extraction/topology.json"
+TOPOLOGY_FILE = CONTROL_PLANE_FOLDER + "topology/topo_extraction/topology.json"
 # Loopback prefix used by routers
 LOOPBACK_PREFIX = 'fdff::/16'
 # VPN file
 VPN_FILE = "%svpn.json" % (VPN_FOLDER)
 # Linux kernel supports up to 2^32 different tables
-MAX_TABLE_ID = 2**32  # 2^32
+MAX_tableid = 2**32  # 2^32
 
 # Check if VPN_FOLDER exists, if not create it
 if not os.path.exists(VPN_FOLDER):
     os.makedirs(VPN_FOLDER)
 
 
+routerid_to_mgmtip = {"0.0.0.1": "2000::1", "0.0.0.2": "2000::2", "0.0.0.3": "2000::3"}
+
 class VPNIntentGenerator:
     def __init__(self):
        # Mapping VPN to intent
         self.vpn_to_intent = dict()
 
-    def get_vpn_list(self):
+    def get_vpns(self):
         # Return the list of VPN names
         return self.vpn_to_intent.keys()
 
-    def add_new_intent(self, intent):
+    def add_intent(self, intent):
         vpn_name = intent.name
         if self.vpn_to_intent.get(vpn_name):
             # The VPN already has an intent
@@ -143,47 +148,47 @@ class TableIDAllocator:
         self.vpn_to_tableid = dict()
         self.tableid_to_tenantid = dict()
         self.reusable_tableids = set()
-        self.last_allocated_table_id = -1
+        self.last_allocated_tableid = -1
 
-    def get_new_table_id(self, vpn_name, tenant_id):
+    def get_new_tableid(self, vpn_name, tenantid):
         if self.vpn_to_tableid.get(vpn_name):
             # The VPN already has an associated table ID
             return -1
         else:
             # Check if a reusable table id is available
             if len(self.reusable_tableids) > 0:
-                table_id = self.reusable_tableids.pop()
+                tableid = self.reusable_tableids.pop()
             else:
                 # If not, get a new table ID
-                self.last_allocated_table_id += 1 
-                while self.last_allocated_table_id in [0, 1, 253, 254, 255]:
+                self.last_allocated_tableid += 1
+                while self.last_allocated_tableid in [0, 1, 253, 254, 255]:
                     # Skip reserved table IDs
-                    self.last_allocated_table_id += 1
-                table_id = self.last_allocated_table_id
+                    self.last_allocated_tableid += 1
+                tableid = self.last_allocated_tableid
             # Associate the table ID to the VPN name
-            self.vpn_to_tableid[vpn_name] = table_id
+            self.vpn_to_tableid[vpn_name] = tableid
             # Associate the table ID to the tenant ID
-            self.tableid_to_tenantid[table_id] = tenant_id
+            self.tableid_to_tenantid[tableid] = tenantid
             # And return
-            return table_id
+            return tableid
 
-    def get_table_id(self, vpn_name):
+    def get_tableid(self, vpn_name):
       # Return the table ID associated to the VPN name
       # if not exists return -1
       return self.vpn_to_tableid.get(vpn_name, -1)
 
-    def release_table_id(self, vpn_name):
+    def release_tableid(self, vpn_name):
       if self.vpn_to_tableid.get(vpn_name):
         # The VPN has an associated table ID
-        table_id = self.vpn_to_tableid[vpn_name]
+        tableid = self.vpn_to_tableid[vpn_name]
         # delete correspondence
         del self.vpn_to_tableid[vpn_name]
         # Delete the association table ID - tenant ID
-        del self.tableid_to_tenantid[table_id]
+        del self.tableid_to_tenantid[tableid]
         # Mark the table ID as reusable
-        self.reusable_tableids.add(table_id)
+        self.reusable_tableids.add(tableid)
         # ...and return table ID
-        return table_id
+        return tableid
       else:
         # The VPN has not an associated table ID
         return -1
@@ -191,25 +196,25 @@ class TableIDAllocator:
 
 class SIDGenerator:
 
-    def get_sid(self, loopback_prefix, table_id):
+    def get_sid(self, loopback_prefix, tableid):
         # A SID has three components
         # the loopback prefix of the router
-        loopback_net = IPv6Network(unicode(loopback_prefix))
+        loopbacknet = IPv6Network(unicode(loopback_prefix))
         # a prefix which identifies the SIDs class
-        sid_net = next(islice(loopback_net.subnets(prefixlen_diff=1), 1, 2))
+        sid_net = next(islice(loopbacknet.subnets(prefixlen_diff=1), 1, 2))
         # the identifier of the VPN (corresponding to the table ID)
-        sid = next(islice(sid_net.hosts(), table_id, table_id+1)).__str__()
+        sid = next(islice(sid_net.hosts(), tableid-1, tableid)).__str__()
         # Return the SID
         return sid
 
 
-class VPNHandler(srv6_vpn_pb2_grpc.SRv6VPNHandlerServicer):
+class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
     """gRPC request handler"""
     
     def __init__(self):
-        self.srv6_vpn_handler = SRv6VPNHandler()
+        self.srv6_vpn_handler = SRv6SouthboundVPN()
         self.intent_generator = VPNIntentGenerator()
-        self.table_id_allocator = TableIDAllocator()
+        self.tableid_allocator = TableIDAllocator()
         self.sid_generator = SIDGenerator()
         self.flush_vpns()
         self.load_dump()
@@ -219,283 +224,285 @@ class VPNHandler(srv6_vpn_pb2_grpc.SRv6VPNHandlerServicer):
     def _get_vpns(self):
         # Get the network topology
         topology = self.read_json_file(TOPOLOGY_FILE)
-        # Get the network prefixes associated to the interfaces
-        routerid_to_prefixes = nx.get_node_attributes(topology,'prefixes')
-        # Get the ip addresses associated to the interfaces
-        routerid_to_interfaces = nx.get_node_attributes(topology,'interfaces')
-        # Get the loopback ip address of the routers
-        routerid_to_loopbackip = nx.get_node_attributes(topology,'loopbackip')
-        # Get the loopback prefixes associated to the routers
-        routerid_to_loopbacknet = dict()
-        for router in routerid_to_prefixes:
-            # Scan all the prefixes and search for the loopback prefix
-            for intf in routerid_to_prefixes[router]:
-                net = routerid_to_prefixes[router][intf]
-                if IPv6Network(unicode(net)).subnet_of(IPv6Network(unicode(LOOPBACK_PREFIX))):
-                    # The prefix belongs to the loopback prefixes net
-                    routerid_to_loopbacknet[router] = net
-        # Get the management ip addresses of the routers
-        routerid_to_mgmtip = nx.get_node_attributes(topology,'mgmtip')
-        # Mapping interface name to prefix net
-        lintf_to_prefix = {v : n1 for (n1, n2),v in nx.get_edge_attributes(topology, 'lhs_intf').iteritems()}
-        rintf_to_prefix = {v : n2 for (n1, n2),v in nx.get_edge_attributes(topology, 'rhs_intf').iteritems()}
-        # Mapping ip address to prefix net
-        lip_to_prefix = {v : n1 for (n1, n2),v in nx.get_edge_attributes(topology, 'lhs_ip').iteritems()}
-        rip_to_prefix = {v : n2 for (n1, n2),v in nx.get_edge_attributes(topology, 'rhs_ip').iteritems()}
-        # Mapping prefix net to ip address
-        prefix_to_lip = {v : k for k,v in lip_to_prefix.iteritems()}
-        prefix_to_rip = {v : k for k,v in rip_to_prefix.iteritems()}
-        # Mapping prefix net to interface name
-        prefix_to_lintf = {v : k for k,v in lintf_to_prefix.iteritems()}
-        prefix_to_rintf = {v : k for k,v in rintf_to_prefix.iteritems()}
-        # Mapping interface name to ip address
-        intf_to_ip = dict()
-        for prefix in prefix_to_lip:
-            # Get ip address associated to the prefix
-            lip = prefix_to_lip[prefix]
-            # Get interface name associated to the prefix
-            lintf = prefix_to_lintf[prefix]
-            # Add the correspondence to the mapping
-            intf_to_ip[lintf] = lip
-        for prefix in prefix_to_rip:
-            # Get ip address associated to the prefix
-            rip = prefix_to_rip[prefix]
-            # Get interface name associated to the prefix
-            rintf = prefix_to_rintf[prefix]
-            # Add the correspondence to the mapping
-            intf_to_ip[rintf] = rip
+        # Get the loopback prefixes of the routers
+        routerid_to_loopbacknet = nx.get_node_attributes(topology,'loopbacknet')
         # Re-create the VPNs starting from the controller state
-        for vpn_name in self.intent_generator.get_vpn_list():
-            # Get the VPN intent
+        for vpn_name in self.intent_generator.get_vpns():
             intent = self.intent_generator.get_intent(vpn_name)
-            # Get the interfaces
-            interfaces = intent.interfaces
-            # Get the tenant ID
-            tenant_id = intent.tenant_id
-            # Retrieve routers to be added to the VPN
-            routers = {intf[0] for intf in interfaces}
-            # Get the table ID
-            table_id = self.table_id_allocator.get_table_id(vpn_name)
-            # Mapping interface name to the private address
-            intf_to_private_addr = dict()
-            for intf in intent.interfaces:
-                if intf_to_private_addr.get(intf[0]) == None:
-                    intf_to_private_addr[intf[0]] = dict()
-                intf_to_private_addr[intf[0]][intf[1]] = intf[2]
-            # Create the VPN
-            for router in routers:
-                # Get management ip address of the router
-                router_mgmt = routerid_to_mgmtip[router]
-                # Get loopback prefix of the router
-                loopback_prefix = routerid_to_loopbacknet[router]
-                # Get the SID
-                sid = self.sid_generator.get_sid(loopback_prefix, table_id)
-                # Send the creation command to the router
-                if self.srv6_vpn_handler.create_vpn(router_mgmt, vpn_name, table_id, sid) == False:
-                    return srv6_vpn_pb2.SRv6VPNReply(message="")
-                # Add interfaces to the VPN
-                for intf in interfaces:
-                    if router == intf[0]:
-                        # Interface is local to the router
-                        # Get interface name
-                        intf_name = intf[1]
-                        # Get the ip address to add to the interface
-                        new_ipaddr = IPv6Interface(unicode(intf[2])).__str__()
-                        new_mask = IPv6Interface(unicode(intf[2])).network.prefixlen.__str__()
-                        # Get the ip address to remove from the interface
-                        old_ipaddr = IPv6Interface(unicode(routerid_to_interfaces[router][intf_name])).__str__()
-                        # Get the old advertised prefix
-                        old_prefix = routerid_to_prefixes[router][intf_name].__str__()
-                        # Get the new prefix to advertise
-                        new_prefix = IPv6Interface(unicode(intf[2])).network.__str__()
-                        # Reconfigure addressing plan and prefix advertisements
-                        reconfigure_addressing_plan(router_mgmt, 2601, intf_name, old_prefix, new_prefix, old_ipaddr, new_ipaddr)
-                        # Add local interface to the VPN
-                        if self.srv6_vpn_handler.add_local_interface_to_vpn(router_mgmt, vpn_name, intf_name) == False:
-                            return srv6_vpn_pb2.SRv6VPNReply(message="")
-                    else:
-                        # Loopback ip of the remote router
-                        loopback_net = routerid_to_loopbacknet[intf[0]]
-                        # Get the private prefix of the interface
-                        intf_prefix = intf_to_private_addr[intf[0]][intf[1]]
-                        # Interface is remote to the router (it is on another router)
-                        remote_sid = self.sid_generator.get_sid(loopback_net, table_id)
-                        # Add the remote interface to the VPN
-                        if self.srv6_vpn_handler.add_remote_interface_to_vpn(router_mgmt, intf_prefix, table_id, remote_sid) == False:
-                            return srv6_vpn_pb2.SRv6VPNReply(message="")
+            self._createVPN(intent)
 
-    # Create a VPN from an intent received through the northbound interface
-    def CreateVPNFromIntent(self, request, context):
-        logger.debug("config received:\n%s", request)
-        # Get topology
+    def _createVPN(self, intent):
+        # Get the topology
         topology = self.read_json_file(TOPOLOGY_FILE)
-        # Get the network prefixes associated to the interfaces
-        routerid_to_prefixes = nx.get_node_attributes(topology,'prefixes')
-        # Get the ip addresses associated to the interfaces
-        routerid_to_interfaces = nx.get_node_attributes(topology,'interfaces')
-        # Get the loopback ip address of the routers
-        routerid_to_loopbackip = nx.get_node_attributes(topology,'loopbackip')
-        # Get the loopback prefixes associated to the routers
-        routerid_to_loopbacknet = dict()
-        for router in routerid_to_prefixes:
-            # Scan all the prefixes and search for the loopback prefix
-            for intf in routerid_to_prefixes[router]:
-                net = routerid_to_prefixes[router][intf]
-                if IPv6Network(unicode(net)).subnet_of(IPv6Network(unicode(LOOPBACK_PREFIX))):
-                    # The prefix belongs to the loopback prefixes net
-                   routerid_to_loopbacknet[router] = net
-        # Get the management ip addresses of the routers
-        routerid_to_mgmtip = nx.get_node_attributes(topology,'mgmtip')
-        # Get the tenant ID
-        tenant_id = request.tenant_id
+        # Get the loopback prefixes address of the routers
+        routerid_to_loopbacknet = nx.get_node_attributes(topology,'loopbacknet')
         # Get the name of the VPN
-        vpn_name = request.name
-        # Generate the full name of the VPN
-        vpn_name= "%s-%s" % (tenant_id, vpn_name)
-        # Get the interfaces of the VPN
-        interfaces = list()
-        for intf in request.interfaces:
-            # An interface is a tuple (router_id, interface_name, private_ip_address)
-            router_id = intf.router_id
-            name = intf.name
-            address = intf.ip_address
-            interfaces.append((router_id, name, address))
-        # Retrieve routers to be added to the VPN
-        routers = {intf[0] for intf in interfaces}
+        vpn_name = intent.name
+        # Get the tenantid
+        tenantid = intent.tenantid
+        # Get the interfaces
+        interfaces = intent.interfaces
         # Check if the VPN already exist
-        if (self.table_id_allocator.get_table_id(vpn_name) != -1
+        if (self.tableid_allocator.get_tableid(vpn_name) != -1
                 or self.intent_generator.get_intent(vpn_name) != -1):
             print "VPN %s already exists" % vpn_name
-            return srv6_vpn_pb2.SRv6VPNReply(message="")
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         # Get a new table ID
-        table_id = self.table_id_allocator.get_new_table_id(vpn_name, tenant_id)
-        # Save the intent
-        intent = VPNIntent(vpn_name, interfaces, tenant_id)
-        self.intent_generator.add_new_intent(intent)
-        # Mapping interface name to the private address
-        intf_to_private_addr = dict()
-        for intf in intent.interfaces:
-            if intf_to_private_addr.get(intf[0]) == None:
-                intf_to_private_addr[intf[0]] = dict()
-            intf_to_private_addr[intf[0]][intf[1]] = intf[2]
+        tableid = self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
+        # Get the routers of the VPN
+        routers = {intf[0] for intf in interfaces}
         # Create the VPN
         for router in routers:
             # Get management ip address of the router
-            router_mgmt = routerid_to_mgmtip[router]
-            # Get loopback ip prefix of the router
-            loopback_prefix = routerid_to_loopbacknet[router]
+            router_mgmtip = routerid_to_mgmtip[router]
+            # Get the loopback network of the router
+            loopbacknet = routerid_to_loopbacknet[router]
             # Get SID
-            sid = self.sid_generator.get_sid(loopback_prefix, table_id)
+            sid = self.sid_generator.get_sid(loopbacknet, tableid)
             # Send the creation command to the router
-            if self.srv6_vpn_handler.create_vpn(router_mgmt, vpn_name, table_id, sid) == False:
-                return srv6_vpn_pb2.SRv6VPNReply(message="")
-            # Add the interfaces to the VPN
-            for intf in interfaces:
-                if router == intf[0]:
-                  # Interface is local to the router
-                  # Get interface name
-                  intf_name = intf[1]
-                  # Get the ip address to add to the interface
-                  new_ipaddr = IPv6Interface(unicode(intf[2])).__str__()
-                  new_mask = IPv6Interface(unicode(intf[2])).network.prefixlen.__str__()
-                  # Get the ip address to remove from the interface
-                  old_ipaddr = IPv6Interface(unicode(routerid_to_interfaces[router][intf_name])).__str__()
-                  # Get the old advertised prefix
-                  old_prefix = routerid_to_prefixes[router][intf_name].__str__()
-                  # Get the new prefix to advertise
-                  new_prefix = IPv6Interface(unicode(intf[2])).network.__str__()
-                  # Reconfigure addressing plan and prefix advertisements
-                  reconfigure_addressing_plan(router_mgmt, 2601, intf_name, old_prefix, new_prefix, old_ipaddr, new_ipaddr)
-                  # Add local interface to the VPN
-                  if self.srv6_vpn_handler.add_local_interface_to_vpn(router_mgmt, vpn_name, intf_name) == False:
-                      return srv6_vpn_pb2.SRv6VPNReply(message="")
-                else:
-                    # Loopback ip of the remote router
-                    remote_loopback = routerid_to_loopbacknet[intf[0]]
-                    # Get the prefix of the interface
-                    intf_prefix = intf_to_private_addr[intf[0]][intf[1]]
-                    # Interface is remote to the router (it is on another router)
-                    remote_sid = self.sid_generator.get_sid(remote_loopback, table_id)
-                    # Add the remote interface to the VPN
-                    if self.srv6_vpn_handler.add_remote_interface_to_vpn(router_mgmt, intf_prefix, table_id, remote_sid) == False:
-                        return srv6_vpn_pb2.SRv6VPNReply(message="")
-        # Dump the information
-        self.dump()
-        # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(message="OK")
+            if self.srv6_vpn_handler.create_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        # Save the intent
+        self.intent_generator.add_intent(intent)
 
-
-    def RemoveVPNByName(self, request, context):
-        logger.debug("Remove VPN request received:\n%s", request)
-        # Extract name and tenant ID from the request
-        name = str(request.name)
-        tenant_id = str(request.tenant_id)
-        # Get the full name of the VPN
-        vpn_name = "%s-%s" % (tenant_id, name)
-        # Get topology
-        topology = self.read_json_file(TOPOLOGY_FILE)
-        # Get the network prefixes associated to the interfaces
-        routerid_to_prefixes = nx.get_node_attributes(topology,'prefixes')
-        # Get the loopback ip address of the routers
-        routerid_to_loopbackip = nx.get_node_attributes(topology,'loopbackip')
-        # Get the loopback prefixes associated to the routers
-        routerid_to_loopbacknet = dict()
-        for router in routerid_to_prefixes:
-            # Scan all the prefixes and search for the loopback prefix
-            for intf in routerid_to_prefixes[router]:
-                net = routerid_to_prefixes[router][intf]
-                if IPv6Network(unicode(net)).subnet_of(IPv6Network(unicode(LOOPBACK_PREFIX))):
-                    # The prefix belongs to the loopback prefixes net
-                    routerid_to_loopbacknet[router] = net
-        # Get the management ip addresses of the routers
-        routerid_to_mgmtip = nx.get_node_attributes(topology,'mgmtip')
-        # Get table ID and intent
-        table_id = self.table_id_allocator.get_table_id(vpn_name)
+    def _removeVPN(self, tenantid, vpn_name):
+        # Get the table ID
+        tableid = self.tableid_allocator.get_tableid(vpn_name)
+        # Get the intent
         intent = self.intent_generator.get_intent(vpn_name)
         # Check if the VPN already exist
-        if (table_id == -1 or intent == -1):
+        if (tableid == -1 or intent == -1):
             print "VPN %s does not exist" % vpn_name
-            return srv6_vpn_pb2.SRv6VPNReply(message="")
-        # Routers in the VPN
-        routers = {intf[0] for intf in intent.interfaces}
-        # Remove the VPN in all routers belonging to it
-        for router in routers:
-            # Get management ip address of the router
-            router_mgmt = routerid_to_mgmtip[router]
-            # Get loopback ip prefix of the router
-            loopback_prefix = routerid_to_loopbacknet[router]
-            # Get the SID
-            sid = self.sid_generator.get_sid(loopback_prefix, table_id)
-            # Remove the VPN
-            if self.srv6_vpn_handler.remove_vpn(router_mgmt, vpn_name, table_id, sid) == False:
-                return srv6_vpn_pb2.SRv6VPNReply(message="")
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        for intf in intent.interfaces.copy():
+            router = intf[0]
+            interface = intf[1]
+            self._removeInterfaceFromVPN(tenantid, vpn_name, router, interface)
         # Update VPNs information
-        if self.table_id_allocator.release_table_id(vpn_name) == -1:
+        if self.tableid_allocator.release_tableid(vpn_name) == -1:
             print "VPN %s has no table ID associated" % vpn_name
-            return srv6_vpn_pb2.SRv6VPNReply(message="")
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         if self.intent_generator.remove_intent(vpn_name) == -1:
             print "VPN %s has no intent associated" % vpn_name
-            return srv6_vpn_pb2.SRv6VPNReply(message="")
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+
+    def _addInterfaceToVPN(self, tenantid, vpn_name, router, intf_name, prefix, ipaddr):
+        # Get the topology
+        topology = self.read_json_file(TOPOLOGY_FILE)
+        # Get the loopback prefixes address of the routers
+        routerid_to_loopbacknet = nx.get_node_attributes(topology,'loopbacknet')
+        # Get the VPN intent
+        intent = self.intent_generator.get_intent(vpn_name)
+        # Get the table ID associated to the VPN
+        tableid = self.tableid_allocator.get_tableid(vpn_name)
+        # Check if the VPN already exist
+        if (intent == -1 or tableid == -1):
+            print "VPN %s does not exists" % vpn_name
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        # Get the routers already in the VPN
+        routers = {intf[0] for intf in intent.interfaces}
+        # Get the loopback network prefix of the router
+        loopbacknet = routerid_to_loopbacknet[router]
+        # Get the SID associated to the VPN
+        sid = self.sid_generator.get_sid(loopbacknet, tableid)
+        # If the router is not in the VPN, first create a new VPN
+        if router not in routers:
+            # Get management IP address of the router
+            router_mgmtip = routerid_to_mgmtip[router]
+            # Create the VPN in the router
+            if self.srv6_vpn_handler.create_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+            # Now the router is part of the VPN
+            routers.add(router)
+        # Add the interface to each router in the VPN
+        for r in routers:
+            # Get management IP address of the router
+            router_mgmtip = routerid_to_mgmtip[r]
+            # Add the interface to the VPN
+            if r == router:
+                # The interface is local to the router
+                if self.srv6_vpn_handler.add_local_interface_to_vpn(router_mgmtip, vpn_name, intf_name, ipaddr) == False:
+                    return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+            else:
+                # The interface is remote to the router
+                # Get the loopback net of the router...
+                loopbacknet = routerid_to_loopbacknet[router]
+                # ...and get the SID associated to the VPN
+                sid = self.sid_generator.get_sid(loopbacknet, tableid)
+                # Add the remote interface to the VPN
+                if self.srv6_vpn_handler.add_remote_interface_to_vpn(router_mgmtip, prefix, tableid, sid) == False:
+                    return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        # Add the new interface to the intent
+        interface = (router, intf_name, prefix, ipaddr)
+        # Update the intent
+        self.intent_generator.get_intent(vpn_name).interfaces.add(interface)
+
+    def _removeInterfaceFromVPN(self, tenantid, vpn_name, router, interface):
+        # Get the topology
+        topology = self.read_json_file(TOPOLOGY_FILE)
+        # Get the loopback prefixes address of the routers
+        routerid_to_loopbacknet = nx.get_node_attributes(topology,'loopbacknet')
+        # Get the table ID associated to the VPN
+        tableid = self.tableid_allocator.get_tableid(vpn_name)
+        # Get the intent associated to the VPN
+        intent = self.intent_generator.get_intent(vpn_name)
+        # Check if the VPN already exist
+        if (tableid == -1 or intent == -1):
+            print "VPN %s does not exists" % vpn_name
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        # Get the routers in the VPN
+        routers = {intf[0] for intf in intent.interfaces}
+        # Get the prefixes of the interfaces
+        prefixes = {(intf[0], intf[1]) : intf[2] for intf in intent.interfaces}
+        # Remove the interface from the VPN in each router
+        for r in routers:
+            # Get management IP address of the router
+            router_mgmtip = routerid_to_mgmtip[r]
+            # Remove the interface from the VPN
+            if r == router:
+                # The interface is local to the router
+                if self.srv6_vpn_handler.remove_local_interface_from_vpn(router_mgmtip, interface) == False:
+                    return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+            else:
+                # The interface is remote to the router
+                # Get the prefix of the interface
+                prefix = prefixes[(router, interface)]
+                # Remove the remote interface from the VPN
+                if self.srv6_vpn_handler.remove_remote_interface_from_vpn(router_mgmtip, prefix, tableid) == False:
+                    return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+        # Update the intent
+        count = 0
+        for intf in intent.interfaces.copy():
+            # Search for the interface to be removed in the intent...
+            r = intf[0]
+            i = intf[1]
+            if r == router:
+                if i == interface:
+                    # ... and remove it
+                    self.intent_generator.get_intent(vpn_name).interfaces.remove(intf)
+                else:
+                    # Count the remaining interfaces belonging to the router in the VPN
+                    count += 1
+        if count == 0:
+            # The router has no interface in the VPN
+            # Get management IP address of the router
+            router_mgmtip = routerid_to_mgmtip[router]
+            # Get the loopback net of the router...
+            loopbacknet = routerid_to_loopbacknet[intf[0]]
+            # ...and get the SID associated to the VPN
+            sid = self.sid_generator.get_sid(loopbacknet, tableid)
+            # Remove the router from the VPN
+            if self.srv6_vpn_handler.remove_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
+
+
+    """ gRPC Server """
+
+    # Create a VPN from an intent received through the northbound interface
+    def CreateVPN(self, request, context):
+        logger.debug("config received:\n%s", request)
+        # Get the tenant ID
+        tenantid = request.tenantid
+        # Get the name of the VPN
+        vpn_name = request.name
+        # Generate the full name of the VPN, including the tenant id
+        vpn_name = "%s-%s" % (tenantid, vpn_name)
+        # Get the interfaces of the VPN from the intent
+        interfaces = set()
+        for intf in request.interfaces:
+            # An interface is a tuple (routerid, interface_name, private_ip_address)
+            router = intf.routerid
+            intf_name = intf.name
+            prefix = intf.prefix
+            ipaddr = intf.ipaddr
+            interfaces.add((router, intf_name, prefix, ipaddr))
+        # Generate the intent
+        intent = VPNIntent(vpn_name, interfaces, tenantid)
+        self._createVPN(intent)
+        # Add the interfaces to the VPN
+        for intf in interfaces:
+            router = intf[0]
+            intf_name = intf[1]
+            prefix = intf[2]
+            ipaddr = intf[3]
+            self._addInterfaceToVPN(tenantid, vpn_name, router, intf_name, prefix, ipaddr)
         # Dump the information
         self.dump()
         # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(message="OK")
+        return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
+    # Remove a VPN
+    def RemoveVPN(self, request, context):
+        logger.debug("Remove VPN request received:\n%s", request)
+        # Extract the tenant ID from the request
+        tenantid = str(request.tenantid)
+        # Extract the name from the request
+        vpn_name = str(request.name)
+        # Get the full name of the VPN
+        vpn_name = "%s-%s" % (tenantid, vpn_name)
+        self._removeVPN(tenantid, vpn_name)
+        # Dump the information
+        self.dump()
+        # Create the response
+        return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
+
+    # Add an interface to an existing a VPN
+    def AddInterfaceToVPN(self, request, context):
+        logger.debug("config received:\n%s", request)
+        # Extract the tenant ID of the VPN from the request
+        tenantid = str(request.tenantid)
+        # Extract the name of the VPN from the request
+        vpn_name = str(request.name)
+        # Get the full name of the VPN
+        vpn_name = "%s-%s" % (tenantid, vpn_name)
+        # Extract the router to be added to the VPN
+        router = request.interface.routerid
+        # Extract the name of the interface to be added to the VPN
+        intf_name = request.interface.name
+        # Extract the private network prefix of the interface
+        prefix = request.interface.prefix
+        # Extract the private IP address of the interface
+        ipaddr = request.interface.ipaddr
+        # Add the interface
+        self._addInterfaceToVPN(tenantid, vpn_name, router, intf_name, prefix, ipaddr)
+        # Dump the VPNs
+        self.dump()
+        # Create the response
+        return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
+
+    # Remove an interface from an existing a VPN
+    def RemoveInterfaceFromVPN(self, request, context):
+        logger.debug("Remove VPN request received:\n%s", request)
+        # Extract the tenant ID of the VPN from the request
+        tenantid = str(request.tenantid)
+        # Extract the name of the VPN from the request
+        vpn_name = str(request.name)
+        # Get the full name of the VPN
+        vpn_name = "%s-%s" % (tenantid, vpn_name)
+        # Extract the router to which the interface belongs to
+        router = request.routerid
+        # Extract the interface to be added
+        interface = request.interface
+        # Remove the interface
+        self._removeInterfaceFromVPN(tenantid, vpn_name, router, interface)
+        # Dump the information
+        self.dump()
+        # Create the response
+        return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     # Get VPNs from the controller inventory
     def GetVPNs(self, request, context):
         # Get VPNs list
-        vpns = self.intent_generator.get_vpn_list()
-        vpn_list = srv6_vpn_pb2.SRv6VPNList()
+        vpns = self.intent_generator.get_vpns()
+        vpn_list = srv6_vpn_msg_pb2.SRv6VPNList()
         for vpn_name in vpns:
             vpn = vpn_list.vpns.add()
             vpn.name = vpn_name
-            vpn.table_id = str(self.table_id_allocator.get_table_id(vpn_name))
+            vpn.tableid = self.tableid_allocator.get_tableid(vpn_name)
             for intf in self.intent_generator.get_intent(vpn_name).interfaces: 
                 interface = vpn.interfaces.append(str(intf))
         # Return the list
         return vpn_list
-
 
     # Read the topology graph and convert to a NetworkX object
     def read_json_file(self, filename):
@@ -503,13 +510,10 @@ class VPNHandler(srv6_vpn_pb2_grpc.SRv6VPNHandlerServicer):
             js_graph = json.load(f)
         return json_graph.node_link_graph(js_graph)
 
-
     # Delete all VPNs
     def flush_vpns(self):
         # Get the topology
         topology = self.read_json_file(TOPOLOGY_FILE)
-        # Get the management ip addresses of the routers
-        routerid_to_mgmtip = nx.get_node_attributes(topology,'mgmtip')
         # Remove informations in each router
         for router in routerid_to_mgmtip:
             router_mgmt = routerid_to_mgmtip[router]
@@ -519,25 +523,24 @@ class VPNHandler(srv6_vpn_pb2_grpc.SRv6VPNHandlerServicer):
     # Create a dump of the VPNs
     def dump(self):
         # Get VPNs
-        vpns = self.intent_generator.get_vpn_list()
+        vpns = self.intent_generator.get_vpns()
         # Build results
         ret = dict()
         ret['vpns'] = dict()
         for vpn in vpns:
             ret['vpns'][vpn] = dict()
-            ret['vpns'][vpn]['table_id'] = self.table_id_allocator.get_table_id(vpn)
+            ret['vpns'][vpn]['tableid'] = self.tableid_allocator.get_tableid(vpn)
             intent = self.intent_generator.get_intent(vpn)
             ret['vpns'][vpn]['intent'] = dict()
             ret['vpns'][vpn]['intent']['name'] = intent.name
             ret['vpns'][vpn]['intent']['interfaces'] = list(intent.interfaces)
-            ret['vpns'][vpn]['intent']['tenant_id'] = intent.tenant_id
-        ret['reusable_tableids'] = list(self.table_id_allocator.reusable_tableids)
-        ret['tableid_to_tenantid'] = self.table_id_allocator.tableid_to_tenantid
-        ret['last_allocated_table_id'] = self.table_id_allocator.last_allocated_table_id
+            ret['vpns'][vpn]['intent']['tenantid'] = intent.tenantid
+        ret['reusable_tableids'] = list(self.tableid_allocator.reusable_tableids)
+        ret['tableid_to_tenantid'] = self.tableid_allocator.tableid_to_tenantid
+        ret['last_allocated_tableid'] = self.tableid_allocator.last_allocated_tableid
         # Json dump of the VPNs
         with open(VPN_FILE, 'w') as outfile:
             json.dump(ret, outfile, sort_keys = True, indent = 2)
-
 
     # Load a dump
     def load_dump(self):
@@ -547,22 +550,22 @@ class VPNHandler(srv6_vpn_pb2_grpc.SRv6VPNHandlerServicer):
                vpns = json.load(file)
             # Parse VPN and fill data structures
             for vpn in vpns['vpns']:
-                self.table_id_allocator.vpn_to_tableid[vpn] = int(vpns['vpns'][vpn]['table_id'])
+                self.tableid_allocator.vpn_to_tableid[vpn] = int(vpns['vpns'][vpn]['tableid'])
                 name = vpns['vpns'][vpn]['intent']['name']
                 _interfaces = vpns['vpns'][vpn]['intent']['interfaces']
                 interfaces = set()
                 for intf in _interfaces:
                   interfaces.add(tuple(intf))
-                tenant_id = vpns['vpns'][vpn]['intent']['tenant_id']
-                intent = VPNIntent(name, interfaces, tenant_id) 
+                tenantid = vpns['vpns'][vpn]['intent']['tenantid']
+                intent = VPNIntent(name, interfaces, tenantid) 
                 self.intent_generator.vpn_to_intent[vpn] = intent
-            self.table_id_allocator.reusable_tableids = set()
+            self.tableid_allocator.reusable_tableids = set()
             for _id in vpns['reusable_tableids']:
-              self.table_id_allocator.reusable_tableids.add(int(_id))
-            self.table_id_allocator.tableid_to_tenantid = dict()
-            for table_id in vpns['tableid_to_tenantid']:
-              self.table_id_allocator.tableid_to_tenantid[int(table_id)] = int(vpns['tableid_to_tenantid'][table_id])
-            self.table_id_allocator.last_allocated_table_id = int(vpns['last_allocated_table_id'])
+              self.tableid_allocator.reusable_tableids.add(int(_id))
+            self.tableid_allocator.tableid_to_tenantid = dict()
+            for tableid in vpns['tableid_to_tenantid']:
+              self.tableid_allocator.tableid_to_tenantid[int(tableid)] = int(vpns['tableid_to_tenantid'][tableid])
+            self.tableid_allocator.last_allocated_tableid = int(vpns['last_allocated_tableid'])
         except IOError:
           print "No VPN file"
 
@@ -577,7 +580,7 @@ def start_server():
     else:
         # Create the server and add the handler
         grpc_server = grpc.server(futures.ThreadPoolExecutor())
-        srv6_vpn_pb2_grpc.add_SRv6VPNHandlerServicer_to_server(VPNHandler(),
+        srv6_vpn_nb_pb2_grpc.add_SRv6NorthboundVPNServicer_to_server(VPNHandler(),
                                                                 grpc_server)
         # If secure we need to create a secure endpoint
         if SECURE:

@@ -5,8 +5,8 @@ import json
 
 
 # Folders
-CONTROL_PLANE_FOLDER = "~/repos/srv6-sdn-control-plane/"
-PROTO_FOLDER = CONTROL_PLANE_FOLDER + "~/repos/srv6-sdn-proto/"
+CONTROL_PLANE_FOLDER = "/home/user/repos/srv6-sdn-control-plane/"
+PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
 
 import sys
 # Add path of proto files
@@ -15,8 +15,11 @@ sys.path.append(PROTO_FOLDER)
 import srv6_explicit_path_pb2_grpc
 import srv6_explicit_path_pb2
 
-import srv6_vpn_pb2_grpc
-import srv6_vpn_pb2
+import srv6_vpn_sb_pb2_grpc
+import srv6_vpn_sb_pb2
+
+import srv6_vpn_msg_pb2_grpc
+import srv6_vpn_msg_pb2
 
 from threading import Thread
 from time import sleep
@@ -43,7 +46,6 @@ class SRv6ExplicitPathHandler:
          channel = grpc.insecure_channel("%s:%s" %(ip_address, port))
       return srv6_explicit_path_pb2_grpc.SRv6ExplicitPathStub(channel), channel
 
-
   def add(self, destination, device, segments):
       # Get the reference of the stub
       srv6_stub,channel = self.get_grpc_session("localhost", 12345, SECURE)
@@ -65,7 +67,6 @@ class SRv6ExplicitPathHandler:
       # Let's close the session
       channel.close()
 
-
   def addFromJson(self, data):
       json_data = json.loads(data)
       # Iterate over the array and delete one by one all the paths
@@ -84,7 +85,6 @@ class SRv6ExplicitPathHandler:
               response = srv6_stub.Create(path_request)
               print response
               channel.close()
-
 
   def delete(self, destination, device, segments):
       # Get the reference of the stub
@@ -106,7 +106,6 @@ class SRv6ExplicitPathHandler:
       print response
       # Let's close the session
       channel.close()
-
 
   def deleteFromJson(self, data):
       json_data = json.loads(data)
@@ -132,7 +131,7 @@ class SRv6ExplicitPathHandler:
               channel.close()
 
 
-class SRv6VPNHandler:
+class SRv6SouthboundVPN:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
@@ -146,11 +145,11 @@ class SRv6VPNHandler:
             channel = grpc.secure_channel("ipv6:[%s]:%s" %(ip_address, port), grpc_client_credentials)
         else:
             channel = grpc.insecure_channel("ipv6:[%s]:%s" %(ip_address, port))
-        return srv6_vpn_pb2_grpc.SRv6VPNHandlerStub(channel), channel
+        return srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNStub(channel), channel
 
     def get_vpns(self, ip_address):
         # Create the request
-        request = srv6_vpn_pb2.EmptyRequest()
+        request = srv6_vpn_msg_pb2.EmptyRequest()
         try:
             # Get the reference of the stub
             srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
@@ -160,14 +159,14 @@ class SRv6VPNHandler:
             vpns = dict()
             for vpn in response.vpns:
               vpn_name = vpn.name
-              table_id = vpn.table_id
+              tableid = vpn.tableid
               sid = vpn.sid
               #interfaces = vpn.interfaces
               interfaces = list()
               for intf in vpn.interfaces:
                 interfaces.append(intf)
               vpns[vpn_name] = {
-                "table_id": table_id,
+                "tableid": tableid,
                 "sid": sid,
                 "interfaces": interfaces
               }
@@ -181,144 +180,172 @@ class SRv6VPNHandler:
               print "%s: %s" % (status_code.name, e.details())
               return None
 
-
-    def create_vpn(self, ip_address, name, table_id, sid):
+    def create_vpn(self, ip_address, name, tableid, sid):
         # Create the request
-        request = srv6_vpn_pb2.CreateVPNRequest()
+        request = srv6_vpn_msg_pb2.CreateVPNRequest()
         request.name = name
-        request.table_id = str(table_id)
+        request.tableid = tableid
         request.sid = str(sid)
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Create the VPN
-            response = srv6_stub.CreateVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Create the VPN
+        response = srv6_stub.CreateVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
-
-    def add_local_interface_to_vpn(self, ip_address, name, interface):
+    def add_local_interface_to_vpn(self, ip_address, name, interface, ipaddr):
         # Create the request
-        request = srv6_vpn_pb2.AddLocalInterfaceToVPNRequest()
+        request = srv6_vpn_msg_pb2.AddLocalInterfaceToVPNRequest()
         request.name = name
         request.interface = interface
+        request.ipaddr = ipaddr
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Add local interface to the VPN
-            response = srv6_stub.AddLocalInterfaceToVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Add local interface to the VPN
+        response = srv6_stub.AddLocalInterfaceToVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
-
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
     def remove_local_interface_from_vpn(self, ip_address, interface):
         # Create the request
-        request = srv6_vpn_pb2.RemoveLocalInterfaceFromVPNRequest()
+        request = srv6_vpn_msg_pb2.RemoveLocalInterfaceFromVPNRequest()
         request.interface = interface
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Remove local interface from the VPN
-            response = srv6_stub.RemoveLocalInterfaceFromVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Remove local interface from the VPN
+        response = srv6_stub.RemoveLocalInterfaceFromVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
-
-    def add_remote_interface_to_vpn(self, ip_address, interface, table_id, sid):
+    def add_remote_interface_to_vpn(self, ip_address, interface, tableid, sid):
         # Create the request
-        request = srv6_vpn_pb2.AddRemoteInterfaceToVPNRequest()
+        request = srv6_vpn_msg_pb2.AddRemoteInterfaceToVPNRequest()
         request.interface = interface
-        request.table_id = str(table_id)
+        request.tableid = tableid
         request.sid = str(sid)
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Add remote interface to the VPN
-            response = srv6_stub.AddRemoteInterfaceToVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Add remote interface to the VPN
+        response = srv6_stub.AddRemoteInterfaceToVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
-
-    def remove_remote_interface_from_vpn(self, ip_address, interface, table_id):
+    def remove_remote_interface_from_vpn(self, ip_address, interface, tableid):
         # Create the request
-        request = srv6_vpn_pb2.RemoveRemoteInterfaceFromVPNRequest()
+        request = srv6_vpn_msg_pb2.RemoveRemoteInterfaceFromVPNRequest()
         request.interface = interface
-        request.table_id = str(table_id)
+        request.tableid = tableid
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Remote remote interface to the VPN
-            response = srv6_stub.RemoveRemoteInterfaceFromVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Remote remote interface to the VPN
+        response = srv6_stub.RemoveRemoteInterfaceFromVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
-
-    def remove_vpn(self, ip_address, name, table_id, sid):
+    def remove_vpn(self, ip_address, name, tableid, sid):
         # Create the request
-        request = srv6_vpn_pb2.RemoveVPNRequest()
+        request = srv6_vpn_msg_pb2.RemoveVPNRequest()
         request.name = name
-        request.table_id = str(table_id)
+        request.tableid = tableid
         request.sid = str(sid)
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Remove the VPN
-            response = srv6_stub.RemoveVPN(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Remove the VPN
+        response = srv6_stub.RemoveVPN(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
-
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
     def flush_vpns(self, ip_address):
         # Create the request
-        request = srv6_vpn_pb2.EmptyRequest()
+        request = srv6_vpn_msg_pb2.EmptyRequest()
         # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
-        try:
-            # Remove the VPNs
-            response = srv6_stub.FlushVPNs(request)
-        except grpc.RpcError as e:
-            print e.details()
-            return False
+        # Remove the VPNs
+        response = srv6_stub.FlushVPNs(request)
         # Let's close the session
         channel.close()
-        return response.message == "OK"
+        if response.message == "OK":
+            # Success
+            return True
+        else:
+            # Handle the error
+            pass
 
     def subscribe_netlink_notifications(self, ip_address):
-        request = srv6_vpn_pb2.EmptyRequest()
+        # Create the request
+        request = srv6_vpn_msg_pb2.EmptyRequest()
+        # Get the reference of the stub
         srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
+        # Listen for Netlink notifications
         for response in srv6_stub.SubscribeNetlinkNotifications(request):
-            print response
+            yield response.nlmsg
+
+    def get_interfaces(self, ip_address):
+        # Create the request
+        request = srv6_vpn_msg_pb2.EmptyRequest()
+        # Get the reference of the stub
+        srv6_stub,channel = self.get_grpc_session(ip_address, 12345, SECURE)
+        # Get interfaces
+        response = srv6_stub.GetInterfaces(request)
+        # Parse response and retrieve interfaces information
+        interfaces = dict()
+        for interface in response.interface:
+          name = interface.name
+          macaddr = interface.macaddr
+          ips = interface.ipaddr
+          ipaddrs = list()
+          for ip in ips:
+            ipaddrs.append(ip)
+          interfaces[name] = {
+            "macaddr": macaddr,
+            "ipaddr": ipaddrs,
+          }
+        # Let's close the session
+        channel.close()
+        return interfaces
 
 
 # Test features
 if __name__ == "__main__":
     # Test Netlink messages
-    srv6VPNHandler = SRv6VPNHandler()
-    #srv6VPNHandler.subscribe_netlink_notifications(r)
+    srv6SouthboundVPN = SRv6SouthboundVPN()
+    # Create a thread for each router and subscribe netlink notifications
     routers = ["2000::1", "2000::2", "2000::3"]
     thread_pool = []
     for router in routers:

@@ -26,11 +26,14 @@
 import grpc
 
 import sys
-# Add path of gRPC APIs
+# Add path of proto files
 sys.path.append("/home/user/repos/srv6-sdn-proto/")
 
-import srv6_vpn_pb2_grpc
-import srv6_vpn_pb2
+import srv6_vpn_nb_pb2_grpc
+import srv6_vpn_nb_pb2
+
+import srv6_vpn_msg_pb2_grpc
+import srv6_vpn_msg_pb2
 
 # Define wheter to use SSL or not
 SECURE = False
@@ -53,29 +56,11 @@ def get_grpc_session(ip_address, port, secure):
         channel = grpc.secure_channel("ipv6:[%s]:%s" %(ip_address, port), grpc_client_credentials)
     else:
         channel = grpc.insecure_channel("ipv6:[%s]:%s" %(ip_address, port))
-    return srv6_vpn_pb2_grpc.SRv6VPNHandlerStub(channel), channel
-
-def create_vpn(intent):
-    # Create the request
-    request = srv6_vpn_pb2.Intent()
-    request.name = str(intent.name)
-    request.tenant_id = str(intent.tenant_id)
-    for intf in intent.interfaces:
-        interface = request.interfaces.add()
-        interface.router_id = str(intf[0])
-        interface.name = str(intf[1])
-        interface.ip_address = str(intf[2])
-    # Get the reference of the stub
-    srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
-    # Create the VPN
-    response = srv6_stub.CreateVPNFromIntent(request)
-    # Let's close the session
-    channel.close()
-    return response.message == "OK"
+    return srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNStub(channel), channel
 
 def get_vpns():
     # Create the request
-    request = srv6_vpn_pb2.EmptyRequest()
+    request = srv6_vpn_msg_pb2.EmptyRequest()
     # Get the reference of the stub
     srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
     # Get VPNs
@@ -83,28 +68,80 @@ def get_vpns():
     # Parse response and retrieve VPNs information
     vpns = dict()
     for vpn in response.vpns:
-        vpn_name = vpn.name
-        table_id = vpn.table_id
+        name = vpn.name
+        tableid = vpn.tableid
         interfaces = list()
         for intf in vpn.interfaces:
             interfaces.append(intf)
-        vpns[vpn_name] = {
-            "table_id": table_id,
+        vpns[name] = {
+            "tableid": tableid,
             "interfaces": interfaces
         }
     # Let's close the session
     channel.close()
     return vpns
 
-def remove_vpn(vpn_name, tenant_id):
+def create_vpn(intent):
     # Create the request
-    request = srv6_vpn_pb2.RemoveVPNByNameRequest()
+    request = srv6_vpn_msg_pb2.Intent()
+    request.name = str(intent.name)
+    request.tenantid = intent.tenantid
+    for intf in intent.interfaces:
+        interface = request.interfaces.add()
+        interface.routerid = str(intf[0])
+        interface.name = str(intf[1])
+        interface.prefix = str(intf[2])
+        interface.ipaddr = str(intf[3])
+    # Get the reference of the stub
+    srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
+    # Create the VPN
+    response = srv6_stub.CreateVPN(request)
+    # Let's close the session
+    channel.close()
+    return response.message == "OK"
+
+def remove_vpn(vpn_name, tenantid):
+    # Create the request
+    request = srv6_vpn_msg_pb2.RemoveVPNByNameRequest()
     request.name = vpn_name
-    request.tenant_id = str(tenant_id)
+    request.tenantid = tenantid
     # Get the reference of the stub
     srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
     # Remove the VPN
-    response = srv6_stub.RemoveVPNByName(request)
+    response = srv6_stub.RemoveVPN(request)
+    # Let's close the session
+    channel.close()
+    return response.message == "OK"
+
+def add_interface_to_vpn(vpn_name, tenantid, intf):
+    # Create the request
+    request = srv6_vpn_msg_pb2.AddInterfaceToVPNRequest()
+    request.name = vpn_name
+    request.tenantid = tenantid
+    interface = request.interface
+    interface.routerid = str(intf[0])
+    interface.name = str(intf[1])
+    interface.prefix = str(intf[2])
+    interface.ipaddr = str(intf[3])
+    # Get the reference of the stub
+    srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
+    # Add the interface to the VPN
+    response = srv6_stub.AddInterfaceToVPN(request)
+    # Let's close the session
+    channel.close()
+    return response.message == "OK"
+
+def remove_interface_from_vpn(vpn_name, tenantid, routerid, interface):
+    # Create the request
+    request = srv6_vpn_msg_pb2.RemoveInterfaceFromVPNRequest()
+    request.name = vpn_name
+    request.tenantid = tenantid
+    request.routerid = str(routerid)
+    request.interface = str(interface)
+    # Get the reference of the stub
+    srv6_stub,channel = get_grpc_session(IP_ADDRESS, IP_PORT, SECURE)
+    # Remove the interface from the VPN
+    response = srv6_stub.RemoveInterfaceFromVPN(request)
     # Let's close the session
     channel.close()
     return response.message == "OK"
@@ -121,7 +158,7 @@ def print_vpns():
     for vpn in vpns:
         print "****** VPN %s ******" % i
         print "Name:", vpn
-        print "Table ID:", vpns[vpn]["table_id"]
+        print "Table ID:", vpns[vpn]["tableid"]
         print "Interfaces:"
         for intf in vpns[vpn]["interfaces"]:
             print intf
