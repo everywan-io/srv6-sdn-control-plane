@@ -95,7 +95,7 @@ VALIDATE_INTERFACES = True
 # Topology file
 TOPOLOGY_FILE = CONTROL_PLANE_FOLDER + "topology/topo_extraction/topology.json"
 # Interfaces file
-INTERFACES_FILE = CONTROL_PLANE_FOLDER + "interface_discovery/interfaces.json"
+INTERFACES_FILE = CONTROL_PLANE_FOLDER + "interface_discovery/interface_discovery/interfaces.json"
 # Loopback prefix used by routers
 LOOPBACK_PREFIX = 'fdff::/16'
 # VPN file
@@ -108,7 +108,7 @@ if not os.path.exists(VPN_FOLDER):
     os.makedirs(VPN_FOLDER)
 
 
-routerid_to_mgmtip = {"0.0.0.1": "2000::1", "0.0.0.2": "2000::2", "0.0.0.3": "2000::3"}
+ROUTERS = list()
 
 class VPNIntentGenerator:
     def __init__(self):
@@ -256,10 +256,8 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
                 router = intf[0]
                 # Get interface name
                 intf_name = intf[1]
-                # Get management ip address of the router
-                router_mgmtip = routerid_to_mgmtip[router]
                 # Check if the interface exists
-                if interfaces_file.get(router_mgmtip) == None or interfaces_file[router_mgmtip].get(intf_name) == None:
+                if interfaces_file.get(router) == None or interfaces_file[router].get(intf_name) == None:
                     return "Error: Cannot create the VPN - The interface %s does not exist on router %s" % (intf_name, router)
         # Check if the VPN already exist
         if (self.tableid_allocator.get_tableid(vpn_name) != -1
@@ -271,14 +269,12 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
         routers = {intf[0] for intf in interfaces}
         # Create the VPN
         for router in routers:
-            # Get management ip address of the router
-            router_mgmtip = routerid_to_mgmtip[router]
             # Get the loopback network of the router
             loopbacknet = routerid_to_loopbacknet[router]
             # Get SID
             sid = self.sid_generator.get_sid(loopbacknet, tableid)
             # Send the creation command to the router
-            if self.srv6_vpn_handler.create_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+            if self.srv6_vpn_handler.create_vpn(router, vpn_name, tableid, sid) == False:
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         # Save the intent
         self.intent_generator.add_intent(intent)
@@ -316,9 +312,7 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
         tableid = self.tableid_allocator.get_tableid(vpn_name)
         # Validate the interface
         if VALIDATE_INTERFACES:
-            # Get management ip address of the router
-            router_mgmtip = routerid_to_mgmtip[router]
-            if interfaces_file.get(router_mgmtip) == None or interfaces_file[router_mgmtip].get(intf_name) == None:
+            if interfaces_file.get(router) == None or interfaces_file[router].get(intf_name) == None:
                 return "Error: Cannot create add interface - The interface %s does not exist on router %s" % (intf_name, router)
         # Check if the VPN already exist
         if (intent == -1 or tableid == -1):
@@ -331,21 +325,17 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
         sid = self.sid_generator.get_sid(loopbacknet, tableid)
         # If the router is not in the VPN, first create a new VPN
         if router not in routers:
-            # Get management IP address of the router
-            router_mgmtip = routerid_to_mgmtip[router]
             # Create the VPN in the router
-            if self.srv6_vpn_handler.create_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+            if self.srv6_vpn_handler.create_vpn(router, vpn_name, tableid, sid) == False:
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
             # Now the router is part of the VPN
             routers.add(router)
         # Add the interface to each router in the VPN
         for r in routers:
-            # Get management IP address of the router
-            router_mgmtip = routerid_to_mgmtip[r]
             # Add the interface to the VPN
             if r == router:
                 # The interface is local to the router
-                if self.srv6_vpn_handler.add_local_interface_to_vpn(router_mgmtip, vpn_name, intf_name, ipaddr) == False:
+                if self.srv6_vpn_handler.add_local_interface_to_vpn(r, vpn_name, intf_name, ipaddr) == False:
                     return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
             else:
                 # The interface is remote to the router
@@ -354,7 +344,7 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
                 # ...and get the SID associated to the VPN
                 sid = self.sid_generator.get_sid(loopbacknet, tableid)
                 # Add the remote interface to the VPN
-                if self.srv6_vpn_handler.add_remote_interface_to_vpn(router_mgmtip, prefix, tableid, sid) == False:
+                if self.srv6_vpn_handler.add_remote_interface_to_vpn(r, prefix, tableid, sid) == False:
                     return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         # Add the new interface to the intent
         interface = (router, intf_name, prefix, ipaddr)
@@ -383,19 +373,17 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
             return "Error: Cannot remove interface - The interface %s on the router %s does not belong to the VPN %s" % (interface, router, vpn_name)         
         # Remove the interface from the VPN in each router
         for r in routers:
-            # Get management IP address of the router
-            router_mgmtip = routerid_to_mgmtip[r]
             # Remove the interface from the VPN
             if r == router:
                 # The interface is local to the router
-                if self.srv6_vpn_handler.remove_local_interface_from_vpn(router_mgmtip, interface) == False:
+                if self.srv6_vpn_handler.remove_local_interface_from_vpn(r, interface) == False:
                     return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
             else:
                 # The interface is remote to the router
                 # Get the prefix of the interface
                 prefix = prefixes[(router, interface)]
                 # Remove the remote interface from the VPN
-                if self.srv6_vpn_handler.remove_remote_interface_from_vpn(router_mgmtip, prefix, tableid) == False:
+                if self.srv6_vpn_handler.remove_remote_interface_from_vpn(r, prefix, tableid) == False:
                     return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         # Update the intent
         count = 0
@@ -412,14 +400,12 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
                     count += 1
         if count == 0:
             # The router has no interface in the VPN
-            # Get management IP address of the router
-            router_mgmtip = routerid_to_mgmtip[router]
             # Get the loopback net of the router...
             loopbacknet = routerid_to_loopbacknet[intf[0]]
             # ...and get the SID associated to the VPN
             sid = self.sid_generator.get_sid(loopbacknet, tableid)
             # Remove the router from the VPN
-            if self.srv6_vpn_handler.remove_vpn(router_mgmtip, vpn_name, tableid, sid) == False:
+            if self.srv6_vpn_handler.remove_vpn(router, vpn_name, tableid, sid) == False:
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="")
         return "OK"
 
@@ -559,9 +545,8 @@ class VPNHandler(srv6_vpn_nb_pb2_grpc.SRv6NorthboundVPNServicer):
         # Get the topology
         topology = self.read_json_file(TOPOLOGY_FILE)
         # Remove informations in each router
-        for router in routerid_to_mgmtip:
-            router_mgmt = routerid_to_mgmtip[router]
-            if self.srv6_vpn_handler.flush_vpns(router_mgmt) == False:
+        for router in ROUTERS:
+            if self.srv6_vpn_handler.flush_vpns(router) == False:
                return
 
     # Create a dump of the VPNs
@@ -646,13 +631,20 @@ def start_server():
     while True:
       time.sleep(5)
 
+def read_json_file(filename):
+    with open(filename) as f:
+        js_graph = json.load(f)
+    return json_graph.node_link_graph(js_graph)
 
 # Parse options
 def parse_options():
-    global SECURE
+    global SECURE, ROUTERS
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", help="Activate debug logs")
     parser.add_option("-s", "--secure", action="store_true", help="Activate secure mode")
+    # ip of the routers
+    parser.add_option('--ips', dest='ips', type='string', default=None,
+                      help='ip-port,ip-port map ip port of the routers')
     # Parse input parameters
     (options, args) = parser.parse_args()
     # Setup properly the logger
@@ -665,6 +657,17 @@ def parse_options():
         SECURE = True
     else:
         SECURE = False
+    # Extract routers
+    if options.ips == None:
+        # In-Band solution
+        # Get the network topology
+        topology = read_json_file(TOPOLOGY_FILE)
+        # Get the loopback prefixes of the routers
+        routerid_to_loopbackip = nx.get_node_attributes(topology,'loopbackip')
+        for ip in routerid_to_loopbackip.itervalues():
+            ROUTERS.append(ip)
+    else:
+        ROUTERS = options.ips.split(",")
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
     logger.info("SERVER_DEBUG:" + str(SERVER_DEBUG))
 

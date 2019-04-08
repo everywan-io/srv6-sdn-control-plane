@@ -54,6 +54,8 @@ PASSWD = "srv6"
 
 LOOPBACK_PREFIX = 'fdff::/16'
 
+# Verbose mode
+VERBOSE = False
 
 def topology_information_extraction(opts):
 	# Let's parse the input
@@ -86,6 +88,8 @@ def topology_information_extraction(opts):
 		routerid_to_loopbacknet = dict()
 		# Mapping graph edges to network prefixes
 		edge_to_netprefix = dict()
+		# Mapping router id to router
+		routerid_to_router = dict()
 
 		# Edges set
 		edges = set()
@@ -95,7 +99,8 @@ def topology_information_extraction(opts):
 		G = nx.Graph()
 
 		for router, port in zip(routers, ports):
-			print "\n********* Connecting to %s-%s *********" %(router, port)
+			if VERBOSE:
+				print "\n********* Connecting to %s-%s *********" %(router, port)
 			password = PASSWD
 			while True:  # or some amount of retries
 				try:
@@ -152,11 +157,48 @@ def topology_information_extraction(opts):
 			# Get results
 			network_details = tn.read_all()
 
+			password = PASSWD
+			while True:  # or some amount of retries
+				try:
+					tn = telnetlib.Telnet(router, port, 3) # Init telnet
+					break
+				except socket.timeout:
+					print "Error: cannot establish a connection to " + str(router) + " on port " + str(port) + "\n"
+					tn = None
+					break
+				except socket.error as (code, msg):
+					if code != errno.EINTR:
+						print "Error: cannot establish a connection to " + str(router) + " on port " + str(port) + "\n"
+						tn = None
+						break
+			if tn == None:
+				continue
+			if password:
+				tn.read_until("Password: ")
+				tn.write(password + "\r\n")
+			# Terminal length set to 0 to not have interruptions
+			tn.write("terminal length 0" + "\r\n")
+			# Turn on privileged mode
+			tn.write("enable"+ "\r\n")
+			# Configuration terminal
+			tn.write("configure terminal"+ "\r\n")
+			# Get running configuration
+			tn.write("show running-config"+ "\r\n")
+			# Close
+			tn.write("q" + "\r\n")
+			# Close
+			tn.write("q" + "\r\n")
+			# Get results
+			running_config = tn.read_all()
+
 			with open("%s/route-detail-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "w") as route_file:
 				route_file.write(route_details)    # Write route database to a file for post-processing
 
 			with open("%s/network-detail-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "w") as network_file:
 				network_file.write(network_details)    # Write network database to a file for post-processing
+
+			with open("%s/running-config-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "w") as running_config_file:
+				running_config_file.write(running_config)    # Write running config to a file for post-processing
 
 			# Process route database
 			with open("%s/route-detail-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "r") as route_file:
@@ -190,7 +232,6 @@ def topology_information_extraction(opts):
 								# then it is processed and (eventually) marked as transit network
 								stub_networks[net] = set()
 							stub_networks[net].add(adv_router)	# Adv router can reach this net
-
 			# Process network database
 			transit_networks = dict()
 			with open("%s/network-detail-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "r") as network_file:
@@ -224,7 +265,17 @@ def topology_information_extraction(opts):
 						nodes.add(adv_router)  # Add router to nodes set
 						nodes.add(router_id)  # Add router to nodes set
 
-
+			# Process network database
+			with open("%s/running-config-%s-%s.txt" %(OSPF_DB_FOLDER , router, port), "r") as running_config_file:
+				# Process infos and get router id
+				for line in running_config_file:
+					# Get router id
+					m = re.search('router-id (\d*.\d*.\d*.\d*)', line)
+					if(m):
+						# Mapping router id to router
+						routerid = m.group(1)
+						routerid_to_router[routerid] = router
+						break
 		# Make separation between stub networks and transit networks
 		for net in stub_networks.keys():
 			if len(stub_networks[net]) == 2:    
@@ -254,22 +305,37 @@ def topology_information_extraction(opts):
 				edges.add(edge)
 
 		# Print results
-		print "Stub Networks:", stub_networks.keys()
-		print "Transit Networks:", transit_networks.keys()
-		print "Nodes:", nodes
-		print "Edges:", edges
-		print "***************************************\n\n"
+		if VERBOSE:
+			print "Stub Networks:", stub_networks.keys()
+			print "Transit Networks:", transit_networks.keys()
+			print "Nodes:", nodes
+			print "Edges:", edges
+			print "***************************************\n\n"
 
 		# Build NetworkX Topology
 
 		# Add routers to the graph
+		router = ""
 		for r in nodes:
 			loopbacknet = ""
-			# Get loopback ip address of the router
-			if routerid_to_loopbacknet.get(r) != None:
-				loopbacknet = routerid_to_loopbacknet[r]
+			loopbackip = ""
+			# Extract loopback net and loopback ip address
+			loopbacknet = routerid_to_loopbacknet.get(r, "")
+			if loopbacknet != "":
 				loopbackip = str(next(IPv6Network(unicode(loopbacknet)).hosts()))
-				G.add_node(r, fillcolor="red", style="filled", shape="ellipse", loopbacknet=loopbacknet, loopbackip=loopbackip, type="router")
+			if routerid_to_router.get(r) != None:
+				# Use mgmt IP address as ID in the NetworkX graph
+				router = routerid_to_router.get(r)
+			else:
+				# Unknown mgmt IP address
+				if loopbackip != "":
+					# Use loopback ip address as ID in the NetworkX graph
+					router = loopbackip
+				else:
+					# Unknown loopback ip
+					# Use router ID as ID in the NetworkX graph
+					router = r
+			G.add_node(router, routerid=r, fillcolor="red", style="filled", shape="ellipse", loopbacknet=loopbacknet, loopbackip=loopbackip, type="router")
 
 		# Add stub networks to the graph
 		for r in stub_networks.keys():
@@ -282,18 +348,89 @@ def topology_information_extraction(opts):
 			if edge_to_netprefix.get(e) != None:
 				net = edge_to_netprefix[e]
 			# Add edge to the graph
-			if (e[0] in nodes and e[1] in stub_networks.keys()) or (e[1] in nodes and e[0] in stub_networks.keys()):
+			if e[0] in nodes and e[1] in stub_networks.keys():
+				# Get an ID for the router
+				if routerid_to_router.get(e[0]) != None:
+					# Use mgmt IP address as ID in the NetworkX graph
+					lhs = routerid_to_router.get(e[0])
+				else:
+					# Unknown mgmt IP address
+					if routerid_to_loopbacknet.get(e[0]) != None:
+						# Extract loopback net and loopback ip address
+						loopbacknet = routerid_to_loopbacknet[e[0]]
+						loopbackip = str(next(IPv6Network(unicode(loopbacknet)).hosts()))
+						# Use loopback ip address as ID in the NetworkX graph
+						lhs = loopbackip
+					else:
+						# Unknown loopback ip
+						# Use router ID as ID in the NetworkX graph
+						lhs = e[0]
+				# Create the edge
+				e = (lhs, e[1])
 				# This is a stub network, no label on the edge
 				G.add_edge(*e, label="", fontsize=9, net=net)
-			elif (e[0] in nodes and e[1] in nodes):
+			elif e[1] in nodes and e[0] in stub_networks.keys():
+				# Get an ID for the router
+				if routerid_to_router.get(e[1]) != None:
+					# Use mgmt IP address as ID in the NetworkX graph
+					rhs = routerid_to_router.get(e[1])
+				else:
+					# Unknown mgmt IP address
+					if routerid_to_loopbacknet.get(e[1]) != None:
+						# Extract loopback net and loopback ip address
+						loopbacknet = routerid_to_loopbacknet[e[1]]
+						loopbackip = str(next(IPv6Network(unicode(loopbacknet)).hosts()))
+						# Use loopback ip address as ID in the NetworkX graph
+						rhs = loopbackip
+					else:
+						# Unknown loopback ip
+						# Use router ID as ID in the NetworkX graph
+						rhs = e[1]
+				# Create the edge
+				e = (e[0], rhs)
+				# This is a stub network, no label on the edge
+				G.add_edge(*e, label="", fontsize=9, net=net)
+			elif e[0] in nodes and e[1] in nodes:
+				# Get an ID for the router
+				if routerid_to_router.get(e[0]) != None:
+					# Use mgmt IP address as ID in the NetworkX graph
+					lhs = routerid_to_router.get(e[0])
+				else:
+					# Unknown mgmt IP address
+					if routerid_to_loopbacknet.get(e[0]) != None:
+						# Extract loopback net and loopback ip address
+						loopbacknet = routerid_to_loopbacknet[e[0]]
+						loopbackip = str(next(IPv6Network(unicode(loopbacknet)).hosts()))
+						# Use loopback ip address as ID in the NetworkX graph
+						lhs = loopbackip
+					else:
+						# Unknown loopback ip
+						# Use router ID as ID in the NetworkX graph
+						lhs = e[0]
+				# Get an ID for the router
+				if routerid_to_router.get(e[1]) != None:
+					# Use mgmt IP address as ID in the NetworkX graph
+					rhs = routerid_to_router.get(e[1])
+				else:
+					# Unknown mgmt IP address
+					if routerid_to_loopbacknet.get(e[1]) != None:
+						# Extract loopback net and loopback ip address
+						loopbacknet = routerid_to_loopbacknet[e[1]]
+						loopbackip = str(next(IPv6Network(unicode(loopbacknet)).hosts()))
+						# Use loopback ip address as ID in the NetworkX graph
+						rhs = loopbackip
+					else:
+						# Unknown loopback ip
+						# Use router ID as ID in the NetworkX graph
+						rhs = e[1]
+				# Create the edge
+				e = (lhs, rhs)
 				# This is a transit network, put a label on the edge
 				G.add_edge(*e, label=net, fontsize=9, net=net)
-
 		# Dump relevant information of the network graph
 		dump_topo(G)
 		# Export the network graph as an image file
 		draw_topo(G)
-
 		# Wait 'period' seconds between two extractions
 		time.sleep(period)
 
@@ -304,7 +441,6 @@ def draw_topo(G):
 
 # Utility function to dump relevant information of the topology
 def dump_topo(G):
-	print TOPOLOGY_FILE
 	# Export NetworkX object into a json file
 	# Json dump of the topology
 	with open(TOPOLOGY_FILE, 'w') as outfile:
@@ -324,6 +460,7 @@ def dump_topo(G):
 		json_topology['nodes'] = [
 		    {
 		        'id': node['id'],
+		        'routerid': node['routerid'],
 		        'loopbacknet':node['loopbacknet'],
 		        'loopbackip':node['loopbackip'],
 		        'type': node.get('type', "")
@@ -340,7 +477,7 @@ def dump_topo(G):
 
 # Parse command line options and dump results
 def parseOptions():
-	global TOPO_FOLDER, OSPF_DB_FOLDER, TOPOLOGY_FILE, GRAPH_TOPO_FILE, DOT_TOPO_FILE, SVG_TOPO_FILE
+	global TOPO_FOLDER, OSPF_DB_FOLDER, TOPOLOGY_FILE, GRAPH_TOPO_FILE, DOT_TOPO_FILE, SVG_TOPO_FILE, VERBOSE
 	parser = OptionParser()
 	# ip:port of the routers
 	parser.add_option('--ip_ports', dest='ips_ports', type='string', default="127.0.0.1-2606",
@@ -351,8 +488,13 @@ def parseOptions():
 	# Topology information extraction period
 	parser.add_option('--period', dest='period', type='string', default="10",
 					  help='topology information extraction period')
+	# Enable verbose mode
+	parser.add_option("-v", "--verbose", action="store_true", default=False, help="Enable verbose mode")
 	# Parse input parameters
 	(options, args) = parser.parse_args()
+	# Verbose mode
+	VERBOSE = options.verbose
+	# Topology folder
 	TOPO_FOLDER = "%s/%s" % (options.out_dir, TOPO_FOLDER)
 	# Folder of the information extracted from OSPF database
 	OSPF_DB_FOLDER = "%s/ospf_db" % (TOPO_FOLDER)
