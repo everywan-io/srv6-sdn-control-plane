@@ -98,6 +98,9 @@ def create_vpn(intent):
     response = srv6_stub.CreateVPN(request)
     # Let's close the session
     channel.close()
+    # Print error
+    if response.message != "OK":
+        print response.message
     return response.message == "OK"
 
 def remove_vpn(vpn_name, tenantid):
@@ -111,6 +114,9 @@ def remove_vpn(vpn_name, tenantid):
     response = srv6_stub.RemoveVPN(request)
     # Let's close the session
     channel.close()
+    # Print error
+    if response.message != "OK":
+        print response.message
     return response.message == "OK"
 
 def add_interface_to_vpn(vpn_name, tenantid, intf):
@@ -129,6 +135,9 @@ def add_interface_to_vpn(vpn_name, tenantid, intf):
     response = srv6_stub.AddInterfaceToVPN(request)
     # Let's close the session
     channel.close()
+    # Print error
+    if response.message != "OK":
+        print response.message
     return response.message == "OK"
 
 def remove_interface_from_vpn(vpn_name, tenantid, routerid, interface):
@@ -144,6 +153,9 @@ def remove_interface_from_vpn(vpn_name, tenantid, routerid, interface):
     response = srv6_stub.RemoveInterfaceFromVPN(request)
     # Let's close the session
     channel.close()
+    # Print error
+    if response.message != "OK":
+        print response.message
     return response.message == "OK"
 
 def print_vpns():
