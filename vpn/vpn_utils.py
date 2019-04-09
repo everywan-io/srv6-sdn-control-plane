@@ -30,7 +30,6 @@ from sshutil.cmd import SSHCommand
 import telnetlib
 import socket
 from optparse import OptionParser
-from pyroute2 import IPRoute
 
 
 class VPNIntent:
