@@ -23,29 +23,31 @@
 #
 
 
+import sshutil
+
+from sshutil.cmd import SSHCommand
+
 import telnetlib
 import socket
 from optparse import OptionParser
+from pyroute2 import IPRoute
 
 
 class VPNIntent:
-    def __init__(self, name, interfaces, tenant_id):
+    def __init__(self, name, interfaces, tenantid):
       self.name = name
       # An interface is a tuple (router_id, interface_name, subnet)
       self.interfaces = interfaces
-      self.tenant_id = tenant_id
+      self.tenantid = tenantid
 
 
-def reconfigure_addressing_plan(router, port, intf, old_prefix, new_prefix, old_ipaddr, new_ipaddr):
+def del_nd_prefix_quagga(router, port, intf, prefix):
 	# Establish a telnet connection with the zebra daemon
 	# and try to reconfigure the addressing plan of the router
 	router = str(router)
 	port = str(port)
 	intf = str(intf)
-	old_prefix = str(old_prefix)
-	new_prefix = str(new_prefix)
-	old_ipaddr = str(old_ipaddr)
-	new_ipaddr = str(new_ipaddr)
+	prefix = str(prefix)
 	try:
 		print "%s - Trying to reconfigure addressing plan" % router
 		password = "srv6"
@@ -66,21 +68,174 @@ def reconfigure_addressing_plan(router, port, intf, old_prefix, new_prefix, old_
 		# Interface configuration
 		tn.write("interface %s\r\n" % intf)
 		# Remove old IPv6 prefix
-		tn.write("no ipv6 nd prefix %s\r\n" % old_prefix)
-		# Add the new IPv6 prefix
-		tn.write("ipv6 nd prefix %s\r\n" % new_prefix)
-		# Remove old IPv6 address
-		tn.write("no ipv6 address %s\r\n" % old_ipaddr)
-		# Add the new IPv6 address
-		tn.write("ipv6 address %s\r\n" % new_ipaddr)
+		tn.write("no ipv6 nd prefix %s\r\n" % prefix)
 		# Close interface configuration
 		tn.write("q" + "\r\n")
 		# Close configuration mode
 		tn.write("q" + "\r\n")
 		# Close privileged mode
 		tn.write("q" + "\r\n")
-		#print tn.read_all()
 		# Close telnet
 		tn.close()
 	except socket.error:
 		print "Error: cannot establish a connection to %s on port %s" % (str(router), str(port))
+
+def add_nd_prefix_quagga(router, port, intf, prefix):
+	# Establish a telnet connection with the zebra daemon
+	# and try to reconfigure the addressing plan of the router
+	router = str(router)
+	port = str(port)
+	intf = str(intf)
+	prefix = str(prefix)
+	try:
+		print "%s - Trying to reconfigure addressing plan" % router
+		password = "srv6"
+		# Init telnet
+		tn = telnetlib.Telnet(router, port)
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Terminal length set to 0 to not have interruptions
+		tn.write("terminal length 0\r\n")
+		# Enable
+		tn.write("enable\r\n")
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Configure terminal
+		tn.write("configure terminal\r\n")
+		# Interface configuration
+		tn.write("interface %s\r\n" % intf)
+		# Remove old IPv6 prefix
+		tn.write("ipv6 nd prefix %s\r\n" % prefix)
+		# Close interface configuration
+		tn.write("q" + "\r\n")
+		# Close configuration mode
+		tn.write("q" + "\r\n")
+		# Close privileged mode
+		tn.write("q" + "\r\n")
+		# Close telnet
+		tn.close()
+	except socket.error:
+		print "Error: cannot establish a connection to %s on port %s" % (str(router), str(port))
+
+def add_address_quagga(router, port, intf, ip):
+	# Establish a telnet connection with the zebra daemon
+	# and try to reconfigure the addressing plan of the router
+	router = str(router)
+	port = str(port)
+	intf = str(intf)
+	ip = str(ip)
+	try:
+		print "%s - Trying to reconfigure addressing plan" % router
+		password = "srv6"
+		# Init telnet
+		tn = telnetlib.Telnet(router, port)
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Terminal length set to 0 to not have interruptions
+		tn.write("terminal length 0\r\n")
+		# Enable
+		tn.write("enable\r\n")
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Configure terminal
+		tn.write("configure terminal\r\n")
+		# Interface configuration
+		tn.write("interface %s\r\n" % intf)
+		# Add the new IPv6 address
+		tn.write("ipv6 address %s\r\n" % ip)
+		# Close interface configuration
+		tn.write("q" + "\r\n")
+		# Close configuration mode
+		tn.write("q" + "\r\n")
+		# Close privileged mode
+		tn.write("q" + "\r\n")
+		# Close telnet
+		tn.close()
+	except socket.error:
+		print "Error: cannot establish a connection to %s on port %s" % (str(router), str(port))
+
+
+def del_address_quagga(router, port, intf, ip):
+	# Establish a telnet connection with the zebra daemon
+	# and try to reconfigure the addressing plan of the router
+	router = str(router)
+	port = str(port)
+	intf = str(intf)
+	ip = str(ip)
+	try:
+		print "%s - Trying to reconfigure addressing plan" % router
+		password = "srv6"
+		# Init telnet
+		tn = telnetlib.Telnet(router, port)
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Terminal length set to 0 to not have interruptions
+		tn.write("terminal length 0\r\n")
+		# Enable
+		tn.write("enable\r\n")
+		# Password
+		tn.read_until("Password: ")
+		tn.write("%s\r\n" % password)
+		# Configure terminal
+		tn.write("configure terminal\r\n")
+		# Interface configuration
+		tn.write("interface %s\r\n" % intf)
+		# Add the new IPv6 address
+		tn.write("no ipv6 address %s\r\n" % ip)
+		# Close interface configuration
+		tn.write("q" + "\r\n")
+		# Close configuration mode
+		tn.write("q" + "\r\n")
+		# Close privileged mode
+		tn.write("q" + "\r\n")
+		# Close telnet
+		tn.close()
+	except socket.error:
+		print "Error: cannot establish a connection to %s on port %s" % (str(router), str(port))
+
+def flush_addresses_ssh(router, intf):
+	# Utility to close a ssh session
+	def close_ssh_session(session):
+	  # Close the session
+	  remoteCmd.close()
+	  # Flush the cache
+	  remoteCmd.cache.flush()
+	# Flush addresses
+	cmd = "ip -6 addr flush dev %s scope global" % intf
+	remoteCmd = SSHCommand(cmd, router, 22, "root", "root")
+	remoteCmd.run_status_stderr()
+	# Close the session
+	close_ssh_session(remoteCmd)
+
+def add_address_ssh(router, intf, ip):
+	# Utility to close a ssh session
+	def close_ssh_session(session):
+	  # Close the session
+	  remoteCmd.close()
+	  # Flush the cache
+	  remoteCmd.cache.flush()
+	# Add the address
+	cmd = "ip -6 addr add %s dev %s" % (ip, intf)
+	remoteCmd = SSHCommand(cmd, router, 22, "root", "root")
+	remoteCmd.run_status_stderr()
+	# Close the session
+	close_ssh_session(remoteCmd)
+
+def del_address_ssh(router, intf, ip):
+	# Utility to close a ssh session
+	def close_ssh_session(session):
+	  # Close the session
+	  remoteCmd.close()
+	  # Flush the cache
+	  remoteCmd.cache.flush()
+	# Add the address
+	cmd = "ip -6 addr del %s dev %s" % (ip, intf)
+	remoteCmd = SSHCommand(cmd, router, 22, "root", "root")
+	remoteCmd.run_status_stderr()
+	# Close the session
+	close_ssh_session(remoteCmd)
