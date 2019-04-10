@@ -673,5 +673,12 @@ def parse_options():
 
 
 if __name__ == "__main__":
+    # If interfaces validation is enabled, check if interfaces.json file exists
+    if VALIDATE_INTERFACES:
+        exists = os.path.isfile(INTERFACES_FILE)
+        if not exists:
+            print "File interfaces.json required for interface validation not found"
+            exit(-1)
+
     parse_options()
     start_server()
