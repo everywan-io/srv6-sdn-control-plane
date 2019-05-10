@@ -27,6 +27,7 @@ import sys
 NB_GRPC_CLIENT_PATH = '/home/user/repos/srv6-sdn-control-plane/northbound/grpc/'
 sys.path.append(NB_GRPC_CLIENT_PATH)
 from nb_grpc_client import *
+from vpn_utils import *
 from vpn6_utils import *
 
 
