@@ -32,13 +32,6 @@ import socket
 from optparse import OptionParser
 
 
-class VPNIntent:
-    def __init__(self, name, interfaces, tenantid):
-      self.name = name
-      # An interface is a tuple (router_id, interface_name, subnet)
-      self.interfaces = interfaces
-      self.tenantid = tenantid
-
 def add_default_via(router, intf, ip):
 	# Utility to close a ssh session
 	def close_ssh_session(session):
@@ -98,8 +91,8 @@ def add_address_quagga(router, port, intf, ip):
 		tn.write("configure terminal\r\n")
 		# Interface configuration
 		tn.write("interface %s\r\n" % intf)
-		# Add the new IPv6 address
-		tn.write("ipv6 address %s\r\n" % ip)
+		# Add the new IP address
+		tn.write("ip address %s\r\n" % ip)
 		# Close interface configuration
 		tn.write("q" + "\r\n")
 		# Close configuration mode
@@ -138,8 +131,8 @@ def del_address_quagga(router, port, intf, ip):
 		tn.write("configure terminal\r\n")
 		# Interface configuration
 		tn.write("interface %s\r\n" % intf)
-		# Add the new IPv6 address
-		tn.write("no ipv6 address %s\r\n" % ip)
+		# Add the new IP address
+		tn.write("no ip address %s\r\n" % ip)
 		# Close interface configuration
 		tn.write("q" + "\r\n")
 		# Close configuration mode

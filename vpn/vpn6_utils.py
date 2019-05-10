@@ -32,14 +32,6 @@ import socket
 from optparse import OptionParser
 
 
-class VPNIntent:
-    def __init__(self, name, interfaces, tenantid):
-      self.name = name
-      # An interface is a tuple (router_id, interface_name, subnet)
-      self.interfaces = interfaces
-      self.tenantid = tenantid
-
-
 def del_nd_prefix_quagga(router, port, intf, prefix):
 	# Establish a telnet connection with the zebra daemon
 	# and try to reconfigure the addressing plan of the router
