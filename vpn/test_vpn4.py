@@ -27,6 +27,7 @@ import sys
 NB_GRPC_CLIENT_PATH = '/home/user/repos/srv6-sdn-control-plane/northbound/grpc/'
 sys.path.append(NB_GRPC_CLIENT_PATH)
 from nb_grpc_client import *
+from vpn_utils import *
 from vpn4_utils import *
 
 
@@ -151,7 +152,6 @@ def run_tests():
         print_vpns()
 
     else:
-        print 1
         # Create VPN
         name = 'research'
         interfaces = [
@@ -173,7 +173,6 @@ def run_tests():
         # Add the default via
         add_default_via('2000::4', 'hads11-eth1', '172.16.1.1')
         add_default_via('2000::6', 'hads21-eth1', '172.16.3.1')
-        print 2
 
         name = 'research'
         interfaces = [
@@ -200,7 +199,6 @@ def run_tests():
         add_default_via('2000::5', 'hads12-eth1', '172.16.2.1')
         add_default_via('2000::8', 'hsur11-eth1', '172.16.4.1')
         add_default_via('2000::9', 'hsur12-eth1', '172.16.5.1')
-        print 3
 
         # Remove VPN
         remove_vpn('research', 20)
@@ -228,7 +226,6 @@ def run_tests():
         add_address_quagga('2000::1', 2601, 'ads1-eth4', '10.3.0.1/24')
         add_address_quagga('2000::3', 2601, 'sur1-eth3', '10.2.0.1/24')
         add_address_quagga('2000::3', 2601, 'sur1-eth4', '10.5.0.1/24')
-        print 4
 
 
         name = 'research'
@@ -256,7 +253,6 @@ def run_tests():
         add_default_via('2000::5', 'hads12-eth1', '172.16.10.1')
         add_default_via('2000::7', 'hads22-eth1', '172.16.20.1')
         add_default_via('2000::9', 'hsur12-eth1', '172.16.30.1')
-        print 5
 
 
         # Remove interface
@@ -277,7 +273,6 @@ def run_tests():
         #add_nd_prefix_quagga('2000::1', 2601, 'ads1-eth4', 'fdf0:0:0:6::/64')
         # Add the public addresses to the interfaces in the routers
         add_address_quagga('2000::1', 2601, 'ads1-eth4', '10.3.0.1/24')
-        print 6
 
 
         # Add interface
@@ -293,7 +288,6 @@ def run_tests():
         del_default_via('2000::5')
         # Add the default via
         add_default_via('2000::5', 'hads12-eth1', '172.16.40.1')
-        print 7
 
 
         # Print the VPNs
