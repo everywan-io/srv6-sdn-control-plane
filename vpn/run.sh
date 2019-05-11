@@ -20,9 +20,9 @@ if [ "$INBAND" = false ] ; then
 	xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -e "sudo python ./srv6_mininet_extension.py --stop-all"
 	sleep 4
 	if [ "$IPv6_EMULATION" = true ] ; then
-		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --ipv6 --topo topo/example_srv6_topology_with_hosts.json"
+		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts_ipv6.json"
 	else
-		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts.json"
+		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts_ipv4.json"
 	fi
 	sleep 6
 	xfce4-terminal --working-directory=$(echo $SRV6_SDN_CONTROL_PLANE_PATH$TOPOLOGY) -T "TOPOLOGY INFORMATION EXTRACTION" -e "sudo python ./ti_extraction.py --verbose --ip_ports 2000::1-2606,2000::2-2606,2000::3-2606 --period 3"
@@ -34,8 +34,8 @@ else
 	xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -e "sudo python ./srv6_mininet_extension.py --stop-all"
 	sleep 4
 	if [ "$IPv6_EMULATION" = true ] ; then
-		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --ipv6 --topo topo/example_srv6_topology_with_hosts_and_controller.json"
+		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts_and_controller_ipv6.json"
 	else
-		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts_and_controller.json"
+		xfce4-terminal --working-directory=$(echo $SRV6_SDN_MININET_PATH) -T MININET -e "sudo python ./srv6_mininet_extension.py --topo topo/example_srv6_topology_with_hosts_and_controller_ipv4.json"
 	fi
 fi
