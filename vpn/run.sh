@@ -13,7 +13,7 @@ TOPOLOGY="topology/"
 INTERFACE_DISCOVERY="interface_discovery/"
 NB_GRPC="northbound/grpc/"
 
-INBAND=false
+INBAND=true
 IPv6_EMULATION=true
 
 if [ "$INBAND" = false ] ; then

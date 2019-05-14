@@ -228,7 +228,8 @@ class SRv6SouthboundVPN:
         # Return the response
         return response.message
 
-    def add_remote_interface_to_vpn(self, ip_address, vpn_name, interface, tableid, sid):
+    def add_remote_interface_to_vpn(self, ip_address,
+                                    vpn_name, interface, tableid, sid):
         # Create the request
         request = srv6_vpn_msg_pb2.AddRemoteInterfaceToVPNRequest()
         request.vpn_name = vpn_name
@@ -244,7 +245,8 @@ class SRv6SouthboundVPN:
         # Return the response
         return response.message
 
-    def remove_remote_interface_from_vpn(self, ip_address, vpn_name, interface, tableid):
+    def remove_remote_interface_from_vpn(self, ip_address,
+                                         vpn_name, interface, tableid):
         # Create the request
         request = srv6_vpn_msg_pb2.RemoveRemoteInterfaceFromVPNRequest()
         request.vpn_name = vpn_name
@@ -303,7 +305,8 @@ class InterfaceManager:
         else:
             channel = grpc.insecure_channel("ipv6:[%s]:%s"
                                             % (ip_address, port))
-        return interface_manager_pb2_grpc.InterfaceManagerStub(channel), channel
+        return (interface_manager_pb2_grpc
+                .InterfaceManagerStub(channel), channel)
 
     def add_ip_address_to_interface(self, ip_address, ifname, ip):
         # Create the request
@@ -370,12 +373,12 @@ class InterfaceManager:
 # Test features
 if __name__ == "__main__":
     # Test Netlink messages
-    srv6SouthboundVPN = SRv6SouthboundVPN()
+    interface_manager = InterfaceManager()
     # Create a thread for each router and subscribe netlink notifications
     routers = ["2000::1", "2000::2", "2000::3"]
     thread_pool = []
     for router in routers:
-        thread = Thread(target=SRv6SouthboundVPN
+        thread = Thread(target=interface_manager
                         .subscribe_netlink_notifications,
                         args=(router, ))
         thread.start()
