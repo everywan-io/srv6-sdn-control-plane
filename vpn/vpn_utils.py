@@ -16,15 +16,56 @@
 # limitations under the License.
 #
 # Utils for VPN use case
-# 
+#
 # @author Carmine Scarpitta <carmine.scarpitta.94@gmail.com>
 # @author Pier Luigi Ventre <pier.luigi.ventre@uniroma2.it>
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
+
 class VPNIntent:
-    def __init__(self, name, interfaces, tenantid):
-      self.name = name
-      # An interface is a tuple (router_id, interface_name, subnet)
-      self.interfaces = interfaces
-      self.tenantid = tenantid
+    def __init__(self, vpn_name, interfaces, tenantid):
+        # VPN name
+        self.vpn_name = vpn_name
+        # Interfaces belonging to the VPN
+        self.interfaces = interfaces
+        # Tenant ID
+        self.tenantid = tenantid
+
+    def dump(self):
+        intent = dict()
+        intent['vpn_name'] = self.vpn_name
+        intent['interfaces'] = [intf.dump() for intf in self.interfaces]
+        intent['tenantid'] = self.tenantid
+        return intent
+
+
+class Interface:
+    def __init__(self, router, ifname, ipaddrs=()):
+        # Router ID
+        self.router = router
+        # Interface name
+        self.ifname = ifname
+        # IP addresses
+        self.ipaddrs = ipaddrs
+
+    def dump(self):
+        intf = dict()
+        intf['router'] = self.router
+        intf['ifname'] = self.ifname
+        intf['ipaddrs'] = [ipaddr.dump() for ipaddr in self.ipaddrs]
+        return intf
+
+
+class IPAddress:
+    def __init__(self, ip, net):
+        # IP address
+        self.ip = ip
+        # Net
+        self.net = net
+
+    def dump(self):
+        ipaddr = dict()
+        ipaddr['ip'] = self.ip
+        ipaddr['net'] = self.net
+        return ipaddr

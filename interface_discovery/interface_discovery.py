@@ -68,7 +68,7 @@ def read_json_file(filename):
 
 def interface_discovery(opts):
 	global VERBOSE
-	sRv6SouthboundVPN = SRv6SouthboundVPN()
+	interfaceManager = InterfaceManager()
 	# Let's parse the input
 	routers = []
 	# First create the chunk
@@ -92,7 +92,7 @@ def interface_discovery(opts):
 	for router in routers:
 		if VERBOSE:
 			print "\n*********** Extracting interfaces from %s ***********" % router
-		router_to_interfaces[router] = sRv6SouthboundVPN.get_interfaces(router)
+		router_to_interfaces[router] = interfaceManager.get_interfaces(router)
 	# Print interfaces
 	if VERBOSE:
 		pp = pprint.PrettyPrinter()
