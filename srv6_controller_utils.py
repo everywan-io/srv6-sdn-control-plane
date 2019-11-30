@@ -8,12 +8,11 @@ import os
 # ipaddress dependencies
 from ipaddress import IPv6Interface
 from ipaddress import IPv6Network
-from ipaddress import IPv4Address
 
 
 # Return true if the IP address belongs to the network
 def IPv6AddrInNet(ipaddr, net):
-    return IPv6Interface(str(ipaddr)) in IPv6Network(str(net))
+    return IPv6Interface(unicode(ipaddr)) in IPv6Network(unicode(net))
 
 
 # Find a IPv6 address contained in the net

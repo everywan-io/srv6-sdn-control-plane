@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from __future__ import print_function
 
 # General imports
 import time
@@ -26,9 +27,12 @@ import srv6_controller_utils as utils
 PROTO_FOLDER = '../srv6-sdn-proto/'
 # Mapping router ID to management IP
 ROUTERID_TO_MGMTIP = {
-    '0.0.0.1': '2000::1',
-    '0.0.0.2': '2000::2',
-    '0.0.0.3': '2000::3'
+    #'0.0.0.1': '2000::1',
+    #'0.0.0.2': '2000::2',
+    #'0.0.0.3': '2000::3'
+    '0.0.0.1': '2000:0:0:1::1',
+    '0.0.0.2': '2000:0:0:2::1',
+    '0.0.0.3': '2000:0:0:3::1',
 }
 
 ###########################################################
@@ -298,7 +302,7 @@ class SRv6Controller(object):
         topo_changed = False
         for ipaddr in interfaces[ifindex]['ipaddr']:
             # Detach router interface from net
-            net = str(IPv6Interface(str(ipaddr)).network)
+            net = str(IPv6Interface(unicode(ipaddr)).network)
             if self.detach_router_from_net(routerid, net):
                 topo_changed = True
         # Return True if topo has changed, False otherwise
@@ -476,10 +480,10 @@ class SRv6Controller(object):
     def handle_interface_up_event(self, routerid, ifindex, ifname, macaddr):
         topo_changed = False
         if self.create_router_interface(routerid=routerid,
-                                      ifindex=ifindex,
-                                      ifname=ifname,
-                                      macaddr=macaddr,
-                                      state='UP'):
+                                        ifindex=ifindex,
+                                        ifname=ifname,
+                                        macaddr=macaddr,
+                                        state='UP'):
             topo_changed = True
         # Return True if the topology has changed, False otherwise
         return topo_changed
@@ -519,7 +523,7 @@ class SRv6Controller(object):
         if self.add_ipaddr_to_interface(routerid, ifindex, ipaddr):
             topo_changed = True
         # Add the new network to the topology
-        net = IPv6Interface(str(ipaddr)).network
+        net = IPv6Interface(unicode(ipaddr)).network
         if not net.is_link_local:
             # and attach the router to it
             if self.attach_router_to_net(routerid, str(net)):
@@ -535,7 +539,7 @@ class SRv6Controller(object):
         if self.remove_ipaddr_from_interface(routerid, ifindex, ipaddr):
             topo_changed = True
         # Get the network associated to the interface
-        net = str(IPv6Interface(str(ipaddr)).network)
+        net = str(IPv6Interface(unicode(ipaddr)).network)
         # and detach the router from it
         if self.detach_router_from_net(routerid, net):
             topo_changed = True
@@ -553,13 +557,13 @@ class SRv6Controller(object):
                             % router)
             return
         if self.VERBOSE:
-            print(('*** Listening network events from router %s' % router))
+            print('*** Listening network events from router %s' % router)
         if self.sb_interface == 'gRPC':
             # Wait for next network event notification and process it
             for event in self.eventsListener.listen(router, self.grpc_client_port):
                 if self.VERBOSE:
-                    print(('*** Received a new network event from router %s:\n%s'
-                           % (routerid, event)))
+                    print('*** Received a new network event from router %s:\n%s'
+                           % (routerid, event))
                 if event['type'] == 'CONNECTION_ESTABLISHED':
                     # 'Connection established' message
                     # Run interface discovery to get missing information
@@ -571,15 +575,15 @@ class SRv6Controller(object):
                         # abort and retry later
                         return
                     # Let's update the interfaces
-                    for routerid, interfaces in \
+                    for r, interfaces in \
                             list(self.topoInfo['interfaces'].items()):
                         for ifindex, ifdata in list(interfaces.items()):
                             for ipaddr in ifdata['ipaddr']:
                                 # Add the new network to the topology
-                                net = IPv6Interface(str(ipaddr)).network
+                                net = IPv6Interface(unicode(ipaddr)).network
                                 if not net.is_link_local:
                                     # and attach the router to it
-                                    if self.attach_router_to_net(routerid, str(net)):
+                                    if self.attach_router_to_net(r, str(net)):
                                         topo_changed = True
                 elif event['type'] == 'INTF_UP':
                     # Interface UP event
@@ -592,7 +596,7 @@ class SRv6Controller(object):
                     macaddr = interface['macaddr']
                     # Handle interface up event
                     topo_changed = self.handle_interface_up_event(routerid, ifindex,
-                                                               ifname, macaddr)
+                                                                  ifname, macaddr)
                 elif event['type'] == 'INTF_DOWN':
                     # Interface DOWN event
                     interface = event['interface']
@@ -604,7 +608,7 @@ class SRv6Controller(object):
                     macaddr = interface['macaddr']
                     # Handle interface down event
                     topo_changed = self.handle_interface_down_event(routerid, ifindex,
-                                                                 ifname, macaddr)
+                                                                    ifname, macaddr)
                 elif event['type'] == 'INTF_DEL':
                     # Interface DEL event
                     interface = event['interface']
@@ -621,7 +625,7 @@ class SRv6Controller(object):
                     ipaddr = interface['ipaddr']
                     # Handle new address event
                     topo_changed = self.handle_new_addr_event(routerid,
-                                                           ifindex, ipaddr)
+                                                              ifindex, ipaddr)
                 elif event['type'] == 'DEL_ADDR':
                     # Del address event
                     interface = event['interface']
@@ -631,7 +635,7 @@ class SRv6Controller(object):
                     ipaddr = interface['ipaddr']
                     # Handle interface del event
                     topo_changed = self.handle_del_addr_event(routerid,
-                                                           ifindex, ipaddr)
+                                                              ifindex, ipaddr)
                 # Build, dump and draw topology, if it has changed
                 if topo_changed:
                     if self.VERBOSE:
@@ -660,9 +664,9 @@ class SRv6Controller(object):
                 # The thread which handles the events listening is not active
                 # Start a new thread events listener in a new thread
                 thread = Thread(name=routerid,
-                                daemon=True,
                                 target=self.listen_network_events,
                                 args=(routerid, ))
+                thread.daemon = True
                 # and update the mapping
                 self.listenerThreads[routerid] = thread
                 thread.start()
@@ -913,11 +917,13 @@ class SRv6Controller(object):
                     }
                 )
             )
+            thread.daemon = True
             thread.start()
         # Start 'dump and draw' thread
         thread = Thread(
             target=self.dump_and_draw_topo
         )
+        thread.daemon = True
         thread.start()
         # Start topology information extraction
         self.topology_information_extraction()

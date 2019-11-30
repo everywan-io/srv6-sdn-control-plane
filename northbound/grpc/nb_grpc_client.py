@@ -41,7 +41,7 @@ sys.path.append(utils.PROTO_FOLDER)
 # SRv6 dependencies
 import srv6_vpn_pb2_grpc
 import srv6_vpn_pb2
-from status_codes_pb2 import StatusCode
+import status_codes_pb2
 import empty_req_pb2
 import nb_grpc_utils
 from nb_grpc_utils import VPN
@@ -49,8 +49,8 @@ from nb_grpc_utils import Interface
 from nb_grpc_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
-IP_ADDRESS = '2000::a'
-IP_PORT = 12345
+#IP_ADDRESS = '2000::a'
+#IP_PORT = 12345
 # Define wheter to use SSL or not
 DEFAULT_SECURE = False
 # SSL cerificate for server validation
@@ -58,19 +58,32 @@ DEFAULT_CERTIFICATE = 'cert_client.pem'
 
 
 STATUS_CODES_TO_DESCR = {
-    StatusCode.STATUS_SUCCESS: 'OK',
-    StatusCode.STATUS_TOPO_NOTFOUND: 'Cannot import the topology',
-    StatusCode.STATUS_VPN_INVALID_TENANTID: 'Invalid tenant ID',
-    StatusCode.STATUS_VPN_INVALID_TYPE: 'Invalid VPN type',
-    StatusCode.STATUS_VPN_NAME_UNAVAILABLE: 'VPN name is already in use',
-    StatusCode.STATUS_ROUTER_NOTFOUND: 'The topology does not contain the router',
-    StatusCode.STATUS_VPN_INVALID_IP: 'Invalid IP adderess',
-    StatusCode.STATUS_VPN_INVALID_PREFIX: 'Invalid VPN prefix',
-    StatusCode.STATUS_VPN_NOTFOUND: 'The VPN does not exist',
-    StatusCode.STATUS_INTF_NOTFOUND: 'The interface does not exist',
-    StatusCode.STATUS_INTF_ALREADY_ASSIGNED: 'The interface is already assigned to a VPN',
-    StatusCode.STATUS_INTF_NOTASSIGNED: 'The interface is not assigned to the VPN',
-    StatusCode.STATUS_INTERNAL_ERROR: 'Internal error'
+    status_codes_pb2.STATUS_SUCCESS: 'OK',
+    status_codes_pb2.STATUS_TOPO_NOTFOUND: 'Cannot import the topology',
+    status_codes_pb2.STATUS_VPN_INVALID_TENANTID: 'Invalid tenant ID',
+    status_codes_pb2.STATUS_VPN_INVALID_TYPE: 'Invalid VPN type',
+    status_codes_pb2.STATUS_VPN_NAME_UNAVAILABLE: 'VPN name is already in use',
+    status_codes_pb2.STATUS_ROUTER_NOTFOUND: 'The topology does not contain the router',
+    status_codes_pb2.STATUS_VPN_INVALID_IP: 'Invalid IP adderess',
+    status_codes_pb2.STATUS_VPN_INVALID_PREFIX: 'Invalid VPN prefix',
+    status_codes_pb2.STATUS_VPN_NOTFOUND: 'The VPN does not exist',
+    status_codes_pb2.STATUS_INTF_NOTFOUND: 'The interface does not exist',
+    status_codes_pb2.STATUS_INTF_ALREADY_ASSIGNED: 'The interface is already assigned to a VPN',
+    status_codes_pb2.STATUS_INTF_NOTASSIGNED: 'The interface is not assigned to the VPN',
+    status_codes_pb2.STATUS_INTERNAL_ERROR: 'Internal error'
+}
+
+STR_TO_VPN_TYPE = {
+    'IPv4VPN': srv6_vpn_pb2.IPv4VPN,
+    'IPv6VPN': srv6_vpn_pb2.IPv6VPN
+}
+
+
+ENCAP = {
+    'SRv6': srv6_vpn_pb2.SRv6,
+    'IPsec_ESP_GRE': srv6_vpn_pb2.IPsec_ESP_GRE,
+    'SRv6_IPsec_ESP_GRE': srv6_vpn_pb2.SRv6_IPsec_ESP_GRE,
+    'SRv6_IPsec_ESP_IP': srv6_vpn_pb2.SRv6_IPsec_ESP_IP
 }
 
 
@@ -108,7 +121,7 @@ class SRv6VPNManager:
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Get VPNs
         response = srv6_stub.GetVPNs(request)
-        if response.status == StatusCode.STATUS_SUCCESS:
+        if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve VPNs information
             vpns = dict()
             for vpn in response.vpns:
@@ -130,15 +143,19 @@ class SRv6VPNManager:
 
 
     def create_vpn(self, server_ip, server_port, 
-                   vpn_name, vpn_type, interfaces, tenantid):
+                   name, type, interfaces, tenantid, encap='SRv6'):
         # Create the request
-        request = srv6_vpn_pb2.CreateVPNRequest()
-        requestIntent = request.intents.add()
-        requestIntent.vpn_name = vpn_name
-        requestIntent.vpn_type = utils.VPNType.str_to_type(vpn_type)
-        requestIntent.tenantid = tenantid
+        request = srv6_vpn_pb2.SRv6VPNRequest()
+        intent = request.intents.add()
+        intent.vpn_name = name
+        intent.vpn_type = STR_TO_VPN_TYPE[type]
+        intent.tenantid = tenantid
+        intent.encap = ENCAP.get(encap, None)
+        if intent.encap is None:
+            print('Invalid encap type')
+            return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
-            interface = requestIntent.interfaces.add()
+            interface = intent.interfaces.add()
             interface.routerid = str(intf[0])
             interface.interface_name = str(intf[1])
             interface.interface_ip = str(intf[2])
@@ -155,13 +172,14 @@ class SRv6VPNManager:
 
     def remove_vpn(self, server_ip, server_port, vpn_name, tenantid):
         # Create the request
-        request = srv6_vpn_pb2.RemoveVPNRequest()
-        request.vpn_name = vpn_name
-        request.tenantid = tenantid
+        request = srv6_vpn_pb2.SRv6VPNRequest()
+        intent = request.intents.add()
+        intent.vpn_name = vpn_name
+        intent.tenantid = tenantid
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Remove the VPN
-        response = srv6_stub.RemoveVPN(request)
+        response = srv6_stub.RemoveVPN(intent)
         # Let's close the session
         channel.close()
         # Return
@@ -170,10 +188,11 @@ class SRv6VPNManager:
 
     def assign_interface_to_vpn(self, server_ip, server_port, vpn_name, tenantid, intf):
         # Create the request
-        request = srv6_vpn_pb2.AssignInterfaceToVPNRequest()
-        request.vpn_name = vpn_name
-        request.tenantid = tenantid
-        interface = request.interfaces.add()
+        request = srv6_vpn_pb2.SRv6VPNRequest()
+        intent = request.intents.add()
+        intent.vpn_name = vpn_name
+        intent.tenantid = tenantid
+        interface = intent.interfaces.add()
         interface.routerid = str(intf[0])
         interface.interface_name = str(intf[1])
         interface.interface_ip = str(intf[2])
@@ -181,7 +200,7 @@ class SRv6VPNManager:
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
-        response = srv6_stub.AssignInterfaceToVPN(request)
+        response = srv6_stub.AssignInterfaceToVPN(intent)
         # Let's close the session
         channel.close()
         # Return
@@ -190,16 +209,17 @@ class SRv6VPNManager:
 
     def remove_interface_from_vpn(self, server_ip, server_port, vpn_name, tenantid, intf):
         # Create the request
-        request = srv6_vpn_pb2.RemoveInterfaceFromVPNRequest()
-        request.vpn_name = vpn_name
-        request.tenantid = tenantid
-        interface = request.interfaces.add()
+        request = srv6_vpn_pb2.SRv6VPNRequest()
+        intent = request.intents.add()
+        intent.vpn_name = vpn_name
+        intent.tenantid = tenantid
+        interface = intent.interfaces.add()
         interface.routerid = str(intf[0])
         interface.interface_name = str(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
-        response = srv6_stub.RemoveInterfaceFromVPN(request)
+        response = srv6_stub.RemoveInterfaceFromVPN(intent)
         # Let's close the session
         channel.close()
         # Return

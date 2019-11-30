@@ -24,7 +24,7 @@
 
 
 # General imports
-import argparse
+from argparse import ArgumentParser
 import grpc
 import json
 import os
@@ -65,6 +65,7 @@ def interface_discovery(router, port, verbose=False):
     except grpc.RpcError as e:
         if e.details() == 'Connect Failed' and verbose:
             print('Cannot connect to %s' % router)
+        return None
     # Print interfaces
     if verbose:
         pp = pprint.PrettyPrinter()
@@ -143,13 +144,13 @@ def parseArguments():
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
-    return options
+    return args
 
 
 if __name__ == '__main__':
     global VERBOSE
     # Let's parse input parameters
-    opts = parseOptions()
+    args = parseArguments()
     # Get interfaces filename
     interfaces_file = args.interfaces_file
     # Nodes

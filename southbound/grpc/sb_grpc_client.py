@@ -37,7 +37,7 @@ sys.path.append(PROTO_FOLDER)
 # SRv6 dependencies
 import srv6_manager_pb2_grpc
 import srv6_manager_pb2
-from status_codes_pb2 import StatusCode
+import status_codes_pb2
 import network_events_listener_pb2
 import network_events_listener_pb2_grpc
 import empty_req_pb2
@@ -65,7 +65,7 @@ class SRv6Manager:
     def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
         self.SECURE = secure
         if secure is True:
-            if certificate_path is None:
+            if certificate is None:
                 print('Error: "certificate" variable cannot be None '
                       'in secure mode')
                 sys.exit(-2)
@@ -402,7 +402,7 @@ class SRv6Manager:
             intf.name = interface
         # Get interfaces
         response = srv6_stub.Get(srv6_request)
-        if response.status == StatusCode.STATUS_SUCCESS:
+        if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve interfaces information
             interfaces = dict()
             for interface in response.interfaces:
@@ -723,7 +723,7 @@ class NetworkEventsListener:
     def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
         self.SECURE = secure
         if secure is True:
-            if certificate_path is None:
+            if certificate is None:
                 print('Error: "certificate" variable cannot be None '
                       'in secure mode')
                 sys.exit(-2)

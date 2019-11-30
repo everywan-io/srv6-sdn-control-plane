@@ -102,7 +102,7 @@ def validate_ipv6_address(ip):
     if ip is None:
         return False
     try:
-        IPv6Interface(ip)
+        IPv6Interface(unicode(ip))
         return True
     except AddressValueError:
         return False
@@ -114,7 +114,7 @@ def validate_ipv4_address(ip):
     if ip is None:
         return False
     try:
-        IPv4Interface(ip)
+        IPv4Interface(unicode(ip))
         return True
     except AddressValueError:
         return False
@@ -142,15 +142,6 @@ def getAddressFamily(ip):
 class VPNType:
     IPv4VPN = 1
     IPv6VPN = 2
-
-    def str_to_type(type):
-        if type == 'IPv4VPN':
-            return IPv4VPN
-        elif tupe == 'IPv6VPN':
-            return IPv6VPN
-        else:
-            return None
-
 
 class VPN:
     def __init__(self, vpn_name, vpn_type, interfaces, tenantid, tableid=-1):
@@ -693,14 +684,24 @@ class SRv6ControllerState:
 
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
+        print routerid
+        print interface_name
+        print 'interf exists\n\n\n\n\n'
         router = self.topology.node[routerid]
+        print router
+        print 'router'
         if router is None or router['interfaces'] is None:
             return False
         interface_names = []
         for interface in router['interfaces'].values():
             interface_names.append(interface['ifname'])
-        if (self.router_exists(routerid)
-                and interface_name in interface_names):
+        print interface_names
+        print
+        print
+        print
+        print
+        print
+        if interface_name in interface_names:
             # The interface exists
             return True
         else:

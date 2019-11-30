@@ -43,9 +43,12 @@ from ipaddress import IPv6Network
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 
+################## Setup these variables ##################
 
 # Loopback prefix used by the routers
 LOOPBACK_PREFIX = 'fcff::'
+
+###########################################################
 
 
 # Default topology file
@@ -58,7 +61,8 @@ DEFAULT_OSPF6D_PASSWORD = 'srv6'
 DOT_FILE_TOPO_GRAPH = '/tmp/topology.dot'
 # Default folder where to save extracted OSPF databases
 OSPF_DB_PATH = '/tmp/ospf_db'
-
+# Convert str to unicode
+LOOPBACK_PREFIX = unicode(LOOPBACK_PREFIX)
 
 def print_and_die(message, code=-2):
     print(message)
@@ -67,21 +71,20 @@ def print_and_die(message, code=-2):
 
 def connect_telnet(router, port):
     # Establish a telnet connection to the router
-    while True:
-        try:
-            # Init telnet
-            tn = telnetlib.Telnet(router, port, 3)
-            # Connection established
-            return tn
-        except socket.timeout:
-            # Timeout expired
+    try:
+        # Init telnet
+        tn = telnetlib.Telnet(router, port, 3)
+        # Connection established
+        return tn
+    except socket.timeout:
+        # Timeout expired
+        logging.error('Error: cannot establish a connection '
+                      'to %s on port %s\n' % (str(router), str(port)))
+    except socket.error as e:
+        # Socket error
+        if e.errno != errno.EINTR:
             logging.error('Error: cannot establish a connection '
                           'to %s on port %s\n' % (str(router), str(port)))
-        except socket.error as e:
-            # Socket error
-            if e.errno != errno.EINTR:
-                logging.error('Error: cannot establish a connection '
-                              'to %s on port %s\n' % (str(router), str(port)))
     return None
 
 
@@ -122,7 +125,7 @@ def build_topo_graph(routers, stub_networks, transit_networks):
     return G
 
 
-def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
+def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
                                  ospf6d_pwd=DEFAULT_OSPF6D_PASSWORD,
                                  verbose=False):
     # Check if ospfdb_path exists, if not create it
@@ -143,12 +146,17 @@ def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
     routerid_to_loopbacknet = dict()
     # Mapping router id to loopback IP
     routerid_to_loopbackip = dict()
+    # Let's parse the input
+    routers = []
+    ports = []
+    # First create the chunk
+    for ip_port in ips_ports:
+        # Then parse the chunk
+        data = ip_port.split("-")
+        routers.append(data[0])
+        ports.append(data[1])
     # Iterate on routers
-    for router in routers:
-        # Separate IP and port
-        data = router.split('-')
-        router = data[0]
-        port = data[1]
+    for router, port in zip(routers, ports):
         if verbose:
             print('\n********* Connecting to %s-%s *********' % (router, port))
         # Password of ospf6d daemon
@@ -161,14 +169,14 @@ def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until(b'Password: ')
-            ospf6d_conn.write(password.encode() + b'\r\n')
+            ospf6d_conn.read_until('Password: ')
+            ospf6d_conn.write(password + '\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write(b'terminal length 0\r\n')
+        ospf6d_conn.write('terminal length 0\r\n')
         # Get routing details from ospf6 database
-        ospf6d_conn.write(b'show ipv6 ospf6 route intra-area detail\r\n')
+        ospf6d_conn.write('show ipv6 ospf6 route intra-area detail\r\n')
         # Close
-        ospf6d_conn.write(b'q\r\n')
+        ospf6d_conn.write('q\r\n')
         # Get results
         route_details = ospf6d_conn.read_all().decode()
         # Establish a telnet connection
@@ -179,14 +187,14 @@ def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until(b'Password: ')
-            ospf6d_conn.write(password.encode() + b'\r\n')
+            ospf6d_conn.read_until('Password: ')
+            ospf6d_conn.write(password + '\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write(b'terminal length 0\r\n')
+        ospf6d_conn.write('terminal length 0\r\n')
         # Get network details from ospf6 database
-        ospf6d_conn.write(b'show ipv6 ospf6 database network detail\r\n')
+        ospf6d_conn.write('show ipv6 ospf6 database network detail\r\n')
         # Close
-        ospf6d_conn.write(b'q\r\n')
+        ospf6d_conn.write('q\r\n')
         # Get results
         network_details = ospf6d_conn.read_all().decode()
         # Establish a telnet connection
@@ -197,20 +205,20 @@ def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until(b'Password: ')
-            ospf6d_conn.write(password.encode() + b'\r\n')
+            ospf6d_conn.read_until('Password: ')
+            ospf6d_conn.write(password + '\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write(b'terminal length 0\r\n')
+        ospf6d_conn.write('terminal length 0\r\n')
         # Turn on privileged mode
-        ospf6d_conn.write(b'enable\r\n')
+        ospf6d_conn.write('enable\r\n')
         # Configuration terminal
-        ospf6d_conn.write(b'configure terminal\r\n')
+        ospf6d_conn.write('configure terminal\r\n')
         # Get running configuration
-        ospf6d_conn.write(b'show running-config\r\n')
+        ospf6d_conn.write('show running-config\r\n')
         # Close
-        ospf6d_conn.write(b'q\r\n')
+        ospf6d_conn.write('q\r\n')
         # Close
-        ospf6d_conn.write(b'q\r\n')
+        ospf6d_conn.write('q\r\n')
         # Get results
         running_config = ospf6d_conn.read_all().decode()
         # Close telnet connection
@@ -319,17 +327,17 @@ def connect_and_extract_topology(routers, ospfdb_path=OSPF_DB_PATH,
         for net in list(stub_networks):
             adv_router = list(stub_networks[net])[0]
             # Get the router ID
-            _id = int(IPv4Address(adv_router))
+            _id = int(IPv4Address(unicode(adv_router)))
             # Generate the loopback prefix of the router
             loopback_prefix = IPv6Network(int(IPv6Address
                                           (LOOPBACK_PREFIX)) | _id << 96)
             loopback_prefix = (IPv6Network(loopback_prefix)
                                .supernet(new_prefix=64))
-            if IPv6Network(net).subnet_of(loopback_prefix):
+            if IPv6Network(unicode(net)).subnet_of(loopback_prefix):
                 # The net is the loopback network of adv_router
                 routerid_to_loopbacknet[adv_router] = net
                 # The loopback IP address is the first address of the loopback net
-                loopbackip = str(next(IPv6Network(net)
+                loopbackip = str(next(IPv6Network(unicode(net))
                                  .hosts()))
                 # Update mapping router ID to loopback IPs
                 routerid_to_loopbackip[adv_router] = loopbackip

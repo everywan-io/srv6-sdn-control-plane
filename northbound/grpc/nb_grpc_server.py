@@ -77,7 +77,7 @@ import nb_grpc_utils as utils
 import srv6_vpn_pb2_grpc
 import srv6_vpn_pb2
 from sb_grpc_client import SRv6Manager
-from status_codes_pb2 import StatusCode
+import status_codes_pb2
 
 
 # Global variables definition
@@ -129,6 +129,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         # Update the topology
         self.srv6_controller_state.load_topology_from_json_dump()
 
+    '''
     # Install a VPN on a specified router
     #
     # Three steps are required to install a VPN
@@ -137,6 +138,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
     #    and lookup in the VPN table
     # 3. Create a VRF and assign it to the VPN
     def _install_vpn_on_router(self, routerid, vpn_name):
+        print 1
         logger.debug(
             'Attempting to install the VPN %s on the router %s'
             % (vpn_name, routerid)
@@ -147,17 +149,20 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return 'Cannot get the router address'
+        print 2
         # If the VPN is already installed on the router,
         # we don't need to create it
         installed = self.srv6_controller_state.is_vpn_installed_on_router(
             vpn_name, routerid
         )
+        print 3
         if installed:
             logger.debug(
                 'The VPN is already installed on the router %s'
                 % routerid
             )
             return 'OK'
+        print 4
         # First step: create a rule for local SIDs processing
         # This step is just required for the first VPN
         installed_vpns = (self.srv6_controller_state
@@ -175,12 +180,13 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     'Cannot get SID family for routerid %s' % routerid
                 )
                 return 'Cannot get SID family for routerid %s' % routerid
+            print 5
             # Add the rule to steer the SIDs through the local SID table
             response = self.srv6_manager.create_iprule(
                 router, self.grpc_client_port, family=AF_INET6,
                 table=utils.LOCAL_SID_TABLE, destination=sid_family
             )
-            if response != StatusCode.STATUS_SUCCESS:
+            if response != status_codes_pb2.STATUS_SUCCESS:
                 logger.warning(
                     'Cannot create the IP rule for destination %s: %s'
                     % (sid_family, response)
@@ -188,26 +194,30 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # If the operation has failed, return an error message
                 return 'Cannot create the rule for destination %s: %s' \
                     % (sid_family, response)
+            print 6
             # Add a blackhole route to drop all unknown active segments
             response = self.srv6_manager.create_iproute(
                 router, self.grpc_client_port, family=AF_INET6,
                 type='blackhole', table=utils.LOCAL_SID_TABLE
             )
-            if response != StatusCode.STATUS_SUCCESS:
+            if response != status_codes_pb2.STATUS_SUCCESS:
                 logger.warning(
                     'Cannot create the blackhole route: %s' % response
                 )
                 # If the operation has failed, return an error message
                 return 'Cannot create the blackhole route: %s' % response
+        print 7
         # Second step is the creation of the decapsulation and lookup route
         tableid = self.srv6_controller_state.get_vpn_tableid(vpn_name)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return 'Cannot retrieve VPN table ID'
+        print 8
         vpn_type = self.srv6_controller_state.get_vpn_type(vpn_name)
         if vpn_type is None:
             logger.warning('Cannot retrieve VPN type')
             return 'Cannot retrieve VPN type'
+        print 9
         if vpn_type == utils.VPNType.IPv6VPN:
             # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
             # table. This behavior is realized by End.DT6 SRv6 action
@@ -223,6 +233,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         # We use the management interface (which is the first interface)
         # in order to solve an issue of routes getting deleted when the
         # interface is assigned to a VRF
+        print 10
         dev = self.srv6_controller_state.get_first_interface(routerid)
         if dev is None:
             # Cannot get non-loopback interface
@@ -237,7 +248,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, segment=sid, action=action,
             device=dev, localsid_table=utils.LOCAL_SID_TABLE, table=tableid
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        print 11
+        if response != status_codes_pb2.STATUS_SUCCESS:
             logger.warning(
                 'Cannot create the SRv6 Local Processing function: %s'
                 % response
@@ -245,11 +257,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # The operation has failed, return an error message
             return 'Cannot create the SRv6 Local Processing function: %s' \
                 % response
+        print 12
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
             router, self.grpc_client_port, name=vpn_name, table=tableid
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             logger.warning(
                 'Cannot create the VRF %s: %s' % (vpn_name, response)
             )
@@ -259,6 +272,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         interfaces = self.srv6_controller_state.get_vpn_interfaces(
             vpn_name
         )
+        print 13
         if interfaces is not None:
             for intf in interfaces:
                 if intf.routerid == routerid:
@@ -269,6 +283,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 sid = self.srv6_controller_state.get_sid(
                     intf.routerid, tableid
                 )
+                print 14
                 # Add remote interfacace to the VPN
                 response = self._assign_remote_interface_to_vpn(
                     routerid, intf.vpn_prefix, tableid, sid
@@ -280,6 +295,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     )
                     # If the operation has failed, return an error message
                     return response
+                print 15
         # The VPN has been installed on the router
         #
         # Update data structures
@@ -288,6 +304,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not succ:
             logger.warning('Cannot add the router to the VPN')
             return 'Cannot add the router to the VPN'
+        print 16
         # Success
         logger.debug('The VPN has been successfully installed on the router')
         return 'OK'
@@ -322,7 +339,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, segment=sid,
             localsid_table=utils.LOCAL_SID_TABLE
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot remove seg6local route: %s' % response)
             return 'Cannot remove seg6local route: %s' % response
@@ -330,7 +347,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         response = self.srv6_manager.remove_vrf_device(
             router, self.grpc_client_port, vpn_name
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning(
                 'Cannot remove the VRF %s from the router %s: %s'
@@ -342,7 +359,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         response = self.srv6_manager.remove_iproute(
             router, self.grpc_client_port, family=AF_INET6, table=tableid
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot remove the IPv6 route: %s' % response)
             return 'Cannot remove the IPv6 route: %s' % response
@@ -350,7 +367,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         response = self.srv6_manager.remove_iproute(
             router, self.grpc_client_port, family=AF_INET, table=tableid
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot remove IPv4 routes: %s' % response)
             return 'Cannot remove IPv4 routes: %s' % response
@@ -375,7 +392,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 router, self.grpc_client_port, family=AF_INET6, table=utils.LOCAL_SID_TABLE,
                 destination=sid_family
             )
-            if response != StatusCode.STATUS_SUCCESS:
+            if response != status_codes_pb2.STATUS_SUCCESS:
                 # If the operation has failed, return an error message
                 logger.warning(
                     'Cannot remove the localSID rule: %s' % response
@@ -386,7 +403,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 router, self.grpc_client_port, family=AF_INET6, type='blackhole',
                 table=utils.LOCAL_SID_TABLE
             )
-            if response != StatusCode.STATUS_SUCCESS:
+            if response != status_codes_pb2.STATUS_SUCCESS:
                 # If the operation has failed, return an error message
                 logger.warning(
                     'Cannot remove the blackhole rule: %s' % response
@@ -625,12 +642,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             return 'Cannot get interface addresses'
         nets = []
         for addr in addrs:
-            nets.append(str(IPv6Interface(addr).network))
+            nets.append(str(IPv6Interface(unicode(addr)).network))
         response = self.srv6_manager.remove_many_ipaddr(
             router, self.grpc_client_port, addrs=addrs, nets=nets,
             device=interface_name, family=AF_UNSPEC
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot remove the public addresses from the interface'
@@ -640,7 +657,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         response = self.srv6_manager.update_interface(
             router, self.grpc_client_port, name=interface_name, ospf_adv=False
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning('Cannot disable OSPF advertisements')
             return 'Cannot disable OSPF advertisements'
@@ -649,7 +666,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, ip_addr=interface_ip,
             device=interface_name, net=vpn_prefix, family=family
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot assign the private VPN IP address to the interface'
@@ -669,7 +686,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, name=vpn_name,
             interfaces=interfaces_in_vpn
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot assign the interface to the VRF: %s' % response
@@ -706,7 +723,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, destination=vpn_prefix,
             table=tableid, device=dev, segments=[sid], encapmode='encap'
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning('Cannot create SRv6 Explicit Path: %s' % response)
             return 'Cannot create SRv6 Explicit Path: %s' % response
@@ -735,12 +752,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # If the operation has failed, return an error message
             logger.warning('Cannot get interface address')
             return 'Cannot get interface address'
-        net = str(IPv6Interface(addr).network)
+        net = str(IPv6Interface(unicode(addr)).network)
         response = self.srv6_manager.remove_ipaddr(
             router, self.grpc_client_port, ip_addr=addr, net=net,
             device=interface_name, family=AF_UNSPEC
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning(
                 'Cannot remove address from the interface: %s' % response
@@ -750,7 +767,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         response = self.srv6_manager.update_interface(
             router, self.grpc_client_port, name=interface_name, ospf_adv=True
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot enable OSPF advertisements: %s' % response)
             return 'Cannot enable OSPF advertisements: %s' % response
@@ -768,7 +785,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, name=vpn_name,
             interfaces=interfaces_in_vpn
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot remove the VRF device: %s' % response)
             return 'Cannot remove the VRF device: %s' % response
@@ -793,13 +810,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, destination=vpn_prefix,
             table=tableid
         )
-        if response != StatusCode.STATUS_SUCCESS:
+        if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot remove SRv6 Explicit Path: %s' % response)
             return 'Cannot remove SRv6 Explicit Path: %s' % response
         # Success
         logger.debug('Remote inteface removed successfully')
         return 'OK'
+    '''
 
     """gRPC Server"""
 
@@ -810,7 +828,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not self.srv6_controller_state.load_topology_from_json_dump():
             logger.warning('Cannot import the topology')
             # Error while retrieving the updated topology
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_TOPO_NOTFOUND)
+            return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_TOPO_NOTFOUND)
         # Extract the intents from the request message
         for intent in request.intents:
             logger.info('Processing the intent:\n%s' % intent)
@@ -821,7 +839,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             if not utils.validate_tenantid(tenantid):
                 logger.warning('Invalid tenant ID: %s' % tenantid)
                 # If tenant ID is invalid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_TENANTID)
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_TENANTID)
             # Extract the VPN type from the intent
             vpn_type = int(intent.vpn_type)
             # Validate the VPN type
@@ -829,7 +847,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             if not utils.validate_vpn_type(vpn_type):
                 logger.warning('Invalid VPN type: %s' % vpn_type)
                 # If the VPN type is invalid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_TYPE)
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_TYPE)
             # Extract the VPN name from the intent
             vpn_name = intent.vpn_name
             # Get the VPN full name (i.e. tenantid-vpn_name)
@@ -839,7 +857,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             if self.srv6_controller_state.vpn_exists(vpn_name):
                 logger.warning('VPN name %s is already in use' % vpn_name)
                 # If the VPN already exists, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_NAME_UNAVAILABLE)
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NAME_UNAVAILABLE)
             # Validate the VPN interfaces included in the intent
             for interface in intent.interfaces:
                 logger.debug('Validating the interface:\n%s' % interface)
@@ -855,7 +873,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         % routerid
                     )
                     # If the router does not exist, return an error message
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_ROUTER_NOTFOUND)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_ROUTER_NOTFOUND)
                 # Extract the interface name
                 interface_name = interface.interface_name
                 # Let's check if the interface exists
@@ -863,7 +881,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         interface_name, routerid):
                     logger.warning('The interface does not exist')
                     # If the interface does not exists, return an error message
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_NOTFOUND)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTFOUND)
                 # Extract interface IP address
                 interface_ip = interface.interface_ip
                 # Extract VPN prefix
@@ -878,15 +896,15 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 else:
                     logger.warning('Invalid VPN type: %s' % vpn_type)
                     # If the VPN type is invalid, return an error message
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_TYPE)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_TYPE)
                 if not is_ip_valid:
                     logger.warning('Invalid IP address: %s' % interface_ip)
                     # If the IP address is invalid, return an error message
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_IP)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_IP)
                 if not is_prefix_valid:
                     logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
                     # If the IP address is invalid, return an error message
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_PREFIX)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
             logger.info('All checks passed')
             # All checks passed, we are ready to create VPN
             #
@@ -901,7 +919,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             if not utils.validate_table_id(tableid):
                 logger.warning('Invalid table ID: %s' % tableid)
                 # If the table ID is not valid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
             # Update data structures
             logger.debug('Updating controller state')
             self.srv6_controller_state.add_vpn(
@@ -918,7 +936,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     logger.warning(
                         'Cannot install the VPN on the router: %s' % response
                     )
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
             # Iterate on the interfaces and assign them to the VPN
             for interface in intent.interfaces:
                 # Get the routerid
@@ -929,11 +947,11 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 response = self._assign_interface_to_vpn(vpn_name, interface)
                 if response != 'OK':
                     logger.warning(
-                        'Cannot associate the interface to the VPN'
+                        'Cannot associate the interface %s to the VPN %s'
                         % (interface.interface_name, vpn_name)
                     )
                     # If the operation has failed, report the error
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
             logger.info('The VPN has been created successfully')
             # Save the VPNs dump to file
             if self.vpn_dump is not None:
@@ -941,7 +959,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 self.srv6_controller_state.save_vpns_dump()
         logger.info('All the intents have been processed successfully\n\n')
         # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_SUCCESS)
+        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     """Remove a VPN"""
     def RemoveVPN(self, request, context):
@@ -950,55 +968,58 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not self.srv6_controller_state.load_topology_from_json_dump():
             logger.warning('Cannot import the topology')
             # Error while retrieving the updated topology
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_TOPO_NOTFOUND)
-        # Extract the VPN tenant ID from the request
-        tenantid = request.tenantid
-        # Extract the VPN name from the request
-        vpn_name = str(request.vpn_name)
-        # Get the VPN full name (i.e. tenantid-vpn_name)
-        vpn_name = '%s-%s' % (tenantid, vpn_name)
-        # Let's check if the VPN exists
-        logger.debug('Checking the VPN:\n%s' % vpn_name)
-        if not self.srv6_controller_state.vpn_exists(vpn_name):
-            logger.warning('The VPN %s does not exist' % vpn_name)
-            # If the VPN already exists, return an error message
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_NOTFOUND)
-        logger.debug('Check passed')
-        # Remove all the interfaces from the VPN
-        for interface in (self
-                          .srv6_controller_state.get_vpn_interfaces(vpn_name)):
-            # Remove the interface from the VPN
-            logger.debug(
-                'Attempting to remove the interface:\n%s\n' % interface
-            )
-            response = self._remove_interface_from_vpn(
-                interface.routerid, interface.interface_name, vpn_name
-            )
-            if response != 'OK':
-                logger.warning('Cannot remove the interface')
-                # If the operation has failed, report the error
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
-        # Remove the VPN
-        if not self.srv6_controller_state.remove_vpn(vpn_name):
-            logger.warning(
-                'Cannot remove the VPN from the controller state'
-            )
-            # If the operation fails, return an error message
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
-        # Release the table ID
-        if self.srv6_controller_state.release_tableid(vpn_name) == -1:
-            logger.warning(
-                'Cannot release the table ID'
-            )
-            # If the operation fails, return an error message
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
-        logger.info('The VPN has been removed successfully')
-        # Save the VPNs dump to file
-        if self.vpn_dump is not None:
-            logger.info('Saving the VPN dump')
-            self.srv6_controller_state.save_vpns_dump()
+            return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_TOPO_NOTFOUND)
+        # Extract the intents from the request message
+        for intent in request.intents:
+            # Extract the VPN tenant ID from the intent
+            tenantid = intent.tenantid
+            # Extract the VPN name from the intent
+            vpn_name = str(intent.vpn_name)
+            # Get the VPN full name (i.e. tenantid-vpn_name)
+            vpn_name = '%s-%s' % (tenantid, vpn_name)
+            # Let's check if the VPN exists
+            logger.debug('Checking the VPN:\n%s' % vpn_name)
+            if not self.srv6_controller_state.vpn_exists(vpn_name):
+                logger.warning('The VPN %s does not exist' % vpn_name)
+                # If the VPN already exists, return an error message
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
+            logger.debug('Check passed')
+            # Remove all the interfaces from the VPN
+            for interface in (self
+                              .srv6_controller_state.get_vpn_interfaces(vpn_name)):
+                # Remove the interface from the VPN
+                logger.debug(
+                    'Attempting to remove the interface:\n%s\n' % interface
+                )
+                response = self._remove_interface_from_vpn(
+                    interface.routerid, interface.interface_name, vpn_name
+                )
+                if response != 'OK':
+                    logger.warning('Cannot remove the interface')
+                    # If the operation has failed, report the error
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+            # Remove the VPN
+            if not self.srv6_controller_state.remove_vpn(vpn_name):
+                logger.warning(
+                    'Cannot remove the VPN from the controller state'
+                )
+                # If the operation fails, return an error message
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+            # Release the table ID
+            if self.srv6_controller_state.release_tableid(vpn_name) == -1:
+                logger.warning(
+                    'Cannot release the table ID'
+                )
+                # If the operation fails, return an error message
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+            logger.info('The VPN has been removed successfully')
+            # Save the VPNs dump to file
+            if self.vpn_dump is not None:
+                logger.info('Saving the VPN dump')
+                self.srv6_controller_state.save_vpns_dump()
+        logger.info('All the intents have been processed successfully\n\n')
         # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_SUCCESS)
+        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     """Assign an interface to a VPN"""
     def AssignInterfaceToVPN(self, request, context):
@@ -1007,131 +1028,134 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not self.srv6_controller_state.load_topology_from_json_dump():
             # Error while retrieving the updated topology
             logger.warning('Cannot import the topology')
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_TOPO_NOTFOUND)
-        # Extract the VPN tenant ID from the request
-        tenantid = request.tenantid
-        # Extract the VPN name from the request
-        vpn_name = str(request.vpn_name)
-        # Get the VPN full name (i.e. tenantid-vpn_name)
-        vpn_name = '%s-%s' % (tenantid, vpn_name)
-        # Let's check if the VPN exists
-        logger.debug('Checking the VPN:\n%s' % vpn_name)
-        if not self.srv6_controller_state.vpn_exists(vpn_name):
-            # If the VPN already exists, return an error message
-            logger.warning('The VPN %s does not exist' % vpn_name)
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_NOTFOUND)
-        # Iterate on the interfaces and extract the interfaces to be assigned
-        # to the VPN and validate them
-        for interface in request.interfaces:
-            logger.debug('Validating the interface:\n%s' % interface)
-            # Get router ID
-            routerid = interface.routerid
-            # Let's check if the router ID exists
-            if not self.srv6_controller_state.router_exists(routerid):
-                # If the router ID does not exist, return an error message
-                logger.warning(
-                    'The topology does not contain the router %s' % routerid
-                )
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_ROUTER_NOTFOUND)
-            # Get interface name
-            interface_name = interface.interface_name
-            # Let's check if the interface exists
-            if not self.srv6_controller_state.interface_exists(interface_name,
-                                                               routerid):
-                # If the interface does not exist, return an error message
-                logger.warning('The interface does not exist')
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_NOTFOUND)
-            # Get interface IP address assigned to the interface
-            interface_ip = interface.interface_ip
-            # Get VPN prefix assigned to the interface
-            vpn_prefix = interface.vpn_prefix
-            # Validate interface IP address
-            vpn_type = self.srv6_controller_state.get_vpn_type(vpn_name)
-            if vpn_type == utils.VPNType.IPv4VPN:
-                is_ip_valid = utils.validate_ipv4_address(interface_ip)
-                is_prefix_valid = utils.validate_ipv4_address(vpn_prefix)
-            elif vpn_type == utils.VPNType.IPv6VPN:
-                is_ip_valid = utils.validate_ipv6_address(interface_ip)
-                is_prefix_valid = utils.validate_ipv6_address(vpn_prefix)
-            else:
-                logger.warning('Invalid VPN type: %s' % vpn_type)
-                # If the VPN type is invalid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_TYPE)
-            if not is_ip_valid:
-                logger.warning('Invalid IP address: %s' % interface_ip)
-                # If the IP address is invalid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_IP)
-            if not is_prefix_valid:
-                logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
-                # If the IP address is invalid, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_INVALID_PREFIX)
-            # Let's make sure that the interface is not assigned to another VPN
-            if self.srv6_controller_state.interface_in_any_vpn(routerid,
-                                                               interface_name):
-                # If the interface is already assigned to a VPN, return an
-                # error message
-                logger.warning(
-                    'The interface %s is already assigned to a VPN'
-                    % interface_name
-                )
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_ALREADY_ASSIGNED)
-        # Assign the interfaces to the VPN
-        #
-        # Get table ID and router ID, used to generate the SID required to
-        # assign the interface to the VPN
-        logger.debug('Attempting to get the table ID of the VPN')
-        tableid = self.srv6_controller_state.get_vpn_tableid(vpn_name)
-        logger.debug('Received table ID: %s' % tableid)
-        # Get the SID
-        logger.debug('Attempting to get a SID for the router')
-        sid = self.srv6_controller_state.get_sid(routerid, tableid)
-        logger.debug('Received SID %s' % sid)
-        # Assign the interface to the VPN
-        for interface in request.interfaces:
-            logger.debug(
-                'Attempting to assign the interface %s to the VPN %s'
-                % (interface.interface_name, vpn_name)
-            )
-            # Check if the VPN is already installed on the router
-            already_installed = self.srv6_controller_state \
-                    .is_vpn_installed_on_router(vpn_name, interface.routerid)
-            if already_installed:
-                logger.debug(
-                    'The VPN %s is already installed on the router %s'
-                    % (vpn_name, routerid)
-                )
-            else:
-                # If not, install the VPN on the router
-                logger.debug(
-                    'The VPN %s is not installed on the router %s'
-                    % (vpn_name, routerid)
-                )
-                logger.debug(
-                    'Attempting to install the VPN %s on the router %s'
-                    % (vpn_name, routerid)
-                )
-                response = self._install_vpn_on_router(routerid, vpn_name)
-                if response != 'OK':
-                    # The operation has failed, return an error message
+            return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_TOPO_NOTFOUND)
+        # Extract the intents from the request message
+        for intent in request.intents:
+            # Extract the VPN tenant ID from the intent
+            tenantid = intent.tenantid
+            # Extract the VPN name from the intent
+            vpn_name = str(intent.vpn_name)
+            # Get the VPN full name (i.e. tenantid-vpn_name)
+            vpn_name = '%s-%s' % (tenantid, vpn_name)
+            # Let's check if the VPN exists
+            logger.debug('Checking the VPN:\n%s' % vpn_name)
+            if not self.srv6_controller_state.vpn_exists(vpn_name):
+                # If the VPN already exists, return an error message
+                logger.warning('The VPN %s does not exist' % vpn_name)
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
+            # Iterate on the interfaces and extract the interfaces to be assigned
+            # to the VPN and validate them
+            for interface in intent.interfaces:
+                logger.debug('Validating the interface:\n%s' % interface)
+                # Get router ID
+                routerid = interface.routerid
+                # Let's check if the router ID exists
+                if not self.srv6_controller_state.router_exists(routerid):
+                    # If the router ID does not exist, return an error message
                     logger.warning(
-                        'Cannot install the VPN on the router: %s' % response
+                        'The topology does not contain the router %s' % routerid
                     )
-                    return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
-            response = self._assign_interface_to_vpn(vpn_name, interface)
-            if response != 'OK':
-                logger.warning(
-                    'Cannot associate the interface to the VPN'
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_ROUTER_NOTFOUND)
+                # Get interface name
+                interface_name = interface.interface_name
+                # Let's check if the interface exists
+                if not self.srv6_controller_state.interface_exists(interface_name,
+                                                                   routerid):
+                    # If the interface does not exist, return an error message
+                    logger.warning('The interface does not exist')
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTFOUND)
+                # Get interface IP address assigned to the interface
+                interface_ip = interface.interface_ip
+                # Get VPN prefix assigned to the interface
+                vpn_prefix = interface.vpn_prefix
+                # Validate interface IP address
+                vpn_type = self.srv6_controller_state.get_vpn_type(vpn_name)
+                if vpn_type == utils.VPNType.IPv4VPN:
+                    is_ip_valid = utils.validate_ipv4_address(interface_ip)
+                    is_prefix_valid = utils.validate_ipv4_address(vpn_prefix)
+                elif vpn_type == utils.VPNType.IPv6VPN:
+                    is_ip_valid = utils.validate_ipv6_address(interface_ip)
+                    is_prefix_valid = utils.validate_ipv6_address(vpn_prefix)
+                else:
+                    logger.warning('Invalid VPN type: %s' % vpn_type)
+                    # If the VPN type is invalid, return an error message
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_TYPE)
+                if not is_ip_valid:
+                    logger.warning('Invalid IP address: %s' % interface_ip)
+                    # If the IP address is invalid, return an error message
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_IP)
+                if not is_prefix_valid:
+                    logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
+                    # If the IP address is invalid, return an error message
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
+                # Let's make sure that the interface is not assigned to another VPN
+                if self.srv6_controller_state.interface_in_any_vpn(routerid,
+                                                                   interface_name):
+                    # If the interface is already assigned to a VPN, return an
+                    # error message
+                    logger.warning(
+                        'The interface %s is already assigned to a VPN'
+                        % interface_name
+                    )
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_ALREADY_ASSIGNED)
+            # Assign the interfaces to the VPN
+            #
+            # Get table ID and router ID, used to generate the SID required to
+            # assign the interface to the VPN
+            logger.debug('Attempting to get the table ID of the VPN')
+            tableid = self.srv6_controller_state.get_vpn_tableid(vpn_name)
+            logger.debug('Received table ID: %s' % tableid)
+            # Get the SID
+            logger.debug('Attempting to get a SID for the router')
+            sid = self.srv6_controller_state.get_sid(routerid, tableid)
+            logger.debug('Received SID %s' % sid)
+            # Assign the interface to the VPN
+            for interface in intent.interfaces:
+                logger.debug(
+                    'Attempting to assign the interface %s to the VPN %s'
                     % (interface.interface_name, vpn_name)
                 )
-                # If the operation has failed, report the error
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTERNAL_ERROR)
-        logger.info('The VPN has been changed successfully')
-        # Save the VPNs dump to file
-        if self.vpn_dump is not None:
-            logger.info('Saving the VPN dump')
-            self.srv6_controller_state.save_vpns_dump()
+                # Check if the VPN is already installed on the router
+                already_installed = self.srv6_controller_state \
+                        .is_vpn_installed_on_router(vpn_name, interface.routerid)
+                if already_installed:
+                    logger.debug(
+                        'The VPN %s is already installed on the router %s'
+                        % (vpn_name, routerid)
+                    )
+                else:
+                    # If not, install the VPN on the router
+                    logger.debug(
+                        'The VPN %s is not installed on the router %s'
+                        % (vpn_name, routerid)
+                    )
+                    logger.debug(
+                        'Attempting to install the VPN %s on the router %s'
+                        % (vpn_name, routerid)
+                    )
+                    response = self._install_vpn_on_router(routerid, vpn_name)
+                    if response != 'OK':
+                        # The operation has failed, return an error message
+                        logger.warning(
+                            'Cannot install the VPN on the router: %s' % response
+                        )
+                        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+                response = self._assign_interface_to_vpn(vpn_name, interface)
+                if response != 'OK':
+                    logger.warning(
+                        'Cannot associate the interface to the VPN'
+                        % (interface.interface_name, vpn_name)
+                    )
+                    # If the operation has failed, report the error
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+            logger.info('The VPN has been changed successfully')
+            # Save the VPNs dump to file
+            if self.vpn_dump is not None:
+                logger.info('Saving the VPN dump')
+                self.srv6_controller_state.save_vpns_dump()
+        logger.info('All the intents have been processed successfully\n\n')
         # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_SUCCESS)
+        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     """Remove an interface from a VPN"""
     def RemoveInterfaceFromVPN(self, request, context):
@@ -1140,76 +1164,79 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not self.srv6_controller_state.load_topology_from_json_dump():
             # Error while retrieving the updated topology
             logger.warning('Error while retrieving the updated topology')
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_TOPO_NOTFOUND)
-        # Extract the VPN tenant ID from the request
-        tenantid = request.tenantid
-        # Extract the VPN name from the request
-        vpn_name = str(request.vpn_name)
-        # Get the VPN full name (i.e. tenantid-vpn_name)
-        vpn_name = '%s-%s' % (tenantid, vpn_name)
-        # Let's check if the VPN exists
-        if not self.srv6_controller_state.vpn_exists(vpn_name):
-            logger.warning('The VPN %s does not exist' % vpn_name)
-            # If the VPN already exists, return an error message
-            return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_VPN_NOTFOUND)
-        # Iterate on the interfaces and extract the interfaces to be removed
-        # from the VPN
-        for interface in request.interfaces:
-            logger.debug('Validating the interface:\n%s' % interface)
-            # Get the router ID
-            routerid = interface.routerid
-            # Let's check if the router ID exists
-            if not self.srv6_controller_state.router_exists(routerid):
-                # If the router ID does not exist, return an error message
-                logger.warning(
-                    'The topology does not contain the router %s' % routerid
+            return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_TOPO_NOTFOUND)
+        # Extract the intents from the request message
+        for intent in request.intents:
+            # Extract the VPN tenant ID from the intent
+            tenantid = intent.tenantid
+            # Extract the VPN name from the intent
+            vpn_name = str(intent.vpn_name)
+            # Get the VPN full name (i.e. tenantid-vpn_name)
+            vpn_name = '%s-%s' % (tenantid, vpn_name)
+            # Let's check if the VPN exists
+            if not self.srv6_controller_state.vpn_exists(vpn_name):
+                logger.warning('The VPN %s does not exist' % vpn_name)
+                # If the VPN already exists, return an error message
+                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
+            # Iterate on the interfaces and extract the interfaces to be removed
+            # from the VPN
+            for interface in intent.interfaces:
+                logger.debug('Validating the interface:\n%s' % interface)
+                # Get the router ID
+                routerid = interface.routerid
+                # Let's check if the router ID exists
+                if not self.srv6_controller_state.router_exists(routerid):
+                    # If the router ID does not exist, return an error message
+                    logger.warning(
+                        'The topology does not contain the router %s' % routerid
+                    )
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_ROUTER_NOTFOUND)
+                # Get the interface name
+                interface_name = interface.interface_name
+                # Let's check if the interface exists
+                if not self.srv6_controller_state.interface_exists(interface_name,
+                                                                   routerid):
+                    # The interface does not exist, return an error message
+                    logger.warning('The interface does not exist')
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTFOUND)
+                # Let's check if the interface is assigned to the given VPN
+                if not self.srv6_controller_state.interface_in_vpn(routerid,
+                                                                   interface_name,
+                                                                   vpn_name):
+                    # The interface is not assigned to the VPN, return an error
+                    # message
+                    logger.warning(
+                        'The interface is not assigned to the VPN %s' % vpn_name
+                    )
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTASSIGNED)
+            # Iterate on interfaces to be removed from the VPN
+            for interface in intent.interfaces:
+                # Remove the interface
+                logger.debug(
+                    'Attempting to remove the interface %s from the VPN %s'
+                    % (interface.interface_name, vpn_name)
                 )
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_ROUTER_NOTFOUND)
-            # Get the interface name
-            interface_name = interface.interface_name
-            # Let's check if the interface exists
-            if not self.srv6_controller_state.interface_exists(interface_name,
-                                                               routerid):
-                # The interface does not exist, return an error message
-                logger.warning('The interface does not exist')
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_NOTFOUND)
-            # Let's check if the interface is assigned to the given VPN
-            if not self.srv6_controller_state.interface_in_vpn(routerid,
-                                                               interface_name,
-                                                               vpn_name):
-                # The interface is not assigned to the VPN, return an error
-                # message
-                logger.warning(
-                    'The interface is not assigned to the VPN %s' % vpn_name
+                response = self._remove_interface_from_vpn(
+                    interface.routerid, interface.interface_name, vpn_name
                 )
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_NOTASSIGNED)
-        # Iterate on interfaces to be removed from the VPN
-        for interface in request.interfaces:
-            # Remove the interface
-            logger.debug(
-                'Attempting to remove the interface %s from the VPN %s'
-                % (interface.interface_name, vpn_name)
-            )
-            response = self._remove_interface_from_vpn(
-                interface.routerid, interface.interface_name, vpn_name
-            )
-            if response != 'OK':
-                # If the operation has failed, report the error
-                logger.warning('The interface does not exist: %s' % response)
-                return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_INTF_NOTFOUND)
-        logger.info('The VPN has been changed successfully')
-        # Save the VPNs dump to file
-        if self.vpn_dump is not None:
-            logger.info('Saving the VPN dump')
-            self.srv6_controller_state.save_vpns_dump()
+                if response != 'OK':
+                    # If the operation has failed, report the error
+                    logger.warning('The interface does not exist: %s' % response)
+                    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTFOUND)
+            logger.info('The VPN has been changed successfully')
+            # Save the VPNs dump to file
+            if self.vpn_dump is not None:
+                logger.info('Saving the VPN dump')
+                self.srv6_controller_state.save_vpns_dump()
+        logger.info('All the intents have been processed successfully\n\n')
         # Create the response
-        return srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_SUCCESS)
+        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     # Get VPNs from the controller inventory
     def GetVPNs(self, request, context):
         logger.debug('GetVPNs request received')
         # Create the response
-        response = srv6_vpn_pb2.SRv6VPNReply(status=StatusCode.STATUS_SUCCESS)
+        response = srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
         # Build the VPNs list
         for _vpn in self.srv6_controller_state.get_vpns():
             # Add a new VPN to the VPNs list
