@@ -19,12 +19,17 @@ from ipaddress import IPv6Interface
 import networkx as nx
 from networkx.readwrite import json_graph
 import srv6_controller_utils as utils
-
+# SRv6 dependencies
+from interface_discovery.interface_discovery import interface_discovery
+from topology.ti_extraction import draw_topo
+from topology.ti_extraction import connect_and_extract_topology
+from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
+from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
 
 ################## Setup these variables ##################
 
 # Path of the proto files
-PROTO_FOLDER = '../srv6-sdn-proto/'
+#PROTO_FOLDER = '../srv6-sdn-proto/'
 # Mapping router ID to management IP
 ROUTERID_TO_MGMTIP = {
     #'0.0.0.1': '2000::1',
@@ -38,47 +43,41 @@ ROUTERID_TO_MGMTIP = {
 ###########################################################
 
 # Path of the interface discovery module
-INTERFACE_DISCOVERY_PATH = './interface_discovery'
+#INTERFACE_DISCOVERY_PATH = './interface_discovery'
 # Path of the topology information extraction module
-TI_EXTRACTION_PATH = './topology'
+#TI_EXTRACTION_PATH = './topology'
 # Path of the gRPC Southbound client
-SB_GRPC_CLIENT_PATH = './southbound/grpc/'
+#SB_GRPC_CLIENT_PATH = './southbound/grpc/'
 # Path of the gRPC Northbound server
-NB_GRPC_CLIENT_PATH = './northbound/grpc/'
+#NB_GRPC_CLIENT_PATH = './northbound/grpc/'
 
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-INTERFACE_DISCOVERY_PATH = os.path.join(script_path, INTERFACE_DISCOVERY_PATH)
-TI_EXTRACTION_PATH = os.path.join(script_path, TI_EXTRACTION_PATH)
-SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
-NB_GRPC_CLIENT_PATH = os.path.join(script_path, NB_GRPC_CLIENT_PATH)
-PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#INTERFACE_DISCOVERY_PATH = os.path.join(script_path, INTERFACE_DISCOVERY_PATH)
+#TI_EXTRACTION_PATH = os.path.join(script_path, TI_EXTRACTION_PATH)
+#SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
+#NB_GRPC_CLIENT_PATH = os.path.join(script_path, NB_GRPC_CLIENT_PATH)
+#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-if PROTO_FOLDER == '':
-    utils.print_and_die('Error: Set PROTO_FOLDER '
-                        'variable in srv6_controller.py')
-if not os.path.exists(PROTO_FOLDER):
-    utils.print_and_die('Error: PROTO_FOLDER variable in srv6_controller.py '
-                        'points to a non existing file\n')
+#if PROTO_FOLDER == '':
+#    utils.print_and_die('Error: Set PROTO_FOLDER '
+#                        'variable in srv6_controller.py')
+#if not os.path.exists(PROTO_FOLDER):
+#    utils.print_and_die('Error: PROTO_FOLDER variable in srv6_controller.py '
+#                        'points to a non existing file\n')
 
 # Add path of interface discovery
-sys.path.append(INTERFACE_DISCOVERY_PATH)
+#sys.path.append(INTERFACE_DISCOVERY_PATH)
 # Add path of topology information extraction
-sys.path.append(TI_EXTRACTION_PATH)
+#sys.path.append(TI_EXTRACTION_PATH)
 # Add path of gRPC southbound client
-sys.path.append(SB_GRPC_CLIENT_PATH)
+#sys.path.append(SB_GRPC_CLIENT_PATH)
 # Add path of gRPC northbound client
-sys.path.append(NB_GRPC_CLIENT_PATH)
+#sys.path.append(NB_GRPC_CLIENT_PATH)
 # Add path of proto files
-sys.path.append(PROTO_FOLDER)
+#sys.path.append(PROTO_FOLDER)
 
-# SRv6 dependencies
-from interface_discovery import interface_discovery
-from ti_extraction import draw_topo
-from ti_extraction import connect_and_extract_topology
-from sb_grpc_client import NetworkEventsListener
-import nb_grpc_server
 
 # In our experiment we use srv6 as default password
 DEFAULT_OSPF6D_PASSWORD = 'srv6'
@@ -302,7 +301,7 @@ class SRv6Controller(object):
         topo_changed = False
         for ipaddr in interfaces[ifindex]['ipaddr']:
             # Detach router interface from net
-            net = str(IPv6Interface(unicode(ipaddr)).network)
+            net = str(IPv6Interface(ipaddr).network)
             if self.detach_router_from_net(routerid, net):
                 topo_changed = True
         # Return True if topo has changed, False otherwise
@@ -523,7 +522,7 @@ class SRv6Controller(object):
         if self.add_ipaddr_to_interface(routerid, ifindex, ipaddr):
             topo_changed = True
         # Add the new network to the topology
-        net = IPv6Interface(unicode(ipaddr)).network
+        net = IPv6Interface(ipaddr).network
         if not net.is_link_local:
             # and attach the router to it
             if self.attach_router_to_net(routerid, str(net)):
@@ -539,7 +538,7 @@ class SRv6Controller(object):
         if self.remove_ipaddr_from_interface(routerid, ifindex, ipaddr):
             topo_changed = True
         # Get the network associated to the interface
-        net = str(IPv6Interface(unicode(ipaddr)).network)
+        net = str(IPv6Interface(ipaddr).network)
         # and detach the router from it
         if self.detach_router_from_net(routerid, net):
             topo_changed = True
@@ -580,7 +579,7 @@ class SRv6Controller(object):
                         for ifindex, ifdata in list(interfaces.items()):
                             for ipaddr in ifdata['ipaddr']:
                                 # Add the new network to the topology
-                                net = IPv6Interface(unicode(ipaddr)).network
+                                net = IPv6Interface(ipaddr).network
                                 if not net.is_link_local:
                                     # and attach the router to it
                                     if self.attach_router_to_net(r, str(net)):

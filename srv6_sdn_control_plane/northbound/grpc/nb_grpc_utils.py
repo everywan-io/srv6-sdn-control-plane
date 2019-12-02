@@ -22,9 +22,11 @@
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
+from __future__ import absolute_import, division, print_function
 
 # General imports
 from sshutil.cmd import SSHCommand
+import sys
 import logging
 import telnetlib
 import socket
@@ -46,23 +48,23 @@ from networkx.readwrite import json_graph
 ################## Setup these variables ##################
 
 # Path of the proto files
-PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
+#PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
 
 ###########################################################
 
 
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-if PROTO_FOLDER == '':
-    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
-    sys.exit(-2)
-if not os.path.exists(PROTO_FOLDER):
-    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
-          'points to a non existing folder\n')
-    sys.exit(-2)
+#if PROTO_FOLDER == '':
+#    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
+#    sys.exit(-2)
+#if not os.path.exists(PROTO_FOLDER):
+#    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
+#          'points to a non existing folder\n')
+#    sys.exit(-2)
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -102,7 +104,7 @@ def validate_ipv6_address(ip):
     if ip is None:
         return False
     try:
-        IPv6Interface(unicode(ip))
+        IPv6Interface(ip)
         return True
     except AddressValueError:
         return False
@@ -114,7 +116,7 @@ def validate_ipv4_address(ip):
     if ip is None:
         return False
     try:
-        IPv4Interface(unicode(ip))
+        IPv4Interface(ip)
         return True
     except AddressValueError:
         return False
@@ -174,7 +176,7 @@ class VPN:
 
     def getInterface(self, routerid, interface_name):
         if self.interfaces.get(routerid) is not None:
-            return self.interface[routerid].get(interface_name, None)
+            return self.interfaces[routerid].get(interface_name, None)
         return None
 
 
@@ -684,23 +686,12 @@ class SRv6ControllerState:
 
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
-        print routerid
-        print interface_name
-        print 'interf exists\n\n\n\n\n'
         router = self.topology.node[routerid]
-        print router
-        print 'router'
         if router is None or router['interfaces'] is None:
             return False
         interface_names = []
         for interface in router['interfaces'].values():
             interface_names.append(interface['ifname'])
-        print interface_names
-        print
-        print
-        print
-        print
-        print
         if interface_name in interface_names:
             # The interface exists
             return True
@@ -960,7 +951,7 @@ class SRv6ControllerState:
             # Process VPNs information
             for vpn in vpn_dump_dict['vpns'].values():
                 # table ID
-                vpn_to_tableid[vpn] = int(vpn['tableid'])
+                #vpn_to_tableid[vpn] = int(vpn['tableid'])
                 # Interfaces
                 interfaces = set()
                 for interface in vpn['interfaces']:
@@ -977,6 +968,8 @@ class SRv6ControllerState:
                 vpn_type = vpn['vpn_type']
                 # VPN name
                 vpn_name = vpn['vpn_name']
+                # Table ID
+                tableid = vpn['tableid']
                 # Build VPN and add the VPN to the VPNs dict
                 self.vpns[vpn.vpn_name] = VPN(vpn_name, vpn_type, interfaces, tenantid, tableid)
             # Process reusable table IDs

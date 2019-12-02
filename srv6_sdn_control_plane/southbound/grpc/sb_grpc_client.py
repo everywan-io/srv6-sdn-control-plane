@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
+from __future__ import absolute_import, division, print_function
 
 # General imports
+from six import text_type
 import grpc
 import json
 import sys
@@ -13,36 +15,36 @@ from threading import Thread
 ################## Setup these variables ##################
 
 # Path of the proto files
-PROTO_FOLDER = "../../../srv6-sdn-proto/"
+#PROTO_FOLDER = "../../../srv6-sdn-proto/"
 
 ###########################################################
 
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-if PROTO_FOLDER == '':
-    print('Error: Set PROTO_FOLDER variable '
-          'in sb_grpc_client.py')
-    sys.exit(-2)
-if not os.path.exists(PROTO_FOLDER):
-    print('Error: PROTO_FOLDER variable in sb_grpc_client.py '
-          'points to a non existing folder\n')
-    sys.exit(-2)
+#if PROTO_FOLDER == '':
+#    print('Error: Set PROTO_FOLDER variable '
+#          'in sb_grpc_client.py')
+#    sys.exit(-2)
+#if not os.path.exists(PROTO_FOLDER):
+#    print('Error: PROTO_FOLDER variable in sb_grpc_client.py '
+#          'points to a non existing folder\n')
+#    sys.exit(-2)
 
 # Add path of proto files
-sys.path.append(PROTO_FOLDER)
+#sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
-import srv6_manager_pb2_grpc
-import srv6_manager_pb2
-import status_codes_pb2
-import network_events_listener_pb2
-import network_events_listener_pb2_grpc
-import empty_req_pb2
-import empty_req_pb2_grpc
-import network_events_listener_pb2
+from srv6_sdn_proto import srv6_manager_pb2_grpc
+from srv6_sdn_proto import srv6_manager_pb2
+from srv6_sdn_proto import status_codes_pb2
+from srv6_sdn_proto import network_events_listener_pb2
+from srv6_sdn_proto import network_events_listener_pb2_grpc
+from srv6_sdn_proto import empty_req_pb2
+from srv6_sdn_proto import empty_req_pb2_grpc
+from srv6_sdn_proto import network_events_listener_pb2
 
 # Network event types
 EVENT_TYPES = {
@@ -104,14 +106,14 @@ class SRv6Manager:
         # Create a new path
         path = path_request.paths.add()
         # Set destination, device, encapmode, table and segments
-        path.destination = destination
-        path.device = device
-        path.encapmode = encapmode
-        path.table = table
+        path.destination = text_type(destination)
+        path.device = text_type(device)
+        path.encapmode = text_type(encapmode)
+        path.table = int(table)
         for segment in segments:
             # Create a new segment
             srv6_segment = path.sr_path.add()
-            srv6_segment.segment = segment
+            srv6_segment.segment = text_type(segment)
         # Add the SRv6 path
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -137,12 +139,12 @@ class SRv6Manager:
                 path = path_request.paths.add()
                 # Set destination, device, encapmode,
                 # table and segments
-                path.destination = jpath['destination']
-                path.device = jpath['device']
-                path.encapmode = jpath['encapmode']
+                path.destination = text_type(jpath['destination'])
+                path.device = text_type(jpath['device'])
+                path.encapmode = text_type(jpath['encapmode'])
                 for segment in jpath['segments']:
                     srv6_segment = path.sr_path.add()
-                    srv6_segment.segment = segment
+                    srv6_segment.segment = text_type(segment)
                 # Add the SRv6 path
                 response = srv6_stub.Create(srv6_request)
                 # Let's close the session
@@ -174,14 +176,14 @@ class SRv6Manager:
         # Create a new path
         path = path_request.paths.add()
         # Set destination, device, encapmode, table and segments
-        path.destination = destination
-        path.device = device
-        path.encapmode = encapmode
-        path.table = table
+        path.destination = text_type(destination)
+        path.device = text_type(device)
+        path.encapmode = text_type(encapmode)
+        path.table = int(table)
         for segment in segments:
             # Create a new segment
             srv6_segment = path.sr_path.add()
-            srv6_segment.segment = segment
+            srv6_segment.segment = text_type(segment)
         # Remove the SRv6 path
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -205,13 +207,13 @@ class SRv6Manager:
             for jpath in data['paths']:
                 path = path_request.paths.add()
                 # Set destination, device, encapmode
-                path.destination = jpath['destination']
-                path.device = jpath['device']
-                path.encapmode = jpath['encapmode']
+                path.destination = text_type(jpath['destination'])
+                path.device = text_type(jpath['device'])
+                path.encapmode = text_type(jpath['encapmode'])
                 for segment in jpath['segments']:
                     # Create a new segment
                     srv6_segment = path.sr_path.add()
-                    srv6_segment.segment = segment
+                    srv6_segment.segment = text_type(segment)
                 # Remove the SRv6 path
                 response = srv6_stub.Remove(srv6_request)
                 # Let's close the session
@@ -238,17 +240,17 @@ class SRv6Manager:
         # Create a new local processing function
         function = function_request.functions.add()
         # Set segment, action, device, locasid table and other params
-        function.segment = segment
-        function.action = action
-        function.nexthop = nexthop
-        function.table = table
-        function.interface = interface
-        function.device = device
-        function.localsid_table = localsid_table
+        function.segment = text_type(segment)
+        function.action = text_type(action)
+        function.nexthop = text_type(nexthop)
+        function.table = int(table)
+        function.interface = text_type(interface)
+        function.device = text_type(device)
+        function.localsid_table = int(localsid_table)
         for segment in segments:
             # Create a new segment
             srv6_segment = function.segs.add()
-            srv6_segment.segment = segment
+            srv6_segment.segment = text_type(segment)
         # Create the SRv6 local processing function
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -286,17 +288,17 @@ class SRv6Manager:
         # Create a new local processing function
         function = function_request.functions.add()
         # Set segment, action, device, locasid table and other params
-        function.segment = segment
-        function.action = action
-        function.nexthop = nexthop
-        function.table = table
-        function.interface = interface
-        function.device = device
-        function.localsid_table = localsid_table
+        function.segment = text_type(segment)
+        function.action = text_type(action)
+        function.nexthop = text_type(nexthop)
+        function.table = int(table)
+        function.interface = text_type(interface)
+        function.device = text_type(device)
+        function.localsid_table = int(localsid_table)
         for segment in segments:
             # Create a new segment
             srv6_segment = function.segs.add()
-            srv6_segment.segment = segment
+            srv6_segment.segment = text_type(segment)
         # Remove
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -319,11 +321,11 @@ class SRv6Manager:
         # Create a new VRF device
         device = vrf_device_request.devices.add()
         # Set name, table
-        device.name = name
-        device.table = table
+        device.name = text_type(name)
+        device.table = int(table)
         for ifname in interfaces:
             # Create a new interface
-            device.interfaces.add(ifname)
+            device.interfaces.add(text_type(ifname))
         # Create VRF device
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -347,9 +349,9 @@ class SRv6Manager:
         # Create a new VRF device
         device = vrf_device_request.devices.add()
         # Set name, table
-        device.name = name
+        device.name = text_type(name)
         if table != -1:
-            device.table = table
+            device.table = int(table)
         # Create a new interfaces
         device.interfaces.extend(interfaces)
         # Create VRF device
@@ -372,7 +374,7 @@ class SRv6Manager:
         # Create a new VRF device
         device = vrf_device_request.devices.add()
         # Set name
-        device.name = name
+        device.name = text_type(name)
         # Remove
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -399,7 +401,7 @@ class SRv6Manager:
         # Add interfaces
         for interface in interfaces:
             intf = interface_request.interfaces.add()
-            intf.name = interface
+            intf.name = text_type(interface)
         # Get interfaces
         response = srv6_stub.Get(srv6_request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -407,19 +409,19 @@ class SRv6Manager:
             interfaces = dict()
             for interface in response.interfaces:
                 ifindex = int(interface.index)
-                ifname = interface.name
-                macaddr = interface.macaddr
+                ifname = text_type(interface.name)
+                macaddr = text_type(interface.macaddr)
                 ips = interface.ipaddrs
                 ipaddrs = list()
                 for ip in ips:
-                    ipaddrs.append(ip)
+                    ipaddrs.append(text_type(ip))
                 state = interface.state
                 interfaces[ifindex] = {
-                    "ifindex": ifindex,
-                    "ifname": ifname,
-                    "macaddr": macaddr,
+                    "ifindex": int(ifindex),
+                    "ifname": text_type(ifname),
+                    "macaddr": text_type(macaddr),
                     "ipaddr": ipaddrs,
-                    "state": state
+                    "state": text_type(state)
                 }
         else:
             interfaces = None
@@ -442,17 +444,17 @@ class SRv6Manager:
         intf = interface_request.interfaces.add()
         # Set name, MAC address and other params
         if ifindex is not None:
-            intf.ifindex = ifindex
+            intf.ifindex = int(ifindex)
         if name is not None:
-            intf.name = name
+            intf.name = text_type(name)
         if macaddr is not None:
-            intf.macaddr = macaddr
+            intf.macaddr = text_type(macaddr)
         if ipaddrs is not None:
             intf.ipaddrs = ipaddrs
         if state is not None:
-            intf.state = state
+            intf.state = text_type(state)
         if ospf_adv is not None:
-            intf.ospf_adv = ospf_adv
+            intf.ospf_adv = bool(ospf_adv)
         # Create interface
         response = srv6_stub.Update(srv6_request)
         # Let's close the session
@@ -482,17 +484,17 @@ class SRv6Manager:
         # Create a new rule
         rule = rule_request.rules.add()
         # Set family and optional params
-        rule.family = family
-        rule.table = table
-        rule.priority = priority
-        rule.action = action
-        rule.scope = scope
-        rule.destination = destination
-        rule.dst_len = dst_len
-        rule.source = source
-        rule.src_len = src_len
-        rule.in_interface = in_interface
-        rule.out_interface = out_interface
+        rule.family = int(family)
+        rule.table = int(table)
+        rule.priority = int(priority)
+        rule.action = text_type(action)
+        rule.scope = int(scope)
+        rule.destination = text_type(destination)
+        rule.dst_len = int(dst_len)
+        rule.source = text_type(source)
+        rule.src_len = int(src_len)
+        rule.in_interface = text_type(in_interface)
+        rule.out_interface = text_type(out_interface)
         # Create IP rule
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -528,17 +530,17 @@ class SRv6Manager:
         # Create a new rule
         rule = rule_request.rules.add()
         # Set family and optional params
-        rule.family = family
-        rule.table = table
-        rule.priority = priority
-        rule.action = action
-        rule.scope = scope
-        rule.destination = destination
-        rule.dst_len = dst_len
-        rule.source = source
-        rule.src_len = src_len
-        rule.in_interface = in_interface
-        rule.out_interface = out_interface
+        rule.family = int(family)
+        rule.table = int(table)
+        rule.priority = int(priority)
+        rule.action = text_type(action)
+        rule.scope = int(scope)
+        rule.destination = text_type(destination)
+        rule.dst_len = int(dst_len)
+        rule.source = text_type(source)
+        rule.src_len = int(src_len)
+        rule.in_interface = text_type(in_interface)
+        rule.out_interface = text_type(out_interface)
         # Remove IP rule
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -564,19 +566,19 @@ class SRv6Manager:
         # Create a new route
         route = route_request.routes.add()
         # Set params
-        route.family = family
-        route.tos = tos
-        route.type = type
-        route.table = table
-        route.scope = scope
-        route.proto = proto
-        route.destination = destination
-        route.dst_len = dst_len
-        route.preferred_source = preferred_source
-        route.src_len = src_len
-        route.in_interface = in_interface
-        route.out_interface = out_interface
-        route.gateway = gateway
+        route.family = int(family)
+        route.tos = text_type(tos)
+        route.type = text_type(type)
+        route.table = int(table)
+        route.scope = int(scope)
+        route.proto = int(proto)
+        route.destination = text_type(destination)
+        route.dst_len = int(dst_len)
+        route.preferred_source = text_type(preferred_source)
+        route.src_len = int(src_len)
+        route.in_interface = text_type(in_interface)
+        route.out_interface = text_type(out_interface)
+        route.gateway = text_type(gateway)
         # Create IP Route
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -612,19 +614,19 @@ class SRv6Manager:
         # Create a new route
         route = route_request.routes.add()
         # Set params
-        route.family = family
-        route.tos = tos
-        route.type = type
-        route.table = table
-        route.proto = proto
-        route.scope = scope
-        route.destination = destination
-        route.dst_len = dst_len
-        route.preferred_source = preferred_source
-        route.src_len = src_len
-        route.in_interface = in_interface
-        route.out_interface = out_interface
-        route.gateway = gateway
+        route.family = int(family)
+        route.tos = text_type(tos)
+        route.type = text_type(type)
+        route.table = int(table)
+        route.proto = int(proto)
+        route.scope = int(scope)
+        route.destination = text_type(destination)
+        route.dst_len = int(dst_len)
+        route.preferred_source = text_type(preferred_source)
+        route.src_len = int(src_len)
+        route.in_interface = text_type(in_interface)
+        route.out_interface = text_type(out_interface)
+        route.gateway = text_type(gateway)
         # Remove IP Route
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -648,10 +650,10 @@ class SRv6Manager:
         # Create a new route
         addr = addr_request.addrs.add()
         # Set address, device, family
-        addr.ip_addr = ip_addr
-        addr.device = device
-        addr.family = family
-        addr.net = net
+        addr.ip_addr = text_type(ip_addr)
+        addr.device = text_type(device)
+        addr.family = int(family)
+        addr.net = text_type(net)
         # Create IP Address
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -680,10 +682,10 @@ class SRv6Manager:
         # Create a new route
         addr = addr_request.addrs.add()
         # Set address, device, family
-        addr.ip_addr = ip_addr
-        addr.device = device
-        addr.family = family
-        addr.net = net
+        addr.ip_addr = text_type(ip_addr)
+        addr.device = text_type(device)
+        addr.family = int(family)
+        addr.net = text_type(net)
         # Remove IP Address
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -706,10 +708,10 @@ class SRv6Manager:
             # Create a new route
             addr = addr_request.addrs.add()
             # Set address, device, family
-            addr.ip_addr = ip_addr
-            addr.device = device
-            addr.family = family
-            addr.net = net
+            addr.ip_addr = text_type(ip_addr)
+            addr.device = text_type(device)
+            addr.family = int(family)
+            addr.net = text_type(net)
         # Remove IP Address
         response = srv6_stub.Remove(srv6_request)
         # Let's close the session
@@ -758,49 +760,49 @@ class NetworkEventsListener:
             _event = dict()
             if event.type == EVENT_TYPES['CONNECTION_ESTABLISHED']:
                 # Connection established event
-                _event['type'] = 'CONNECTION_ESTABLISHED'
+                _event['type'] = text_type('CONNECTION_ESTABLISHED')
             elif event.type == EVENT_TYPES['INTF_UP']:
                 # Interface UP event
                 _event['interface'] = dict()
                 _event['type'] = 'INTF_UP'
                 # Extract interface index
-                _event['interface']['index'] = event.interface.index
+                _event['interface']['index'] = int(event.interface.index)
                 # Extract interface name
-                _event['interface']['name'] = event.interface.name
+                _event['interface']['name'] = text_type(event.interface.name)
                 # Extract interface MAC address
-                _event['interface']['macaddr'] = event.interface.macaddr
+                _event['interface']['macaddr'] = text_type(event.interface.macaddr)
             elif event.type == EVENT_TYPES['INTF_DOWN']:
                 # Interface DOWN event
                 _event['interface'] = dict()
                 _event['type'] = 'INTF_DOWN'
                 # Extract interface index
-                _event['interface']['index'] = event.interface.index
+                _event['interface']['index'] = int(event.interface.index)
                 # Extract interface name
-                _event['interface']['name'] = event.interface.name
+                _event['interface']['name'] = text_type(event.interface.name)
                 # Extract interface MAC address
-                _event['interface']['macaddr'] = event.interface.macaddr
+                _event['interface']['macaddr'] = text_type(event.interface.macaddr)
             elif event.type == EVENT_TYPES['INTF_DEL']:
                 # Interface DEL event
                 _event['interface'] = dict()
                 _event['type'] = 'INTF_DEL'
                 # Extract interface index
-                _event['interface']['index'] = event.interface.index
+                _event['interface']['index'] = int(event.interface.index)
             elif event.type == EVENT_TYPES['NEW_ADDR']:
                 # NEW address event
                 _event['interface'] = dict()
                 _event['type'] = 'NEW_ADDR'
                 # Extract interface index
-                _event['interface']['index'] = event.interface.index
+                _event['interface']['index'] = int(event.interface.index)
                 # Extract address
-                _event['interface']['ipaddr'] = event.interface.ipaddr
+                _event['interface']['ipaddr'] = text_type(event.interface.ipaddr)
             elif event.type == EVENT_TYPES['DEL_ADDR']:
                 # DEL address event
                 _event['interface'] = dict()
                 _event['type'] = 'DEL_ADDR'
                 # Extract interface index
-                _event['interface']['index'] = event.interface.index
+                _event['interface']['index'] = int(event.interface.index)
                 # Extract address
-                _event['interface']['ipaddr'] = event.interface.ipaddr
+                _event['interface']['ipaddr'] = text_type(event.interface.ipaddr)
             # Pass the event to the caller
             yield _event
         # Let's close the session

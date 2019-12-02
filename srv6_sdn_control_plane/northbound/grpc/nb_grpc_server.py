@@ -22,6 +22,7 @@
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
+from __future__ import absolute_import, division, print_function
 
 # General imports
 from argparse import ArgumentParser
@@ -41,12 +42,12 @@ from ipaddress import IPv6Interface
 ################## Setup these variables ##################
 
 # Path of the proto files
-PROTO_FOLDER = '../../../srv6-sdn-proto/'
+#PROTO_FOLDER = '../../../srv6-sdn-proto/'
 
 ###########################################################
 
 # Path of gRPC client
-SB_GRPC_CLIENT_PATH = '../../southbound/grpc'
+#SB_GRPC_CLIENT_PATH = '../../southbound/grpc'
 # Topology file
 DEFAULT_TOPOLOGY_FILE = '/tmp/topology.json'
 # VPN file
@@ -55,29 +56,31 @@ DEFAULT_VPN_DUMP = '/tmp/vpn.json'
 DEFAULT_USE_MGMT_IP = False
 
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
-SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+#SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
 
 # Check paths
-if PROTO_FOLDER == '':
-    print('Error: Set PROTO_FOLDER variable in nb_grpc_server.py')
-    sys.exit(-2)
-if not os.path.exists(PROTO_FOLDER):
-    print('Error: PROTO_FOLDER variable in nb_grpc_server.py '
-          'points to a non existing folder\n')
-    sys.exit(-2)
+#if PROTO_FOLDER == '':
+#    print('Error: Set PROTO_FOLDER variable in nb_grpc_server.py')
+#    sys.exit(-2)
+#if not os.path.exists(PROTO_FOLDER):
+#    print('Error: PROTO_FOLDER variable in nb_grpc_server.py '
+#          'points to a non existing folder\n')
+#    sys.exit(-2)
 
 # Add path of proto files
-sys.path.append(PROTO_FOLDER)
+#sys.path.append(PROTO_FOLDER)
 # Add path of gRPC APIs
-sys.path.append(SB_GRPC_CLIENT_PATH)
+#sys.path.append(SB_GRPC_CLIENT_PATH)
 # SRv6 dependencies
-import nb_grpc_utils as utils
-import srv6_vpn_pb2_grpc
-import srv6_vpn_pb2
-from sb_grpc_client import SRv6Manager
-import status_codes_pb2
+#from . import nb_grpc_utils as utils
+from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils as utils
+from srv6_sdn_proto import srv6_vpn_pb2_grpc
+from srv6_sdn_proto import srv6_vpn_pb2
+#from ...southbound.grpc.sb_grpc_client import SRv6Manager
+from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager
+from srv6_sdn_proto import status_codes_pb2
 
 
 # Global variables definition
@@ -129,7 +132,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         # Update the topology
         self.srv6_controller_state.load_topology_from_json_dump()
 
-    '''
+    
     # Install a VPN on a specified router
     #
     # Three steps are required to install a VPN
@@ -138,7 +141,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
     #    and lookup in the VPN table
     # 3. Create a VRF and assign it to the VPN
     def _install_vpn_on_router(self, routerid, vpn_name):
-        print 1
         logger.debug(
             'Attempting to install the VPN %s on the router %s'
             % (vpn_name, routerid)
@@ -149,20 +151,17 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return 'Cannot get the router address'
-        print 2
         # If the VPN is already installed on the router,
         # we don't need to create it
         installed = self.srv6_controller_state.is_vpn_installed_on_router(
             vpn_name, routerid
         )
-        print 3
         if installed:
             logger.debug(
                 'The VPN is already installed on the router %s'
                 % routerid
             )
             return 'OK'
-        print 4
         # First step: create a rule for local SIDs processing
         # This step is just required for the first VPN
         installed_vpns = (self.srv6_controller_state
@@ -180,7 +179,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     'Cannot get SID family for routerid %s' % routerid
                 )
                 return 'Cannot get SID family for routerid %s' % routerid
-            print 5
             # Add the rule to steer the SIDs through the local SID table
             response = self.srv6_manager.create_iprule(
                 router, self.grpc_client_port, family=AF_INET6,
@@ -194,7 +192,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # If the operation has failed, return an error message
                 return 'Cannot create the rule for destination %s: %s' \
                     % (sid_family, response)
-            print 6
             # Add a blackhole route to drop all unknown active segments
             response = self.srv6_manager.create_iproute(
                 router, self.grpc_client_port, family=AF_INET6,
@@ -206,18 +203,15 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 )
                 # If the operation has failed, return an error message
                 return 'Cannot create the blackhole route: %s' % response
-        print 7
         # Second step is the creation of the decapsulation and lookup route
         tableid = self.srv6_controller_state.get_vpn_tableid(vpn_name)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return 'Cannot retrieve VPN table ID'
-        print 8
         vpn_type = self.srv6_controller_state.get_vpn_type(vpn_name)
         if vpn_type is None:
             logger.warning('Cannot retrieve VPN type')
             return 'Cannot retrieve VPN type'
-        print 9
         if vpn_type == utils.VPNType.IPv6VPN:
             # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
             # table. This behavior is realized by End.DT6 SRv6 action
@@ -233,7 +227,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         # We use the management interface (which is the first interface)
         # in order to solve an issue of routes getting deleted when the
         # interface is assigned to a VRF
-        print 10
         dev = self.srv6_controller_state.get_first_interface(routerid)
         if dev is None:
             # Cannot get non-loopback interface
@@ -248,7 +241,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             router, self.grpc_client_port, segment=sid, action=action,
             device=dev, localsid_table=utils.LOCAL_SID_TABLE, table=tableid
         )
-        print 11
         if response != status_codes_pb2.STATUS_SUCCESS:
             logger.warning(
                 'Cannot create the SRv6 Local Processing function: %s'
@@ -257,7 +249,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # The operation has failed, return an error message
             return 'Cannot create the SRv6 Local Processing function: %s' \
                 % response
-        print 12
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
             router, self.grpc_client_port, name=vpn_name, table=tableid
@@ -272,7 +263,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         interfaces = self.srv6_controller_state.get_vpn_interfaces(
             vpn_name
         )
-        print 13
         if interfaces is not None:
             for intf in interfaces:
                 if intf.routerid == routerid:
@@ -283,7 +273,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 sid = self.srv6_controller_state.get_sid(
                     intf.routerid, tableid
                 )
-                print 14
                 # Add remote interfacace to the VPN
                 response = self._assign_remote_interface_to_vpn(
                     routerid, intf.vpn_prefix, tableid, sid
@@ -295,7 +284,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     )
                     # If the operation has failed, return an error message
                     return response
-                print 15
         # The VPN has been installed on the router
         #
         # Update data structures
@@ -304,7 +292,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         if not succ:
             logger.warning('Cannot add the router to the VPN')
             return 'Cannot add the router to the VPN'
-        print 16
         # Success
         logger.debug('The VPN has been successfully installed on the router')
         return 'OK'
@@ -642,7 +629,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             return 'Cannot get interface addresses'
         nets = []
         for addr in addrs:
-            nets.append(str(IPv6Interface(unicode(addr)).network))
+            nets.append(str(IPv6Interface(addr).network))
         response = self.srv6_manager.remove_many_ipaddr(
             router, self.grpc_client_port, addrs=addrs, nets=nets,
             device=interface_name, family=AF_UNSPEC
@@ -752,7 +739,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # If the operation has failed, return an error message
             logger.warning('Cannot get interface address')
             return 'Cannot get interface address'
-        net = str(IPv6Interface(unicode(addr)).network)
+        net = str(IPv6Interface(addr).network)
         response = self.srv6_manager.remove_ipaddr(
             router, self.grpc_client_port, ip_addr=addr, net=net,
             device=interface_name, family=AF_UNSPEC
@@ -817,7 +804,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         # Success
         logger.debug('Remote inteface removed successfully')
         return 'OK'
-    '''
+    
 
     """gRPC Server"""
 
@@ -1143,7 +1130,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 response = self._assign_interface_to_vpn(vpn_name, interface)
                 if response != 'OK':
                     logger.warning(
-                        'Cannot associate the interface to the VPN'
+                        'Cannot associate the interface %s to the VPN %s'
                         % (interface.interface_name, vpn_name)
                     )
                     # If the operation has failed, report the error
@@ -1444,7 +1431,7 @@ if __name__ == '__main__':
         time.sleep(INTERVAL_CHECK_FILES)
     # Start server
     start_server(
-        grpc_server_ip, grpc_server_port, grpc_client_port, secure,  key,
+        grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
         certificate, southbound_interface, topo_file, vpn_dump, use_mgmt_ip,
         verbose
     )

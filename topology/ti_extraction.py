@@ -22,8 +22,10 @@
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
+from __future__ import absolute_import, division, print_function
 
 # General imports
+from six import text_type
 import json
 import os
 import time
@@ -62,7 +64,7 @@ DOT_FILE_TOPO_GRAPH = '/tmp/topology.dot'
 # Default folder where to save extracted OSPF databases
 OSPF_DB_PATH = '/tmp/ospf_db'
 # Convert str to unicode
-LOOPBACK_PREFIX = unicode(LOOPBACK_PREFIX)
+LOOPBACK_PREFIX = text_type(LOOPBACK_PREFIX)
 
 def print_and_die(message, code=-2):
     print(message)
@@ -132,6 +134,8 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
     if not os.path.exists(ospfdb_path):
         os.makedirs(ospfdb_path)
     # General data structures
+    # Routers info
+    routers_dict = dict()
     # Stub networks dictionary: mapping stub networks to sets
     # of routers advertising the networks
     stub_networks = dict()
@@ -169,14 +173,14 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until('Password: ')
-            ospf6d_conn.write(password + '\r\n')
+            ospf6d_conn.read_until(b'Password: ')
+            ospf6d_conn.write(password.encode('latin-1') + b'\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write('terminal length 0\r\n')
+        ospf6d_conn.write(b'terminal length 0\r\n')
         # Get routing details from ospf6 database
-        ospf6d_conn.write('show ipv6 ospf6 route intra-area detail\r\n')
+        ospf6d_conn.write(b'show ipv6 ospf6 route intra-area detail\r\n')
         # Close
-        ospf6d_conn.write('q\r\n')
+        ospf6d_conn.write(b'q\r\n')
         # Get results
         route_details = ospf6d_conn.read_all().decode()
         # Establish a telnet connection
@@ -187,14 +191,14 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until('Password: ')
-            ospf6d_conn.write(password + '\r\n')
+            ospf6d_conn.read_until(b'Password: ')
+            ospf6d_conn.write(password.encode('latin-1') + b'\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write('terminal length 0\r\n')
+        ospf6d_conn.write(b'terminal length 0\r\n')
         # Get network details from ospf6 database
-        ospf6d_conn.write('show ipv6 ospf6 database network detail\r\n')
+        ospf6d_conn.write(b'show ipv6 ospf6 database network detail\r\n')
         # Close
-        ospf6d_conn.write('q\r\n')
+        ospf6d_conn.write(b'q\r\n')
         # Get results
         network_details = ospf6d_conn.read_all().decode()
         # Establish a telnet connection
@@ -205,20 +209,20 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             continue
         # Insert login password
         if password:
-            ospf6d_conn.read_until('Password: ')
-            ospf6d_conn.write(password + '\r\n')
+            ospf6d_conn.read_until(b'Password: ')
+            ospf6d_conn.write(password.encode('latin-1') + b'\r\n')
         # Terminal length set to 0 to not have interruptions
-        ospf6d_conn.write('terminal length 0\r\n')
+        ospf6d_conn.write(b'terminal length 0\r\n')
         # Turn on privileged mode
-        ospf6d_conn.write('enable\r\n')
+        ospf6d_conn.write(b'enable\r\n')
         # Configuration terminal
-        ospf6d_conn.write('configure terminal\r\n')
+        ospf6d_conn.write(b'configure terminal\r\n')
         # Get running configuration
-        ospf6d_conn.write('show running-config\r\n')
+        ospf6d_conn.write(b'show running-config\r\n')
         # Close
-        ospf6d_conn.write('q\r\n')
+        ospf6d_conn.write(b'q\r\n')
         # Close
-        ospf6d_conn.write('q\r\n')
+        ospf6d_conn.write(b'q\r\n')
         # Get results
         running_config = ospf6d_conn.read_all().decode()
         # Close telnet connection
@@ -243,16 +247,16 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             # Process infos and get active routers
             for line in route_file:
                 # Get a network prefix
-                m = re.search('Destination: (\S+)', line)
+                m = re.search('Destination: (\\S+)', line)
                 if(m):
-                    net = m.group(1)
+                    net = text_type(m.group(1))
                     continue
                 # Get link-state id and the router advertising the network
-                m = re.search('Intra-Prefix Id: (\d*.\d*.\d*.\d*) '
-                              'Adv: (\d*.\d*.\d*.\d*)', line)
+                m = re.search('Intra-Prefix Id: (\\d*.\\d*.\\d*.\\d*) '
+                              'Adv: (\\d*.\\d*.\\d*.\\d*)', line)
                 if(m):
-                    link_state_id = m.group(1)
-                    adv_router = m.group(2)
+                    link_state_id = text_type(m.group(1))
+                    adv_router = text_type(m.group(2))
                     # Add router to routers set
                     _routers.add(adv_router)
                     # It's a stub network or transit network
@@ -277,22 +281,22 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             # Process infos and get active routers
             for line in network_file:
                 # Get a link state id
-                m = re.search('Link State ID: (\d*.\d*.\d*.\d*)', line)
+                m = re.search('Link State ID: (\\d*.\\d*.\\d*.\\d*)', line)
                 if(m):
-                    link_state_id = m.group(1)
+                    link_state_id = text_type(m.group(1))
                     continue
                 # Get the router advertising the network
-                m = re.search('Advertising Router: (\d*.\d*.\d*.\d*)',
+                m = re.search('Advertising Router: (\\d*.\\d*.\\d*.\\d*)',
                               line)
                 if(m):
                     # Get router ID of the router advertising the network
-                    adv_router = m.group(1)
+                    adv_router = text_type(m.group(1))
                     continue
                 # Get routers directly connected to the network
-                m = re.search('Attached Router: (\d*.\d*.\d*.\d*)', line)
+                m = re.search('Attached Router: (\\d*.\\d*.\\d*.\\d*)', line)
                 if(m):
                     # Get router ID of the router attached to the network
-                    router_id = m.group(1)
+                    router_id = text_type(m.group(1))
                     # Get the network id: a network is uniquely identified
                     # by a pair (link state_id, advertising router)
                     network_id = (link_state_id, adv_router)
@@ -317,27 +321,27 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             # Process infos and get router id
             for line in running_config_file:
                 # Get router id
-                m = re.search('router-id (\d*.\d*.\d*.\d*)', line)
+                m = re.search('router-id (\\d*.\\d*.\\d*.\\d*)', line)
                 if(m):
                     # Update mapping router id to router
-                    routerid = m.group(1)
+                    routerid = text_type(m.group(1))
                     routerid_to_router[routerid] = router
                     break
         # Identify loopback nets
         for net in list(stub_networks):
             adv_router = list(stub_networks[net])[0]
             # Get the router ID
-            _id = int(IPv4Address(unicode(adv_router)))
+            _id = int(IPv4Address(adv_router))
             # Generate the loopback prefix of the router
             loopback_prefix = IPv6Network(int(IPv6Address
                                           (LOOPBACK_PREFIX)) | _id << 96)
             loopback_prefix = (IPv6Network(loopback_prefix)
                                .supernet(new_prefix=64))
-            if IPv6Network(unicode(net)).subnet_of(loopback_prefix):
+            if IPv6Network(net).subnet_of(loopback_prefix):
                 # The net is the loopback network of adv_router
                 routerid_to_loopbacknet[adv_router] = net
                 # The loopback IP address is the first address of the loopback net
-                loopbackip = str(next(IPv6Network(unicode(net))
+                loopbackip = str(next(IPv6Network(net)
                                  .hosts()))
                 # Update mapping router ID to loopback IPs
                 routerid_to_loopbackip[adv_router] = loopbackip
@@ -365,16 +369,15 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             print('*** Routers: %s' % _routers)
             print('**********************************************\n\n')
         # Build routers
-        routers = dict()
         for routerid in _routers:
             loopbacknet = routerid_to_loopbacknet.get(routerid)
             loopbackip = routerid_to_loopbackip.get(routerid)
-            routers[routerid] = {
+            routers_dict[routerid] = {
                 'loopbacknet': loopbacknet,
                 'loopbackip': loopbackip
             }
     # Done, return the topology graph
-    return routers, stub_networks, transit_networks
+    return routers_dict, stub_networks, transit_networks
 
 
 def topology_information_extraction(nodes, period, topo_file, topo_graph, ospf6d_pwd):
@@ -499,8 +502,10 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO)
     # Debug settings
-    SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
-    logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
+    #SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
+    #logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG)
     # Get topology filename
     topo_file = args.topo_file
     # Get topology graph image filename

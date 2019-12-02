@@ -12,7 +12,8 @@ from ipaddress import IPv6Network
 
 # Return true if the IP address belongs to the network
 def IPv6AddrInNet(ipaddr, net):
-    return IPv6Interface(unicode(ipaddr)) in IPv6Network(unicode(net))
+    #return IPv6Interface(unicode(ipaddr)) in IPv6Network(unicode(net))
+    return IPv6Interface(ipaddr) in IPv6Network(net)
 
 
 # Find a IPv6 address contained in the net

@@ -22,31 +22,32 @@
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
+from __future__ import absolute_import, division, print_function
 
 # General imports
+from six import text_type
 import grpc
 import os
 import sys
 
-GRPC_FOLDER = '.'
+#GRPC_FOLDER = '.'
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
-sys.path.append(GRPC_FOLDER)
-import nb_grpc_utils as utils
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
+#sys.path.append(GRPC_FOLDER)
+from . import nb_grpc_utils
 
 # Add path of proto files
-sys.path.append(utils.PROTO_FOLDER)
+#sys.path.append(nb_grpc_utils.PROTO_FOLDER)
 
 # SRv6 dependencies
-import srv6_vpn_pb2_grpc
-import srv6_vpn_pb2
-import status_codes_pb2
-import empty_req_pb2
-import nb_grpc_utils
-from nb_grpc_utils import VPN
-from nb_grpc_utils import Interface
-from nb_grpc_utils import VPNType
+from srv6_sdn_proto import srv6_vpn_pb2_grpc
+from srv6_sdn_proto import srv6_vpn_pb2
+from srv6_sdn_proto import status_codes_pb2
+from srv6_sdn_proto import empty_req_pb2
+from .nb_grpc_utils import VPN
+from .nb_grpc_utils import Interface
+from .nb_grpc_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
 #IP_ADDRESS = '2000::a'
@@ -92,18 +93,18 @@ class SRv6VPNManager:
     def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
         self.SECURE = secure
         if secure is True:
-            if certificate_path is None:
+            if certificate is None:
                 print('Error: "certificate" variable cannot be None '
                       'in secure mode')
                 sys.exit(-2)
-            self.CERTIFICATE = certificate
+            self.certificate = certificate
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
-            with open(CERTIFICATE) as f:
+            with open(self.certificate) as f:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
@@ -125,12 +126,14 @@ class SRv6VPNManager:
             # Parse response and retrieve VPNs information
             vpns = dict()
             for vpn in response.vpns:
-                vpn_name = vpn.vpn_name
-                tableid = vpn.tableid
+                vpn_name = text_type(vpn.vpn_name)
+                tableid = int(vpn.tableid)
                 interfaces = list()
                 for intf in vpn.interfaces:
-                    interfaces.append(Interface(intf.routerid, intf.interface_name,
-                                                intf.interface_ip, intf.vpn_prefix))
+                    interfaces.append(Interface(text_type(intf.routerid),
+                                                text_type(intf.interface_name),
+                                                text_type(intf.interface_ip),
+                                                text_type(intf.vpn_prefix)))
                 vpns[vpn_name] = {
                     "tableid": tableid,
                     "interfaces": interfaces
@@ -147,19 +150,19 @@ class SRv6VPNManager:
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
-        intent.vpn_name = name
-        intent.vpn_type = STR_TO_VPN_TYPE[type]
-        intent.tenantid = tenantid
-        intent.encap = ENCAP.get(encap, None)
+        intent.vpn_name = text_type(name)
+        intent.vpn_type = int(STR_TO_VPN_TYPE[type])
+        intent.tenantid = int(tenantid)
+        intent.encap = int(ENCAP.get(encap, None))
         if intent.encap is None:
             print('Invalid encap type')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
             interface = intent.interfaces.add()
-            interface.routerid = str(intf[0])
-            interface.interface_name = str(intf[1])
-            interface.interface_ip = str(intf[2])
-            interface.vpn_prefix = str(intf[3])
+            interface.routerid = text_type(intf[0])
+            interface.interface_name = text_type(intf[1])
+            interface.interface_ip = text_type(intf[2])
+            interface.vpn_prefix = text_type(intf[3])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Create the VPN
@@ -174,8 +177,8 @@ class SRv6VPNManager:
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
-        intent.vpn_name = vpn_name
-        intent.tenantid = tenantid
+        intent.vpn_name = text_type(vpn_name)
+        intent.tenantid = int(tenantid)
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Remove the VPN
@@ -190,13 +193,13 @@ class SRv6VPNManager:
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
-        intent.vpn_name = vpn_name
-        intent.tenantid = tenantid
+        intent.vpn_name = text_type(vpn_name)
+        intent.tenantid = int(tenantid)
         interface = intent.interfaces.add()
-        interface.routerid = str(intf[0])
-        interface.interface_name = str(intf[1])
-        interface.interface_ip = str(intf[2])
-        interface.vpn_prefix = str(intf[3])
+        interface.routerid = text_type(intf[0])
+        interface.interface_name = text_type(intf[1])
+        interface.interface_ip = text_type(intf[2])
+        interface.vpn_prefix = text_type(intf[3])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
@@ -211,11 +214,11 @@ class SRv6VPNManager:
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
-        intent.vpn_name = vpn_name
-        intent.tenantid = tenantid
+        intent.vpn_name = text_type(vpn_name)
+        intent.tenantid = int(tenantid)
         interface = intent.interfaces.add()
-        interface.routerid = str(intf[0])
-        interface.interface_name = str(intf[1])
+        interface.routerid = text_type(intf[0])
+        interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
@@ -251,6 +254,11 @@ class SRv6VPNManager:
 
 if __name__ == '__main__':
     # Test IPv6-VPN APIs
+    srv6_vpn_manager = SRv6VPNManager()
+
+    # Controller address and port
+    controller_addr = '::'
+    controller_port = 54321
 
     # Create VPN 10-research
     name = 'research'
@@ -268,10 +276,10 @@ if __name__ == '__main__':
     ]
     # Tenant ID
     tenantid = 10
-    # Create the intent
-    intent = VPNIntent(name, VPNType.IPv6VPN, interfaces, tenantid)
     # Send creation command through the northbound API
-    create_vpn(intent)
+    srv6_vpn_manager.create_vpn(controller_addr, controller_port,
+                                name, VPNType.IPv6VPN, interfaces,
+                                tenantid)
     # Remove all addresses in the hosts
     nb_grpc_utils.flush_ipv6_addresses_ssh('2000::4', 'hads11-eth1')
     nb_grpc_utils.flush_ipv6_addresses_ssh('2000::6', 'hads21-eth1')
@@ -287,7 +295,9 @@ if __name__ == '__main__':
     if1 = Interface('fcff:0:1::1', 'ads1-eth4', 'fd00:0:1:2::1',
                     'fd00:0:1:2::/48')
     tenantid = 10
-    add_interface_to_vpn(name, tenantid, if1)
+    srv6_vpn_manager.assign_interface_to_vpn(controller_addr,
+                                             controller_port,
+                                             name, tenantid, if1)
     # Remove all addresses in the hosts
     nb_grpc_utils.flush_ipv6_addresses_ssh('2000::5', 'hads12-eth1')
     # Add the public addresses to the interfaces in the hosts
@@ -301,7 +311,9 @@ if __name__ == '__main__':
     # Tenant ID
     tenantid = 10
     # Run remove interface command
-    remove_interface_from_vpn(name, tenantid, if1)
+    srv6_vpn_manager.remove_interface_from_vpn(controller_addr,
+                                               controller_port, name,
+                                               tenantid, if1)
     # Add the public prefixes to the interfaces in the routers
     nb_grpc_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth4',
                                             'fd00:0:1:3:2::/64')
@@ -316,7 +328,8 @@ if __name__ == '__main__':
                                        'fd00:0:1:3:2::2')
 
     # Remove VPN 10-research
-    remove_vpn('research', 10)
+    srv6_vpn_manager.remove_vpn(controller_addr,
+                                controller_port, 'research', 10)
     # Add the public prefixes addresses to the interfaces in the routers
     nb_grpc_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth3',
                                             'fd00:0:1:3:1::/64')
@@ -354,11 +367,10 @@ if __name__ == '__main__':
     ]
     # Tenant ID
     tenantid = 10
-    # Create the intent
-    intent = VPNIntent(name, VPNType.IPv4VPN,
-                       interfaces, tenantid)
     # Send creation command through the northbound API
-    create_vpn(intent)
+    srv6_vpn_manager.create_vpn(controller_addr, controller_port,
+                                name, VPNType.IPv4VPN,
+                                interfaces, tenantid)
 
     # Add interface
     name = 'research'
@@ -366,7 +378,9 @@ if __name__ == '__main__':
     if1 = Interface('fdff::1', 'ads1-eth4',
                     '172.16.40.1/24', '172.16.40.0/24')
     tenantid = 10
-    add_interface_to_vpn(name, tenantid, if1)
+    srv6_vpn_manager.assign_interface_to_vpn(controller_addr,
+                                          controller_port, name,
+                                          tenantid, if1)
 
     # Remove interface
     name = 'research'
@@ -375,13 +389,16 @@ if __name__ == '__main__':
     # Tenant ID
     tenantid = 20
     # Run remove interface command
-    remove_interface_from_vpn(name, tenantid, if1)
+    srv6_vpn_manager.remove_interface_from_vpn(controller_addr,
+                                               controller_port, name,
+                                               tenantid, if1)
     # Add the public addresses to the interfaces in the routers
     nb_grpc_utils.add_ipv4_address_quagga('fdff::1',
                                           'ads1-eth4', '10.3.0.1/16')
 
     # Remove VPN 10-research
-    remove_vpn('research', 10)
+    srv6_vpn_manager.remove_vpn(controller_addr,
+                                controller_port, 'research', 10)
     # Add the public addresses to the interfaces in the hosts
     nb_grpc_utils.add_ipv4_address_quagga('fdff::1',
                                           'ads1-eth3', '10.3.0.1/16')

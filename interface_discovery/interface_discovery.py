@@ -43,7 +43,7 @@ SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
 sys.path.append(SB_GRPC_CLIENT_PATH)
 
 # SRv6 dependencies
-from sb_grpc_client import SRv6Manager
+from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager
 
 # Interfaces file
 DEFAULT_INTERFACES_FILE = '/tmp/interfaces.json'
