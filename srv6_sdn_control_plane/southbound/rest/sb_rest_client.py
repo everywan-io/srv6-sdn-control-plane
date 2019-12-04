@@ -47,7 +47,7 @@ params = {"operation": "create"}
 request = get_http_requests("localhost", 443 if SECURE else 8080, SECURE, params, data)
 # Single add
 response = session.send(request, verify=(CERTIFICATE if SECURE else None))
-print response.status_code
+print(response.status_code)
 
 data = """
 {
@@ -77,7 +77,7 @@ params = {"operation": "create"}
 request = get_http_requests("localhost", 443 if SECURE else 8080, SECURE, params, data)
 # Bulk add
 response = session.send(request, verify=(CERTIFICATE if SECURE else None))
-print response.status_code
+print(response.status_code)
 # Let's close the session
 session.close()
 # Delete all the routes created before
@@ -132,5 +132,5 @@ for data in json_data:
   # Paths is our common data-model
   request = get_http_requests("localhost", 443 if SECURE else 8080, SECURE, params, json.dumps(data))
   response = session.send(request, verify=(CERTIFICATE if SECURE else None))
-  print response.status_code
+  print(response.status_code)
   session.close()

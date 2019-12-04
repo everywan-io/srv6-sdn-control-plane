@@ -32,15 +32,14 @@ import pprint
 import sys
 import errno
 
-# Path to the southbound gRPC-based client
-SB_GRPC_CLIENT_PATH = '../southbound/grpc'
+# Path to the southbound gRPC-based client#SB_GRPC_CLIENT_PATH = '../southbound/grpc'
 
 # Adjust relative paths
-script_path = os.path.dirname(os.path.abspath(__file__))
-SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
+#script_path = os.path.dirname(os.path.abspath(__file__))
+#SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
 
 # Add path of gRPC APIs
-sys.path.append(SB_GRPC_CLIENT_PATH)
+#sys.path.append(SB_GRPC_CLIENT_PATH)
 
 # SRv6 dependencies
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager

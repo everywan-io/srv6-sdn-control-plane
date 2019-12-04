@@ -37,14 +37,13 @@ from threading import Thread
 #sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
-from srv6_sdn_proto import srv6_manager_pb2_grpc
 from srv6_sdn_proto import srv6_manager_pb2
+from srv6_sdn_proto import srv6_manager_pb2_grpc
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import empty_req_pb2_grpc
-from srv6_sdn_proto import network_events_listener_pb2
 
 # Network event types
 EVENT_TYPES = {

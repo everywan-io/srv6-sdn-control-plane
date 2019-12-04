@@ -27,7 +27,7 @@ session = NetconfSSHSession("127.0.0.1", 830, "srv6", "srv6")
 
 # From the hello, we got the capabilities
 for capability in session.capabilities:
-  print capability
+  print(capability)
 
 config = """
 <edit-config>
@@ -54,7 +54,7 @@ config = """
 
 # Single add
 result = session.send_rpc(config)
-print format(etree.tostring(result[0], pretty_print=True))
+print(format(etree.tostring(result[0], pretty_print=True)))
 
 config = """
 <edit-config>
@@ -91,7 +91,7 @@ config = """
 
 # Bulk add
 result = session.send_rpc(config)
-print format(etree.tostring(result[0], pretty_print=True))
+print(format(etree.tostring(result[0], pretty_print=True)))
 # Close the session
 close_netconf_session(session)
 # Delete all the routes created before
@@ -170,5 +170,5 @@ for config in configs:
   # Each time we create a new session
   session = NetconfSSHSession("127.0.0.1", 830, "srv6", "srv6")
   result = session.send_rpc(config)
-  print format(etree.tostring(result[0], pretty_print=True))
+  print(format(etree.tostring(result[0], pretty_print=True)))
   close_netconf_session(session)
