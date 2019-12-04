@@ -75,11 +75,15 @@ DEFAULT_USE_MGMT_IP = False
 #sys.path.append(SB_GRPC_CLIENT_PATH)
 # SRv6 dependencies
 #from . import nb_grpc_utils as utils
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils as utils
+#from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils as utils
+from . import nb_grpc_utils as utils
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
+from srv6_sdn_proto import inventory_service_pb2_grpc
+from srv6_sdn_proto import inventory_service_pb2
 #from ...southbound.grpc.sb_grpc_client import SRv6Manager
-from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager
+#from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager
+from ...southbound.grpc.sb_grpc_client import SRv6Manager
 from srv6_sdn_proto import status_codes_pb2
 
 
@@ -108,12 +112,124 @@ SUPPORTED_SB_INTERFACES = ['gRPC']
 logger = logging.getLogger(__name__)
 
 
+class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
+    """gRPC request handler"""
+
+    def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 topo_graph=None, tunnel_file=DEFAULT_VPN_DUMP,
+                 verbose=DEFAULT_VERBOSE):
+        # Port of the gRPC client
+        self.grpc_client_port = grpc_client_port
+        # Verbose mode
+        self.verbose = verbose
+        # Topology graph
+        self.topo_graph = topo_graph
+        # Tunnels file
+        self.tunnel_file = tunnel_file
+
+        print('GRAPH', self.topo_graph)
+
+
+    def GetDeviceInformation(self, request, context):
+        logger.debug('GetDeviceInformation request received')
+        # Extract the device ids from the request
+        ids = list()
+        for id in request.ids:
+            ids.append(id)
+        # Read the topology graph
+        #G = utils.json_file_to_graph(self.topo_file)
+        # Create the response
+        response = inventory_service_pb2.InventoryServiceReply(status=status_codes_pb2.STATUS_SUCCESS)
+        # Build the devices list
+        for node_id, node_info in self.topo_graph.nodes(data=True):
+            if len(ids) > 0 and node_id not in ids:
+                # Skip
+                continue
+            if node_info['type'] != 'router':
+                # Skip stub networks
+                continue
+            device = response.device_information.devices.add()
+            device.id = node_id
+            if node_info.get('loopbackip'):
+                device.loopbackip = node_info['loopbackip']
+            if node_info.get('loopbacknet'):
+                device.loopbacknet = node_info['loopbacknet']
+            if node_info.get('managementip'):
+                device.managementip = node_info['managementip']
+            if node_info.get('interfaces'):
+                for _interface, interface_info in node_info['interfaces'].items():
+                    interface = device.interfaces.add()
+                    interface.index = interface_info['ifindex']
+                    interface.name = interface_info['ifname']
+                    interface.macaddr = interface_info['macaddr']
+                    interface.state = interface_info['state']
+                    for ipaddr in interface_info['ipaddr']:
+                        interface.ipaddrs.append(ipaddr)
+        # Return the response
+        logger.debug('Sending response:\n%s' % response)
+        return response
+
+
+    def GetTopologyInformation(self, request, context):
+        logger.debug('GetTopologyInformation request received')
+        # Read the topology graph
+        #G = utils.json_file_to_graph(self.topo_file)
+        # Create the response
+        response = inventory_service_pb2.InventoryServiceReply(status=status_codes_pb2.STATUS_SUCCESS)
+        # Build the topology
+        routers = list()
+        for node_id, node_info in self.topo_graph.nodes(data=True):
+            if node_info['type'] != 'router':
+                # Skip stub networks
+                continue
+            routers.append(node_id)
+            response.topology_information.routers.append(node_id)
+        for link in self.topo_graph.edges():
+            if link[0] in routers and link[1] in routers:
+                _link = response.topology_information.links.add()
+                _link.l_router = link[0]
+                _link.r_router = link[1]
+        # Return the response
+        logger.debug('Sending response:\n%s' % response)
+        return response
+
+
+    def GetTunnelInformation(self, request, context):
+        logger.debug('GetTunnelInformation request received')
+        # Read the topology graph
+        G = utils.json_file_to_graph(self.tunnel_file)
+        # Create the response
+        response = inventory_service_pb2.InventoryServiceReply(status=status_codes_pb2.STATUS_SUCCESS)
+        # Build the tunnels list
+        for _tunnel in self.srv6_controller_state.get_vpns():
+            # Add a new tunnel to the tunnels list
+            tunnel = response.tunnel_information.tunnels.add()
+            # Set name
+            tunnel.name = _tunnel.name
+            # Set interfaces
+            # Iterate on all interfaces
+            for interface_info in _tunnel.interfaces.values():
+                # Add a new interface to the tunnel
+                _interface = tunnel.interfaces.add()
+                # Add router ID
+                _interface.routerid = interface_info.routerid
+                # Add interface name
+                _interface.interface_name = interface_info.interface_name
+                # Add interface IP
+                _interface.interface_ip = interface_info.interface_ip
+                # Add site prefix
+                _interface.site_prefix = interface_info.site_prefix
+        # Return the tunnels list
+        logger.debug('Sending response:\n%s' % response)
+        return response
+
+
 class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
     """gRPC request handler"""
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  southbound_interface=DEFAULT_SB_INTERFACE,
-                 topo_file=DEFAULT_TOPOLOGY_FILE, vpn_dump=DEFAULT_VPN_DUMP,
+                 topo_graph=None, vpn_dump=DEFAULT_VPN_DUMP,
                  use_mgmt_ip=DEFAULT_USE_MGMT_IP, verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
@@ -127,10 +243,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         self.srv6_manager = SRv6Manager()
         # Initialize controller state
         self.srv6_controller_state = utils.SRv6ControllerState(
-            topo_file, vpn_dump, use_mgmt_ip
+            topo_graph, vpn_dump, use_mgmt_ip
         )
-        # Update the topology
-        self.srv6_controller_state.load_topology_from_json_dump()
 
     
     # Install a VPN on a specified router
@@ -1258,7 +1372,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  secure=DEFAULT_SECURE, key=DEFAULT_KEY,
                  certificate=DEFAULT_CERTIFICATE,
                  southbound_interface=DEFAULT_SB_INTERFACE,
-                 topo_file=DEFAULT_TOPOLOGY_FILE,
+                 topo_graph=None,
                  vpn_dump=DEFAULT_VPN_DUMP, use_mgmt_ip=DEFAULT_USE_MGMT_IP,
                  verbose=DEFAULT_VERBOSE):
     # Setup gRPC server
@@ -1267,8 +1381,13 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
     srv6_vpn_pb2_grpc.add_SRv6VPNServicer_to_server(
         SRv6VPNManager(
-            grpc_client_port, southbound_interface, topo_file, vpn_dump,
+            grpc_client_port, southbound_interface, topo_graph, vpn_dump,
             use_mgmt_ip, verbose
+        ), grpc_server
+    )
+    inventory_service_pb2_grpc.add_InventoryServiceServicer_to_server(
+        InventoryService(
+            grpc_client_port, topo_graph, vpn_dump, verbose
         ), grpc_server
     )
     # If secure mode is enabled, we need to create a secure endpoint
@@ -1429,9 +1548,15 @@ if __name__ == '__main__':
         # retrying
         print('Waiting for TOPOLOGY_FILE...')
         time.sleep(INTERVAL_CHECK_FILES)
-    # Start server
-    start_server(
-        grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
-        certificate, southbound_interface, topo_file, vpn_dump, use_mgmt_ip,
-        verbose
-    )
+    # Update the topology
+    if utils.load_topology_from_json_dump(topo_file) is not None:
+        # Start server
+        start_server(
+            grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
+            certificate, southbound_interface, topo_file, vpn_dump, use_mgmt_ip,
+            verbose
+        )
+        while True:
+            time.sleep(5)
+    else:
+        print('Invalid topology')

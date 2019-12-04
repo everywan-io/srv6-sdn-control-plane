@@ -163,6 +163,8 @@ class SRv6Controller(object):
         self.certificate = certificate
         # VPN dump
         self.vpn_dump = vpn_dump
+        # Graph
+        self.G = nx.Graph()
         # Topology information
         self.topoInfo = {
             'routers': dict(),
@@ -725,80 +727,81 @@ class SRv6Controller(object):
             print(('*** Routers: %s' % list(self.topoInfo['routers'].keys())))
             print(('*** Nets: %s' % list(self.topoInfo['nets'].keys())))
         # Topology graph
-        G = nx.Graph()
-        # Build nodes list
-        # Add routers to the graph
-        for routerid, router_info in list(self.topoInfo['routers'].items()):
-            # Extract loopback net
-            loopbacknet = router_info.get('loopbacknet')
-            # Extract loopback IP
-            loopbackip = router_info.get('loopbackip')
-            # Extract management IP
-            if self.out_of_band:
-                managementip = self.routerid_to_mgmtip.get(routerid)
-            else:
-                managementip = None
-            # Extract router interfaces
-            interfaces = self.topoInfo['interfaces'].get(routerid)
-            # Add the node to the graph
-            G.add_node(routerid, routerid=routerid, fillcolor='red',
-                       style='filled', shape='ellipse',
-                       loopbacknet=loopbacknet, loopbackip=loopbackip,
-                       managementip=managementip, interfaces=interfaces, type='router')
-        # Build edges list
-        for net, routerids in list(self.topoInfo['nets'].items()):
-            if len(routerids) == 2:
-                # Transit network
-                # Link between two routers
-                edge = list(routerids)
-                edge = (edge[0], edge[1])
-                # Get the two router interfaces corresponding to this edge
-                # Get interface name and IP address
-                # corresponding to the left router
-                lhs_intf = self.get_interface_facing_on_net(edge[0], net)
-                if lhs_intf is None or lhs_intf['state'] == 'DOWN':
-                    # The interface is 'DOWN'
-                    # Skip
-                    continue
-                lhs_ifname = lhs_intf.get('ifname')
-                lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
-                # Get interface name and IP address
-                # corresponding to the right router
-                rhs_intf = self.get_interface_facing_on_net(edge[1], net)
-                if rhs_intf is None or rhs_intf['state'] == 'DOWN':
-                    # The interface is 'DOWN'
-                    # Skip
-                    continue
-                rhs_ifname = rhs_intf.get('ifname')
-                rhs_ip = utils.findIPv6AddrInNet(rhs_intf.get('ipaddr'), net)
-                # Add edge to the graph
-                # This is a transit network, set the net as label
-                G.add_edge(*edge, label=net, fontsize=9, net=net,
-                           source_ip=rhs_ip, source_intf=rhs_ifname,
-                           target_ip=lhs_ip, target_intf=lhs_ifname)
-            elif len(routerids) == 1:
-                # Stub networks
-                # Link between a router and a stub network
-                edge = (list(routerids)[0], net)
-                # Get the interface of the left router
-                lhs_intf = self.get_interface_facing_on_net(edge[0], net)
-                if lhs_intf is None or lhs_intf['state'] == 'DOWN':
-                    # The interface is 'DOWN'
-                    # Skip
-                    continue
-                lhs_ifname = lhs_intf.get('ifname')
-                lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
-                # Add a node representing the net to the graph
-                G.add_node(net, fillcolor='cyan', style='filled',
-                           shape='box', type='stub_network')
-                # Add edge to the graph
-                # This is a stub network, no label on the edge
-                G.add_edge(*edge, label='', fontsize=9, net=net,
-                           source_ip=None, source_intf=None,
-                           target_ip=lhs_ip, target_intf=lhs_intf)
+        #G = nx.Graph()
         # Build topology graph
         with self.topo_graph_lock:
-            self.G = G
+            # Remove all nodes and edges from the graph
+            self.G.clear()
+            # Build nodes list
+            # Add routers to the graph
+            for routerid, router_info in list(self.topoInfo['routers'].items()):
+                # Extract loopback net
+                loopbacknet = router_info.get('loopbacknet')
+                # Extract loopback IP
+                loopbackip = router_info.get('loopbackip')
+                # Extract management IP
+                if self.out_of_band:
+                    managementip = self.routerid_to_mgmtip.get(routerid)
+                else:
+                    managementip = None
+                # Extract router interfaces
+                interfaces = self.topoInfo['interfaces'].get(routerid)
+                # Add the node to the graph
+                self.G.add_node(routerid, routerid=routerid, fillcolor='red',
+                        style='filled', shape='ellipse',
+                        loopbacknet=loopbacknet, loopbackip=loopbackip,
+                        managementip=managementip, interfaces=interfaces, type='router')
+            # Build edges list
+            for net, routerids in list(self.topoInfo['nets'].items()):
+                if len(routerids) == 2:
+                    # Transit network
+                    # Link between two routers
+                    edge = list(routerids)
+                    edge = (edge[0], edge[1])
+                    # Get the two router interfaces corresponding to this edge
+                    # Get interface name and IP address
+                    # corresponding to the left router
+                    lhs_intf = self.get_interface_facing_on_net(edge[0], net)
+                    if lhs_intf is None or lhs_intf['state'] == 'DOWN':
+                        # The interface is 'DOWN'
+                        # Skip
+                        continue
+                    lhs_ifname = lhs_intf.get('ifname')
+                    lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
+                    # Get interface name and IP address
+                    # corresponding to the right router
+                    rhs_intf = self.get_interface_facing_on_net(edge[1], net)
+                    if rhs_intf is None or rhs_intf['state'] == 'DOWN':
+                        # The interface is 'DOWN'
+                        # Skip
+                        continue
+                    rhs_ifname = rhs_intf.get('ifname')
+                    rhs_ip = utils.findIPv6AddrInNet(rhs_intf.get('ipaddr'), net)
+                    # Add edge to the graph
+                    # This is a transit network, set the net as label
+                    self.G.add_edge(*edge, label=net, fontsize=9, net=net,
+                            source_ip=rhs_ip, source_intf=rhs_ifname,
+                            target_ip=lhs_ip, target_intf=lhs_ifname)
+                elif len(routerids) == 1:
+                    # Stub networks
+                    # Link between a router and a stub network
+                    edge = (list(routerids)[0], net)
+                    # Get the interface of the left router
+                    lhs_intf = self.get_interface_facing_on_net(edge[0], net)
+                    if lhs_intf is None or lhs_intf['state'] == 'DOWN':
+                        # The interface is 'DOWN'
+                        # Skip
+                        continue
+                    lhs_ifname = lhs_intf.get('ifname')
+                    lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
+                    # Add a node representing the net to the graph
+                    self.G.add_node(net, fillcolor='cyan', style='filled',
+                            shape='box', type='stub_network')
+                    # Add edge to the graph
+                    # This is a stub network, no label on the edge
+                    self.G.add_edge(*edge, label='', fontsize=9, net=net,
+                            source_ip=None, source_intf=None,
+                            target_ip=lhs_ip, target_intf=lhs_intf)
         # Set the topology changed flag
         self.topology_changed_flag.set()
 
@@ -909,7 +912,7 @@ class SRv6Controller(object):
                         'key': self.key,
                         'certificate': self.certificate,
                         'southbound_interface': self.sb_interface,
-                        'topo_file': self.topology_file,
+                        'topo_graph': self.G,
                         'vpn_dump': self.vpn_dump,
                         'use_mgmt_ip': self.out_of_band,
                         'verbose': self.VERBOSE

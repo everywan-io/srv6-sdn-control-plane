@@ -45,6 +45,8 @@ from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import empty_req_pb2
+from srv6_sdn_proto import inventory_service_pb2_grpc
+from srv6_sdn_proto import inventory_service_pb2
 from .nb_grpc_utils import VPN
 from .nb_grpc_utils import Interface
 from .nb_grpc_utils import VPNType
@@ -86,6 +88,149 @@ ENCAP = {
     'SRv6_IPsec_ESP_GRE': srv6_vpn_pb2.SRv6_IPsec_ESP_GRE,
     'SRv6_IPsec_ESP_IP': srv6_vpn_pb2.SRv6_IPsec_ESP_IP
 }
+
+
+class InventoryService:
+
+    def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
+        self.SECURE = secure
+        if secure is True:
+            if certificate is None:
+                print('Error: "certificate" variable cannot be None '
+                      'in secure mode')
+                sys.exit(-2)
+            self.certificate = certificate
+
+    # Build a grpc stub
+    def get_grpc_session(self, ip_address, port, secure):
+        # If secure we need to establish a channel with the secure endpoint
+        if secure:
+            # Open the certificate file
+            with open(self.certificate) as f:
+                certificate = f.read()
+            # Then create the SSL credentials and establish the channel
+            grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
+            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+                                          grpc_client_credentials)
+        else:
+            channel = grpc.insecure_channel("ipv6:[%s]:%s" % (ip_address, port))
+        return inventory_service_pb2_grpc.InventoryServiceStub(channel), channel
+
+
+    def get_device_information(self, server_ip, server_port):
+        # Create the request
+        request = inventory_service_pb2.InventoryServiceRequest()
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        # Get VPNs
+        response = inventory_service_stub.GetDeviceInformation(request)
+        if response.status == status_codes_pb2.STATUS_SUCCESS:
+            # Parse response and retrieve devices information
+            devices = dict()
+            for device in response.device_information.devices:
+                device_id = None
+                loopbackip = None
+                loopbacknet = None
+                managementip = None
+                interfaces = None
+                if device.id is not None:
+                    device_id = text_type(device.id)
+                if device.loopbackip is not None:
+                    loopbackip = text_type(device.loopbackip)
+                if device.loopbacknet is not None:
+                    loopbacknet = text_type(device.loopbacknet)
+                if device.managementip is not None:
+                    managementip = text_type(device.managementip)
+                if device.interfaces is not None:
+                    interfaces = list()
+                    for intf in device.interfaces:
+                        ipaddrs = list()
+                        for ipaddr in intf.ipaddrs:
+                            ipaddrs.append(ipaddr)
+                        interfaces.append({
+                            'ifindex': text_type(intf.index),
+                            'ifname': text_type(intf.name),
+                            'macaddr': text_type(intf.macaddr),
+                            'ipaddrs': intf.ipaddrs,
+                            'state': text_type(intf.state),
+                        })
+                devices[device_id] = {
+                    'device_id': device_id,
+                    'loopbackip': loopbackip,
+                    'loopbacknet': loopbacknet,
+                    'managementip': managementip,
+                    'interfaces': interfaces,
+                }
+        else:
+            devices = None
+        # Let's close the session
+        channel.close()
+        return devices
+
+
+    def get_topology_information(self, server_ip, server_port):
+        # Create the request
+        request = inventory_service_pb2.InventoryServiceRequest()
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        # Get VPNs
+        response = inventory_service_stub.GetTopologyInformation(request)
+        if response.status == status_codes_pb2.STATUS_SUCCESS:
+            # Parse response and retrieve topology information
+            topology = dict()
+            topology['routers'] = list()
+            topology['links'] = list()
+            for router in response.topology_information.routers:
+                topology['routers'].append(text_type(router))
+            for link in response.topology_information.links:
+                topology['links'].append((text_type(link.l_router), text_type(link.r_router)))
+        else:
+            topology = None
+        # Let's close the session
+        channel.close()
+        return topology
+
+
+    def get_tunnel_information(self, server_ip, server_port):
+        # Create the request
+        request = inventory_service_pb2.InventoryServiceRequest()
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        # Get VPNs
+        response = inventory_service_stub.GetTunnelInformation(request)
+        if response.status == status_codes_pb2.STATUS_SUCCESS:
+            # Parse response and retrieve tunnel information
+            tunnels = list()
+            for tunnel in response.tunnel_information.tunnels:
+                name = None
+                tunnel_interfaces = list()
+                for interface in tunnel.tunnel_interfaces:
+                    routerid = None
+                    interface_name = None
+                    interface_ip = None
+                    if interface.routerid is not None:
+                        routerid = text_type(interface.routerid)
+                    if interface.interface_name is not None:
+                        interface_name = text_type(interface.interface_name)
+                    if interface.interface_ip is not None:
+                        interface_ip = text_type(interface.interface_ip)
+                    if interface.site_prefix is not None:
+                        site_prefix = text_type(interface.site_prefix)
+                    tunnel_interfaces.append({
+                        'routerid': routerid,
+                        'interface_name': interface_name,
+                        'interface_ip': interface_ip,
+                        'site_prefix': site_prefix
+                    })
+                tunnels.append({
+                    'name': name,
+                    'tunnel_interfaces': tunnel_interfaces
+                })
+        else:
+            tunnels = None
+        # Let's close the session
+        channel.close()
+        return tunnels
 
 
 class SRv6VPNManager:

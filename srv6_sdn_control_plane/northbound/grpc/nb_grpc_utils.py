@@ -635,19 +635,17 @@ class SRv6ControllerState:
        methods to handle it
     """
 
-    def __init__(self, topo_file, vpn_dump, use_mgmt_ip=False):
+    def __init__(self, topology, vpn_dump, use_mgmt_ip=False):
         # Create Table IDs allocator
         self.tableid_allocator = TableIDAllocator()
         # Create SIDs allocator
         self.sid_allocator = SIDAllocator()
-        # Topology file
-        self.topo_file = topo_file
+        # Topology graph
+        self.topology = topology
         # VPN file
         self.vpn_dump = vpn_dump
         # VPNs dict
         self.vpns = dict()
-        # Topology
-        self.topology = dict()
         # Keep track of how many VPNs are installed in each router
         self.num_vpn_installed_on_router = dict()
         # Use management IP addresses for out of band control
@@ -995,6 +993,7 @@ class SRv6ControllerState:
     def release_tableid(self, vpn_name):
         return self.tableid_allocator.release_tableid(vpn_name)
 
+    '''
     # Update the topology from a JSON file
     def load_topology_from_json_dump(self, block=True):
         ready = False
@@ -1012,3 +1011,22 @@ class SRv6ControllerState:
         # Success
         logger.info('The topology has been updated')
         return True
+    '''
+
+# Update the topology from a JSON file
+def load_topology_from_json_dump(topo_file, block=True):
+    ready = False
+    while not ready:
+        try:
+            logger.debug('Try to retrieve the updated topology')
+            topology = json_file_to_graph(topo_file)
+            if self.topology is not None:
+                ready = True
+        except Exception:
+            # Error
+            logger.warning('Error while retrieving the topology from the file %s' % topo_file)
+            print('*** Waiting for the topology getting ready')
+            time.sleep(WAIT_TOPOLOGY_INTERVAL)
+    # Success
+    logger.info('The topology has been updated')
+    return topology
