@@ -25,6 +25,8 @@ from topology.ti_extraction import draw_topo
 from topology.ti_extraction import connect_and_extract_topology
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
+#
+from pymerang.pymerang_server import PymerangController
 
 ################## Setup these variables ##################
 
@@ -115,6 +117,12 @@ DEFAULT_NB_INTERFACE = 'gRPC'
 DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
 
 
+class SDWANControllerState:
+
+    def __init__(self):
+        self.devices = dict()
+
+
 class SRv6Controller(object):
 
     def __init__(self, nodes, period, topo_file, topo_graph, out_of_band,
@@ -162,7 +170,9 @@ class SRv6Controller(object):
         # Server certificate
         self.certificate = certificate
         # VPN dump
-        self.vpn_dump = vpn_dump
+        self.vpn_file = vpn_dump
+        # VPN dict
+        self.vpn_dict = dict()
         # Graph
         self.G = nx.Graph()
         # Topology information
@@ -190,6 +200,8 @@ class SRv6Controller(object):
             print(('*** Selected southbound interface: %s' % self.sb_interface))
             print(('*** Selected northbound interface: %s' % self.nb_interface))
             print()
+        # Controller state
+        self.controller_state = SDWANControllerState()
 
     # Get the interface of the router facing on a net
     def get_interface_facing_on_net(self, routerid, net):
@@ -893,6 +905,13 @@ class SRv6Controller(object):
         if self.VERBOSE:
             print('*** Done')
 
+    # Start registration server
+    def start_registration_server(self):
+        logging.info('*** Starting registration server')
+        server = PymerangController(devices=self.controller_state.devices)
+        server.load_device_config()
+        server.serve()
+
     # Run the SRv6 controller
     def run(self):
         if self.VERBOSE:
@@ -913,7 +932,9 @@ class SRv6Controller(object):
                         'certificate': self.certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
-                        'vpn_dump': self.vpn_dump,
+                        'vpn_dict': self.vpn_dict,
+                        'devices': self.controller_state.devices,
+                        'vpn_file': self.vpn_file,
                         'use_mgmt_ip': self.out_of_band,
                         'verbose': self.VERBOSE
                     }
@@ -924,6 +945,12 @@ class SRv6Controller(object):
         # Start 'dump and draw' thread
         thread = Thread(
             target=self.dump_and_draw_topo
+        )
+        thread.daemon = True
+        thread.start()
+        # Start registration server
+        thread = Thread(
+            target=self.start_registration_server
         )
         thread.daemon = True
         thread.start()

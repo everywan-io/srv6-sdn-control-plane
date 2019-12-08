@@ -635,7 +635,7 @@ class SRv6ControllerState:
        methods to handle it
     """
 
-    def __init__(self, topology, vpn_dump, use_mgmt_ip=False):
+    def __init__(self, topology, vpn_dict, vpn_file, use_mgmt_ip=False):
         # Create Table IDs allocator
         self.tableid_allocator = TableIDAllocator()
         # Create SIDs allocator
@@ -643,19 +643,21 @@ class SRv6ControllerState:
         # Topology graph
         self.topology = topology
         # VPN file
-        self.vpn_dump = vpn_dump
+        self.vpn_file = vpn_file
         # VPNs dict
-        self.vpns = dict()
+        self.vpns = vpn_dict
         # Keep track of how many VPNs are installed in each router
         self.num_vpn_installed_on_router = dict()
         # Use management IP addresses for out of band control
         self.use_mgmt_ip = use_mgmt_ip
         # If VPN dumping is enabled, import the VPNs from the dump
-        if vpn_dump is not None:
+        '''
+        if vpn_file is not None:
             try:
                 self.import_vpns_from_dump()
             except:
                 print('Corrupted VPN file')
+        '''
 
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
@@ -935,14 +937,14 @@ class SRv6ControllerState:
         last_allocated_tableid = self.tableid_allocator.last_allocated_tableid
         vpn_dump_dict['last_allocated_tableid'] = last_allocated_tableid
         # Write the dump to file
-        with open(self.vpn_dump, 'w') as outfile:
+        with open(self.vpn_file, 'w') as outfile:
             json.dump(vpn_dump_dict, outfile, sort_keys=True, indent=2)
 
     # Import VPNs from dump
     def import_vpns_from_dump(self):
         try:
             # Open VPN dump file
-            with open(self.vpn_dump) as json_file:
+            with open(self.vpn_file) as json_file:
                 vpn_dump_dict = json.load(json_file)
             # Parse VPN dump and fill data structures
             #
