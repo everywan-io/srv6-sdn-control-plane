@@ -135,6 +135,7 @@ class InventoryService:
                 interfaces = None
                 if device.id is not None:
                     device_id = text_type(device.id)
+                '''
                 if device.loopbackip is not None:
                     loopbackip = text_type(device.loopbackip)
                 if device.loopbacknet is not None:
@@ -154,6 +155,36 @@ class InventoryService:
                             'ipaddrs': intf.ipaddrs,
                             'state': text_type(intf.state),
                         })
+                '''
+                interfaces = dict()
+                if device.interfaces is not None:
+                    for intf in device.interfaces:
+                        ifname = intf.name
+                        mac_addrs = list()
+                        for mac_addr in intf.mac_addrs:
+                            mac_addrs.append({
+                                'broadcast': mac_addr.broadcast,
+                                'addr': mac_addr.addr,
+                            })
+                        ipv4_addrs = list()
+                        for ipv4_addr in intf.ipv4_addrs:
+                            ipv4_addrs.append({
+                                'broadcast': ipv4_addr.broadcast,
+                                'netmask': ipv4_addr.netmask,
+                                'addr': ipv4_addr.addr,
+                            })
+                        ipv6_addrs = list()
+                        for ipv6_addr in intf.ipv6_addrs:
+                            ipv6_addrs.append({
+                                'broadcast': ipv6_addr.broadcast,
+                                'netmask': ipv6_addr.netmask,
+                                'addr': ipv6_addr.addr,
+                            })
+                        interfaces[ifname] = {
+                            'mac_addrs': mac_addrs,
+                            'ipv4_addrs': ipv4_addrs,
+                            'ipv6_addrs': ipv6_addrs
+                        }
                 devices[device_id] = {
                     'device_id': device_id,
                     'loopbackip': loopbackip,

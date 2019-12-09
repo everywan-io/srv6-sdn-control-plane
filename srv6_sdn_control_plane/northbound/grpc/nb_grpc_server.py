@@ -171,6 +171,24 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         for device_id, device_info in self.devices.items():
             device = response.device_information.devices.add()
             device.id = text_type(device_id)
+            _interfaces = device_info.get('interfaces', [])
+            for ifname, ifinfo in _interfaces.items():
+                interface = device.interfaces.add()
+                interface.name = ifname
+                for addr in ifinfo['mac_addrs']:
+                    mac_addr = interface.mac_addrs.add()
+                    mac_addr.broadcast = addr['broadcast']
+                    mac_addr.addr = addr['addr']
+                for addr in ifinfo['ipv4_addrs']:
+                    ipv4_addr = interface.ipv4_addrs.add()
+                    ipv4_addr.broadcast = addr['broadcast']
+                    ipv4_addr.netmask = addr['netmask']
+                    ipv4_addr.addr = addr['addr']
+                for addr in ifinfo['ipv6_addrs']:
+                    ipv6_addr = interface.ipv6_addrs.add()
+                    ipv6_addr.broadcast = addr['broadcast']
+                    ipv6_addr.netmask = addr['netmask']
+                    ipv6_addr.addr = addr['addr']
         # Return the response
         logger.debug('Sending response:\n%s' % response)
         return response
@@ -1010,6 +1028,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
                     # If the IP address is invalid, return an error message
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
+                # Extract tunnel type
+                tunnel_type = intent.tunnel
             logger.info('All checks passed')
             # All checks passed, we are ready to create VPN
             #
