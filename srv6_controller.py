@@ -14,7 +14,7 @@ from argparse import ArgumentParser
 from threading import Thread
 from threading import Lock
 # ipaddress dependencies
-from ipaddress import IPv6Interface
+from ipaddress import IPv6Interface, IPv4Address
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
@@ -33,14 +33,14 @@ from pymerang.pymerang_server import PymerangController
 # Path of the proto files
 #PROTO_FOLDER = '../srv6-sdn-proto/'
 # Mapping router ID to management IP
-ROUTERID_TO_MGMTIP = {
-    #'0.0.0.1': '2000::1',
-    #'0.0.0.2': '2000::2',
-    #'0.0.0.3': '2000::3'
-    '0.0.0.1': '2000:0:0:1::1',
-    '0.0.0.2': '2000:0:0:2::1',
-    '0.0.0.3': '2000:0:0:3::1',
-}
+#ROUTERID_TO_MGMTIP = {
+#    #'0.0.0.1': '2000::1',
+#    #'0.0.0.2': '2000::2',
+#    #'0.0.0.3': '2000::3'
+#    '0.0.0.1': '2000:0:0:1::1',
+#    '0.0.0.2': '2000:0:0:2::1',
+#    '0.0.0.3': '2000:0:0:3::1',
+#}
 
 ###########################################################
 
@@ -122,10 +122,15 @@ class SDWANControllerState:
     def __init__(self):
         self.devices = dict()
 
+    # Get router's management IP address
+    def get_router_mgmtip(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        return self.devices[routerid]['mgmtip']
+
 
 class SRv6Controller(object):
 
-    def __init__(self, nodes, period, topo_file, topo_graph, out_of_band,
+    def __init__(self, nodes, period, topo_file, topo_graph,
                  ospf6d_pwd, sb_interface, nb_interface,
                  secure, key, certificate, grpc_server_ip, grpc_server_port,
                  grpc_client_port, min_interval_between_topo_dumps,
@@ -145,8 +150,6 @@ class SRv6Controller(object):
         self.topology_file = topo_file
         # Topology file
         self.topology_graph = topo_graph
-        # Out-of-Band control
-        self.out_of_band = out_of_band
         # Southbound interface
         self.sb_interface = sb_interface
         # Northbound interface
@@ -480,7 +483,7 @@ class SRv6Controller(object):
         if self.VERBOSE:
             print(('*** Extracting interface from router %s' % routerid))
         # Get the IP address of the router
-        router = self.get_router_address(routerid)
+        router = self.controller_state.get_router_mgmtip(routerid)
         if router is None:
             # Router address not found
             # The topology has not changed
@@ -569,7 +572,7 @@ class SRv6Controller(object):
     # received from the nodes through the Southbound interface
     def listen_network_events(self, routerid):
         topo_changed = False
-        router = self.get_router_address(routerid)
+        router = self.controller_state.get_router_mgmtip(routerid)
         if router is None:
             logging.warning('Error in listen_network_events(): '
                             'Cannot find an address for the router %s'
@@ -758,10 +761,7 @@ class SRv6Controller(object):
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
-                if self.out_of_band:
-                    managementip = self.routerid_to_mgmtip.get(routerid)
-                else:
-                    managementip = None
+                managementip = self.controller_state.get_router_mgmtip(routerid)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
                 # Add the node to the graph
@@ -941,7 +941,6 @@ class SRv6Controller(object):
                         'vpn_dict': self.vpn_dict,
                         'devices': self.controller_state.devices,
                         'vpn_file': self.vpn_file,
-                        'use_mgmt_ip': self.out_of_band,
                         'verbose': self.VERBOSE
                     }
                 )
@@ -967,81 +966,6 @@ class SRv6Controller(object):
             time.sleep(100)
 
 
-class InBandSRv6Controller(SRv6Controller):
-
-    def __init__(self, nodes, period, topo_file,
-                 topo_graph, ospf6d_pwd, sb_interface, nb_interface, secure,
-                 key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-                 min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose):
-        super(InBandSRv6Controller, self).__init__(
-            nodes=nodes,
-            period=period,
-            topo_file=topo_file,
-            out_of_band=False,
-            topo_graph=topo_graph,
-            ospf6d_pwd=ospf6d_pwd,
-            sb_interface=sb_interface,
-            nb_interface=nb_interface,
-            secure=secure,
-            key=key,
-            certificate=certificate,
-            grpc_server_ip=grpc_server_ip,
-            grpc_server_port=grpc_server_port,
-            grpc_client_port=grpc_client_port,
-            min_interval_between_topo_dumps=min_interval_between_topo_dumps,
-            vpn_dump=vpn_dump,
-            topo_extraction=topo_extraction,
-            verbose=verbose
-        )
-
-    # In-band controllers use loopback IPs
-    # Get a loopback address for the router
-    def get_router_address(self, routerid):
-        router_info = self.topoInfo['routers'].get(routerid)
-        if router_info is not None:
-            return router_info['loopbackip']
-
-
-class OutOfBandSRv6Controller(SRv6Controller):
-
-    def __init__(self, nodes, period, topo_file,
-                 topo_graph, ospf6d_pwd, sb_interface, nb_interface, secure,
-                 key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-                 min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose):
-        super(OutOfBandSRv6Controller, self).__init__(
-            nodes=nodes,
-            period=period,
-            topo_file=topo_file,
-            out_of_band=True,
-            topo_graph=topo_graph,
-            ospf6d_pwd=ospf6d_pwd,
-            sb_interface=sb_interface,
-            nb_interface=nb_interface,
-            secure=secure,
-            key=key,
-            certificate=certificate,
-            grpc_server_ip=grpc_server_ip,
-            grpc_server_port=grpc_server_port,
-            grpc_client_port=grpc_client_port,
-            min_interval_between_topo_dumps=min_interval_between_topo_dumps,
-            vpn_dump=vpn_dump,
-            topo_extraction=topo_extraction,
-            verbose=verbose
-        )
-        # Check mapping routerid to mgmt ip required by out-of-band control
-        if len(ROUTERID_TO_MGMTIP) == 0:
-            utils.print_and_die('Error: Set ROUTERID_TO_MGMTIP '
-                                'variable in srv6_controller.py '
-                                'in order to use Out-of-Band Controller')
-        # Mapping router ID to management IP
-        self.routerid_to_mgmtip = ROUTERID_TO_MGMTIP
-
-    # Out-of-band controllers use management IPs
-    # Get a management address for the router
-    def get_router_address(self, routerid):
-        return self.routerid_to_mgmtip.get(routerid)
-
-
 # Parse arguments
 def parseArguments():
     # Get parser
@@ -1056,9 +980,6 @@ def parseArguments():
     parser.add_argument('-p', '--period', dest='period',
                         type=int, default=DEFAULT_TOPO_EXTRACTION_PERIOD,
                         help='Topology information extraction period')
-    # Enable In-Band SRv6 Controller
-    parser.add_argument('--in-band', action='store_true', dest='in_band',
-                        help='Enable In-Band SRv6 Controller')
     # Path of topology file
     parser.add_argument('--topology', dest='topo_file', action='store',
                         default=DEFAULT_TOPOLOGY_FILE, help='File where '
@@ -1188,18 +1109,24 @@ if __name__ == '__main__':
         utils.print_and_die('Error: %s interface not yet supported or invalid\n'
                       'Supported northbound interfaces: %s' % (nb_interface, SUPPORTED_NB_INTERFACES))
     # Create a new SRv6 controller
-    srv6_controller = None
-    if args.in_band:
-        srv6_controller = InBandSRv6Controller(
-            nodes, period, topo_file, topo_graph, pwd, sb_interface,
-            nb_interface, secure, key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-            min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose
-        )
-    else:
-        srv6_controller = OutOfBandSRv6Controller(
-            nodes, period, topo_file, topo_graph, pwd, sb_interface,
-            nb_interface, secure, key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-            min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose
-        )
+    srv6_controller = SRv6Controller(
+        nodes=nodes,
+        period=period,
+        topo_file=topo_file,
+        topo_graph=topo_graph,
+        ospf6d_pwd=pwd,
+        sb_interface=sb_interface,
+        nb_interface=nb_interface,
+        secure=secure,
+        key=key,
+        certificate=certificate,
+        grpc_server_ip=grpc_server_ip,
+        grpc_server_port=grpc_server_port,
+        grpc_client_port=grpc_client_port,
+        min_interval_between_topo_dumps=min_interval_between_topo_dumps,
+        vpn_dump=vpn_dump,
+        topo_extraction=topo_extraction,
+        verbose=verbose
+    )
     # Start the controller
     srv6_controller.run()

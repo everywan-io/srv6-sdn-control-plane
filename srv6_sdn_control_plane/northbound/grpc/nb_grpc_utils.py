@@ -615,7 +615,7 @@ class ControllerState:
        methods to handle it
     """
 
-    def __init__(self, topology, devices, vpn_dict, vpn_file, use_mgmt_ip=False):
+    def __init__(self, topology, devices, vpn_dict, vpn_file):
         # Topology graph
         self.topology = topology
         # Devices
@@ -626,8 +626,6 @@ class ControllerState:
         self.vpns = vpn_dict
         # Keep track of how many VPNs are installed in each router
         self.num_vpn_installed_on_router = dict()
-        # Use management IP addresses for out of band control
-        self.use_mgmt_ip = use_mgmt_ip
         # Initiated tunnels
         self.initiated_tunnels = set()
         # Number of tunneled interfaces

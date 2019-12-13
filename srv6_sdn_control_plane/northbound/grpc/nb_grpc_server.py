@@ -793,15 +793,13 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  topo_graph=None, vpn_dict=None,
                  devices=None,
                  vpn_file=DEFAULT_VPN_DUMP,
-                 use_mgmt_ip=DEFAULT_USE_MGMT_IP,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
     controller_state = nb_grpc_utils.ControllerState(
         topology=topo_graph,
         devices=devices,
         vpn_dict=vpn_dict,
-        vpn_file=vpn_file,
-        use_mgmt_ip=use_mgmt_ip
+        vpn_file=vpn_file
     )
     # Setup gRPC server
     #
@@ -907,12 +905,6 @@ def parse_arguments():
         dest='southbound_interface', default=DEFAULT_SB_INTERFACE,
         help='Southbound interface\nSupported interfaces: [grpc]'
     )
-    # Use management IPs instead of loopback IPs
-    parser.add_argument(
-        '-m', '--use-mgmt-ip', action='store_true',
-        dest='use_mgmt_ip', default=DEFAULT_USE_MGMT_IP,
-        help='Use management IPs instead of loopback IPs'
-    )
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -951,8 +943,6 @@ if __name__ == '__main__':
     grpc_client_port = args.grpc_client_port
     # Southbound interface
     southbound_interface = args.southbound_interface
-    # Use management IPs
-    use_mgmt_ip = args.use_mgmt_ip
     # Setup properly the verbose mode
     if args.verbose:
         verbose = True
@@ -982,7 +972,7 @@ if __name__ == '__main__':
         start_server(
             grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
             certificate, southbound_interface, topo_graph, None, vpn_dump,
-            use_mgmt_ip, verbose
+            verbose
         )
         while True:
             time.sleep(5)
