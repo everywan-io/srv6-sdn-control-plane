@@ -129,7 +129,7 @@ class SRv6Controller(object):
                  ospf6d_pwd, sb_interface, nb_interface,
                  secure, key, certificate, grpc_server_ip, grpc_server_port,
                  grpc_client_port, min_interval_between_topo_dumps,
-                 vpn_dump=None, verbose=False):
+                 vpn_dump=None, topo_extraction=False, verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
         if self.VERBOSE:
@@ -189,14 +189,20 @@ class SRv6Controller(object):
         self.topo_graph_lock = Lock()
         # Minimum interval between dumps
         self.min_interval_between_topo_dumps = min_interval_between_topo_dumps
+        # Topology information extraction
+        self.topo_extraction = topo_extraction
         if self.VERBOSE:
             print()
             print('Configuration')
             print(('*** Nodes: %s' % self.nodes))
             print(('*** ospf6d password: %s' % self.ospf6d_pwd))
-            print(('*** Topology Information Extraction period: %s' % self.period))
-            print(('*** Topology file: %s' % self.topology_file))
-            print(('*** topology_graph: %s' % self.topology_graph))
+            if self.topo_extraction:
+                print(('*** Topology Information Extraction: enabled'))
+                print(('*** Topology Information Extraction period: %s' % self.period))
+                print(('*** Topology file: %s' % self.topology_file))
+                print(('*** topology_graph: %s' % self.topology_graph))
+            else:
+                print(('*** Topology Information Extraction: disabled'))
             print(('*** Selected southbound interface: %s' % self.sb_interface))
             print(('*** Selected northbound interface: %s' % self.nb_interface))
             print()
@@ -955,7 +961,10 @@ class SRv6Controller(object):
         thread.daemon = True
         thread.start()
         # Start topology information extraction
-        self.topology_information_extraction()
+        if topo_extraction:
+            self.topology_information_extraction()
+        while True:
+            time.sleep(100)
 
 
 class InBandSRv6Controller(SRv6Controller):
@@ -963,7 +972,7 @@ class InBandSRv6Controller(SRv6Controller):
     def __init__(self, nodes, period, topo_file,
                  topo_graph, ospf6d_pwd, sb_interface, nb_interface, secure,
                  key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-                 min_interval_between_topo_dumps, vpn_dump, verbose):
+                 min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose):
         super(InBandSRv6Controller, self).__init__(
             nodes=nodes,
             period=period,
@@ -981,6 +990,7 @@ class InBandSRv6Controller(SRv6Controller):
             grpc_client_port=grpc_client_port,
             min_interval_between_topo_dumps=min_interval_between_topo_dumps,
             vpn_dump=vpn_dump,
+            topo_extraction=topo_extraction,
             verbose=verbose
         )
 
@@ -997,7 +1007,7 @@ class OutOfBandSRv6Controller(SRv6Controller):
     def __init__(self, nodes, period, topo_file,
                  topo_graph, ospf6d_pwd, sb_interface, nb_interface, secure,
                  key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-                 min_interval_between_topo_dumps, vpn_dump, verbose):
+                 min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose):
         super(OutOfBandSRv6Controller, self).__init__(
             nodes=nodes,
             period=period,
@@ -1015,6 +1025,7 @@ class OutOfBandSRv6Controller(SRv6Controller):
             grpc_client_port=grpc_client_port,
             min_interval_between_topo_dumps=min_interval_between_topo_dumps,
             vpn_dump=vpn_dump,
+            topo_extraction=topo_extraction,
             verbose=verbose
         )
         # Check mapping routerid to mgmt ip required by out-of-band control
@@ -1067,6 +1078,10 @@ def parseArguments():
     parser.add_argument('-v', '--verbose', action='store_true',
                         dest='verbose', default=False,
                         help='Enable verbose mode')
+    # Enable topology information extraction
+    parser.add_argument('-t', '--topo-extraction', action='store_true',
+                        dest='topo_extraction', default=False,
+                        help='Enable topology information extraction')
     # Southbound interface
     parser.add_argument('--sb-interface', action='store',
                         dest='sb_interface', default=DEFAULT_SB_INTERFACE,
@@ -1129,7 +1144,7 @@ if __name__ == '__main__':
     nodes = nodes.split(',')
     # Get period between two extractions
     period = args.period
-    # self.VERBOSE mode
+    # Verbose mode
     verbose = args.verbose
     # ospf6d password
     pwd = args.password
@@ -1139,6 +1154,8 @@ if __name__ == '__main__':
     nb_interface = args.nb_interface
     # Output VPN file
     vpn_dump = args.vpn_dump
+    # Topology Information Extraction
+    topo_extraction = args.topo_extraction
     # Setup properly the logger
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -1176,13 +1193,13 @@ if __name__ == '__main__':
         srv6_controller = InBandSRv6Controller(
             nodes, period, topo_file, topo_graph, pwd, sb_interface,
             nb_interface, secure, key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-            min_interval_between_topo_dumps, vpn_dump, verbose
+            min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose
         )
     else:
         srv6_controller = OutOfBandSRv6Controller(
             nodes, period, topo_file, topo_graph, pwd, sb_interface,
             nb_interface, secure, key, certificate, grpc_server_ip, grpc_server_port, grpc_client_port,
-            min_interval_between_topo_dumps, vpn_dump, verbose
+            min_interval_between_topo_dumps, vpn_dump, topo_extraction, verbose
         )
     # Start the controller
     srv6_controller.run()
