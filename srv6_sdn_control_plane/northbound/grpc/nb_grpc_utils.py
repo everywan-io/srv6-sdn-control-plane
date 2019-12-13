@@ -39,32 +39,11 @@ from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv4Interface
 from ipaddress import IPv6Interface
+from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
-
-
-################## Setup these variables ##################
-
-# Path of the proto files
-#PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
-
-###########################################################
-
-
-# Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
-
-# Check paths
-#if PROTO_FOLDER == '':
-#    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
-#    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
-#    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
-#          'points to a non existing folder\n')
-#    sys.exit(-2)
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -99,7 +78,7 @@ def validate_vpn_type(vpn_type):
 
 
 # Utiliy function to check if the IP
-# is a valid IPv4 address
+# is a valid IPv6 address
 def validate_ipv6_address(ip):
     if ip is None:
         return False
@@ -146,7 +125,7 @@ class VPNType:
     IPv6VPN = 2
 
 class VPN:
-    def __init__(self, vpn_name, vpn_type, interfaces, tenantid, tableid=-1):
+    def __init__(self, vpn_name, vpn_type, interfaces, tenantid): #tableid=-1):
         # VPN name
         self.vpn_name = vpn_name
         # VPN type
@@ -162,7 +141,8 @@ class VPN:
         # Tenant ID
         self.tenantid = tenantid
         # Table ID
-        self.tableid = tableid
+        #self.tableid = tableid
+        #self.tunnel_specific_data = dict()
 
     def removeInterface(self, routerid, interface_name):
         if self.interfaces.get(routerid) is not None \
@@ -630,18 +610,16 @@ class TableIDAllocator:
             return -1
 
 
-class SRv6ControllerState:
+class ControllerState:
     """This class maintains the state of the SRv6 controller and provides some
        methods to handle it
     """
 
-    def __init__(self, topology, vpn_dict, vpn_file, use_mgmt_ip=False):
-        # Create Table IDs allocator
-        self.tableid_allocator = TableIDAllocator()
-        # Create SIDs allocator
-        self.sid_allocator = SIDAllocator()
+    def __init__(self, topology, devices, vpn_dict, vpn_file, use_mgmt_ip=False):
         # Topology graph
         self.topology = topology
+        # Devices
+        self.devices = devices
         # VPN file
         self.vpn_file = vpn_file
         # VPNs dict
@@ -650,6 +628,10 @@ class SRv6ControllerState:
         self.num_vpn_installed_on_router = dict()
         # Use management IP addresses for out of band control
         self.use_mgmt_ip = use_mgmt_ip
+        # Initiated tunnels
+        self.initiated_tunnels = set()
+        # Number of tunneled interfaces
+        self.num_tunneled_interfaces = dict()
         # If VPN dumping is enabled, import the VPNs from the dump
         '''
         if vpn_file is not None:
@@ -662,19 +644,12 @@ class SRv6ControllerState:
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
         if self.vpns.get(vpn_name) is not None:
-            # Inconsistency, the VPN exists, but it has no assigned table ID
-            if self.tableid_allocator.get_tableid(vpn_name) == -1:
-                logger.error(
-                    'Inconsistent data structures. The VPN %s exists, but the '
-                    'table ID has not been found' % vpn_name
-                )
-                exit(-1)
             # The VPN exists
             return True
         else:
             # The VPN does not exist
             return False
-
+    '''
     # Return True if the router exists, False otherwise
     def router_exists(self, routerid):
         if self.topology.has_node(routerid):
@@ -683,7 +658,19 @@ class SRv6ControllerState:
         else:
             # The router ID has not been found
             return False
+    '''
 
+    # Return True if the router exists, False otherwise
+    def router_exists(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        if routerid in self.devices:
+            # Found router ID
+            return True
+        else:
+            # The router ID has not been found
+            return False
+    
+    '''
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
         router = self.topology.node[routerid]
@@ -693,6 +680,19 @@ class SRv6ControllerState:
         for interface in router['interfaces'].values():
             interface_names.append(interface['ifname'])
         if interface_name in interface_names:
+            # The interface exists
+            return True
+        else:
+            # The interface does not exist
+            return False
+    '''
+
+    # Return True if the specified interface exists
+    def interface_exists(self, interface_name, routerid):
+        routerid = int(IPv4Address(routerid))
+        if routerid not in self.devices or self.devices[routerid].get('interfaces') is None:
+            return False
+        if interface_name in self.devices[routerid]['interfaces']:
             # The interface exists
             return True
         else:
@@ -733,6 +733,7 @@ class SRv6ControllerState:
         # The interface is not assigned to the VPN
         return False
 
+    '''
     # Get router's loopback IP address
     def get_loopbackip(self, routerid):
         return self.topology.node[routerid]['loopbackip']
@@ -740,14 +741,23 @@ class SRv6ControllerState:
     # Get router's management IP address
     def get_managementip(self, routerid):
         return self.topology.node[routerid]['managementip']
+    '''
 
+    # Get router's management IP address
+    def get_router_mgmtip(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        return self.devices[routerid]['mgmtip']
+
+    '''
     # Get router address
     def get_router_address(self, routerid):
         if self.use_mgmt_ip:
             return self.get_managementip(routerid)
         else:
             return self.get_loopbackip(routerid)
+    '''
 
+    '''
     # Get random router interface
     def get_random_interface(self, routerid):
         router_info = self.topology.node[routerid]
@@ -761,14 +771,26 @@ class SRv6ControllerState:
             interfaces.append(interface['ifname'])
         interfaces.sort()
         return interfaces[0]
+    '''
+
+    # Get random router interface
+    def get_non_loopback_interface(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        interfaces = self.devices[routerid]['interfaces']
+        for interface in iter(interfaces):
+            # Skip loopback interfaces
+            if interface != 'lo':
+                return interface
+        # No non-loopback interfaces
+        return None
 
     # Add a VPN to the controller state
-    def add_vpn(self, vpn_name, vpn_type, tenantid, tableid):
+    def add_vpn(self, vpn_name, vpn_type, tenantid): #, tableid):
         # If the VPN already exists, return False
         if vpn_name in self.vpns:
             return False
         # Add the VPN to the VPNs dict
-        self.vpns[vpn_name] = VPN(vpn_name, vpn_type, set(), tenantid, tableid)
+        self.vpns[vpn_name] = VPN(vpn_name, vpn_type, set(), tenantid) #, tableid)
         # Success, return True
         return True
 
@@ -806,25 +828,25 @@ class SRv6ControllerState:
         return True
 
     # Return VPN type
-    def get_vpn_type(self, vpn_name):
-        if vpn_name not in self.vpns:
-            return None
-        return self.vpns[vpn_name].vpn_type
+    #def get_vpn_type(self, vpn_name):
+    #    if vpn_name not in self.vpns:
+    #        return None
+    #    return self.vpns[vpn_name].vpn_type
 
     # Return VPN type
-    def get_vpn_tableid(self, vpn_name):
-        print(self.vpns)
-        if vpn_name not in self.vpns:
-            return None
-        return self.vpns[vpn_name].tableid
+    #def get_vpn_tableid(self, vpn_name):
+    #    print(self.vpns)
+    #    if vpn_name not in self.vpns:
+    #        return None
+    #    return self.vpns[vpn_name].tableid
 
     # Return SID
-    def get_sid(self, routerid, tableid):
-        return self.sid_allocator.getSID(routerid, tableid)
+    #def get_sid(self, routerid, tableid):
+    #    return self.sid_allocator.getSID(routerid, tableid)
 
     # Return SID
-    def get_sid_family(self, routerid):
-        return self.sid_allocator.getSIDFamily(routerid)
+    #def get_sid_family(self, routerid):
+    #    return self.sid_allocator.getSIDFamily(routerid)
 
     # Return VPN interfaces
     def get_vpn_interfaces(self, vpn_name, routerid=None):
@@ -840,9 +862,11 @@ class SRv6ControllerState:
 
     # Return VPN interfaces
     def get_vpn_interface_names(self, vpn_name, routerid=None):
-        if self.vpns.get(vpn_name) is None:
-            return None
+        #if self.vpns.get(vpn_name) is None:
+        #    return None
         interfaces = set()
+        if self.vpns.get(vpn_name) is None:
+            return interfaces
         for _interfaces in self.vpns[vpn_name].interfaces.values():
             for _interface in _interfaces.values():
                 if routerid is not None and _interface.routerid != routerid:
@@ -873,12 +897,34 @@ class SRv6ControllerState:
     def get_number_of_interfaces(self, vpn_name, routerid):
         return self.vpns[vpn_name].numberOfInterfaces(routerid)
 
+    '''
     # Return the IP addresses associated to an interface
     def get_interface_ips(self, routerid, interface_name):
         for interface in self.topology.node[routerid]['interfaces'].values():
             if interface['ifname'] == interface_name:
                 return interface['ipaddr']
         return None
+    '''
+
+    # Return the IP addresses associated to an interface
+    def get_interface_ipv4(self, routerid, interface_name):
+        routerid = int(IPv4Address(routerid))
+        ips = list()
+        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
+            ips.append('%s/%s' % (addr['addr'], addr['netmask']))
+        return ips
+
+    # Return the IP addresses associated to an interface
+    def get_interface_ipv6(self, routerid, interface_name):
+        routerid = int(IPv4Address(routerid))
+        ips = list()
+        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
+            ips.append('%s/%s' % (addr['addr'], addr['netmask']))
+        return ips
+
+    # Return the IP addresses associated to an interface
+    def get_interface_ips(self, routerid, interface_name):
+        return self.get_interface_ipv4(routerid, interface_name) + self.get_interface_ipv6(routerid, interface_name)
 
     # Return the VPNs
     def get_vpns(self):
@@ -928,14 +974,14 @@ class SRv6ControllerState:
                 'interfaces': interfaces
             }
         # Process reusable table IDs set
-        reusable_tableids = list(self.tableid_allocator.reusable_tableids)
-        vpn_dump_dict['reusable_tableids'] = reusable_tableids
+        #reusable_tableids = list(self.tableid_allocator.reusable_tableids)
+        #vpn_dump_dict['reusable_tableids'] = reusable_tableids
         # Process table IDs
-        tableid_to_tenantid = self.tableid_allocator.tableid_to_tenantid
-        vpn_dump_dict['tableid_to_tenantid'] = tableid_to_tenantid
+        #tableid_to_tenantid = self.tableid_allocator.tableid_to_tenantid
+        #vpn_dump_dict['tableid_to_tenantid'] = tableid_to_tenantid
         # Process last table ID
-        last_allocated_tableid = self.tableid_allocator.last_allocated_tableid
-        vpn_dump_dict['last_allocated_tableid'] = last_allocated_tableid
+        #last_allocated_tableid = self.tableid_allocator.last_allocated_tableid
+        #vpn_dump_dict['last_allocated_tableid'] = last_allocated_tableid
         # Write the dump to file
         with open(self.vpn_file, 'w') as outfile:
             json.dump(vpn_dump_dict, outfile, sort_keys=True, indent=2)
@@ -971,29 +1017,29 @@ class SRv6ControllerState:
                 # Table ID
                 tableid = vpn['tableid']
                 # Build VPN and add the VPN to the VPNs dict
-                self.vpns[vpn.vpn_name] = VPN(vpn_name, vpn_type, interfaces, tenantid, tableid)
+                self.vpns[vpn.vpn_name] = VPN(vpn_name, vpn_type, interfaces, tenantid) #, tableid)
             # Process reusable table IDs
-            for _id in vpn_dump_dict['reusable_tableids']:
-                self.tableid_allocator.reusable_tableids.add(int(_id))
+            #for _id in vpn_dump_dict['reusable_tableids']:
+            #    self.tableid_allocator.reusable_tableids.add(int(_id))
             # Process table IDs
-            tableid_to_tenantid = vpn_dump_dict['tableid_to_tenantid']
-            for tableid, tenantid in tableid_to_tenantid.items():
-                tableid = int(tableid)
-                tenantid = int(tenantid)
-                self.tableid_allocator.tableid_to_tenantid[tableid] = tenantid
+            #tableid_to_tenantid = vpn_dump_dict['tableid_to_tenantid']
+            #for tableid, tenantid in tableid_to_tenantid.items():
+            #    tableid = int(tableid)
+            #    tenantid = int(tenantid)
+            #    self.tableid_allocator.tableid_to_tenantid[tableid] = tenantid
             # Process last table ID
-            last_tableid = int(vpn_dump_dict['last_allocated_tableid'])
-            self.tableid_allocator.last_allocated_tableid = last_tableid
+            #last_tableid = int(vpn_dump_dict['last_allocated_tableid'])
+            #self.tableid_allocator.last_allocated_tableid = last_tableid
         except IOError:
             print('VPN file not found')
 
     # Get a new table ID
-    def get_new_tableid(self, vpn_name, tenantid):
-        return self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
+    #def get_new_tableid(self, vpn_name, tenantid):
+    #    return self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
 
     # Release a table ID
-    def release_tableid(self, vpn_name):
-        return self.tableid_allocator.release_tableid(vpn_name)
+    #def release_tableid(self, vpn_name):
+    #    return self.tableid_allocator.release_tableid(vpn_name)
 
     '''
     # Update the topology from a JSON file
@@ -1015,6 +1061,7 @@ class SRv6ControllerState:
         return True
     '''
 
+'''
 # Update the topology from a JSON file
 def load_topology_from_json_dump(topo_file, block=True):
     ready = False
@@ -1032,3 +1079,4 @@ def load_topology_from_json_dump(topo_file, block=True):
     # Success
     logger.info('The topology has been updated')
     return topology
+'''

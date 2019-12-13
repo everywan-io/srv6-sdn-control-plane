@@ -82,12 +82,12 @@ STR_TO_VPN_TYPE = {
 }
 
 
-ENCAP = {
-    'SRv6': srv6_vpn_pb2.SRv6,
-    'IPsec_ESP_GRE': srv6_vpn_pb2.IPsec_ESP_GRE,
-    'SRv6_IPsec_ESP_GRE': srv6_vpn_pb2.SRv6_IPsec_ESP_GRE,
-    'SRv6_IPsec_ESP_IP': srv6_vpn_pb2.SRv6_IPsec_ESP_IP
-}
+#ENCAP = {
+#    'SRv6': srv6_vpn_pb2.SRv6,
+#    'IPsec_ESP_GRE': srv6_vpn_pb2.IPsec_ESP_GRE,
+#    'SRv6_IPsec_ESP_GRE': srv6_vpn_pb2.SRv6_IPsec_ESP_GRE,
+#    'SRv6_IPsec_ESP_IP': srv6_vpn_pb2.SRv6_IPsec_ESP_IP
+#}
 
 
 class InventoryService:
@@ -133,8 +133,11 @@ class InventoryService:
                 loopbacknet = None
                 managementip = None
                 interfaces = None
+                mgmtip = None
                 if device.id is not None:
                     device_id = text_type(device.id)
+                if device.mgmtip is not None:
+                    mgmtip = text_type(device.mgmtip)
                 '''
                 if device.loopbackip is not None:
                     loopbackip = text_type(device.loopbackip)
@@ -191,6 +194,7 @@ class InventoryService:
                     'loopbacknet': loopbacknet,
                     'managementip': managementip,
                     'interfaces': interfaces,
+                    'mgmtip': mgmtip
                 }
         else:
             devices = None
@@ -329,8 +333,10 @@ class SRv6VPNManager:
         intent.vpn_name = text_type(name)
         intent.vpn_type = int(STR_TO_VPN_TYPE[type])
         intent.tenantid = int(tenantid)
-        intent.encap = int(ENCAP.get(encap, None))
-        if intent.encap is None:
+        #intent.encap = int(ENCAP.get(encap, None))
+        intent.tunnel = encap
+        #if intent.encap is None:
+        if intent.tunnel is None:
             print('Invalid encap type')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
