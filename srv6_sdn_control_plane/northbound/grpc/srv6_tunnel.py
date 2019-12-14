@@ -38,6 +38,7 @@ from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv6Interface, IPv4Interface
+from ipaddress import IPv6Network, IPv4Network
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel_utils
@@ -331,7 +332,6 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         for addr in ipv6_addrs:
             addrs.append(addr)
             nets.append(str(IPv6Interface(addr).network))
-        print('ADDRS', addrs, nets)
         response = self.srv6_manager.remove_many_ipaddr(
             src_router, self.grpc_client_port, addrs=addrs, nets=nets,
             device=src_interface.interface_name, family=AF_UNSPEC
@@ -351,9 +351,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot disable OSPF advertisements')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         # Add IP address to the interface
+        if nb_grpc_utils.getAddressFamily(src_interface.interface_ip) == AF_INET:
+            net = IPv4Interface(src_interface.interface_ip).network.__str__()
+        elif nb_grpc_utils.getAddressFamily(src_interface.interface_ip) == AF_INET6:
+            net = IPv6Interface(src_interface.interface_ip).network.__str__()
+        else:
+            logging.warning('Invalid IP address')
         response = self.srv6_manager.create_ipaddr(
             src_router, self.grpc_client_port, ip_addr=src_interface.interface_ip,
-            device=src_interface.interface_name, net=src_interface.vpn_prefix, family=family
+            device=src_interface.interface_name, net=net, family=family
         )
         if response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
@@ -371,7 +377,6 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         interfaces_in_vpn.add(src_interface.interface_name)
         # Add the interface to the VRF
-        print('Update VRF',src_router, interfaces_in_vpn)
         response = self.srv6_manager.update_vrf_device(
             src_router, self.grpc_client_port, name=tunnel_name,
             interfaces=interfaces_in_vpn
@@ -475,15 +480,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             dst_interface.routerid, tableid
         )
         # Create the SRv6 route
-        print('srv6 expl path', src_router, dst_interface.vpn_prefix, tableid, dev, sid)
-        response = self.srv6_manager.create_srv6_explicit_path(
-            src_router, self.grpc_client_port, destination=dst_interface.vpn_prefix,
-            table=tableid, device=dev, segments=[sid], encapmode='encap'
-        )
-        if response != status_codes_pb2.STATUS_SUCCESS:
-            # If the operation has failed, report an error message
-            logger.warning('Cannot create SRv6 Explicit Path: %s' % response)
-            return status_codes_pb2.STATUS_INTERNAL_ERROR
+        for subnet in dst_interface.subnets:
+            response = self.srv6_manager.create_srv6_explicit_path(
+                src_router, self.grpc_client_port, destination=subnet,
+                table=tableid, device=dev, segments=[sid], encapmode='encap'
+            )
+            if response != status_codes_pb2.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create SRv6 Explicit Path: %s' % response)
+                return status_codes_pb2.STATUS_INTERNAL_ERROR
         # Success
         logger.debug('Remote interface assigned to VPN successfully')
         # Done
@@ -507,14 +512,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot retrieve VPN table ID')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         # Remove the SRv6 route
-        response = self.srv6_manager.remove_srv6_explicit_path(
-            src_router, self.grpc_client_port, destination=dst_interface.vpn_prefix,
-            table=tableid
-        )
-        if response != status_codes_pb2.STATUS_SUCCESS:
-            # If the operation has failed, return an error message
-            logger.warning('Cannot remove SRv6 Explicit Path: %s' % response)
-            return status_codes_pb2.STATUS_INTERNAL_ERROR
+        for subnet in dst_interface.subnets:
+            response = self.srv6_manager.remove_srv6_explicit_path(
+                src_router, self.grpc_client_port, destination=subnet,
+                table=tableid
+            )
+            if response != status_codes_pb2.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning('Cannot remove SRv6 Explicit Path: %s' % response)
+                return status_codes_pb2.STATUS_INTERNAL_ERROR
         # Success
         logger.debug('Remote interface removed successfully')
         # Done
@@ -551,21 +557,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             res = self.assign_src_interface_to_vrf(tunnel_name, tunnel_type,
                                                       r_interface, tenantid, tunnel_info)
             if res != status_codes_pb2.STATUS_SUCCESS:
-                print('test', 0)
                 return res
             self.controller_state_srv6.interfaces_in_vpn[tunnel_name].add(r_interface)
         # Configure destination tunnel interface
         # If the interfaces are on the same router, we don't need the SRv6 encapsulation
-        print('test', 1)
         if l_interface not in self.controller_state_srv6.sites_in_vpn[tunnel_name]:
-            print('test', 2)
             if l_interface.routerid != r_interface.routerid:
-                print('test', 3)
                 self.add_route_to_dst_interface(tunnel_name, tunnel_type, r_interface,
                                                  l_interface, tenantid, tunnel_info)
-                print('test', 4)
                 if res != status_codes_pb2.STATUS_SUCCESS:
-                    print('test', 5)
                     return res
                 self.controller_state_srv6.sites_in_vpn[tunnel_name].add(l_interface)
 
@@ -632,7 +632,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     # Add interface IP
                     _interface.interface_ip = interface.interface_ip
                     # Add VPN prefix
-                    _interface.vpn_prefix = interface.vpn_prefix
+                    _interface.subnets = interface.subnets
         # Return the VPNs list
         logger.debug('Sending response:\n%s' % response)
         return response

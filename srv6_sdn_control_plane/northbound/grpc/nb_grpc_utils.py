@@ -161,7 +161,7 @@ class VPN:
 
 
 class Interface:
-    def __init__(self, routerid, interface_name, interface_ip=None, vpn_prefix=None):
+    def __init__(self, routerid, interface_name, interface_ip=None, subnets=None):
         # Router ID
         self.routerid = routerid
         # Interface name
@@ -169,7 +169,7 @@ class Interface:
         # Router IP
         self.interface_ip = interface_ip
         # VPN prefix
-        self.vpn_prefix = vpn_prefix
+        self.subnets = subnets
 
 
 # IPv6 utility functions

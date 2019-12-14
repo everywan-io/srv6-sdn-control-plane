@@ -296,11 +296,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
+                subnets = list()
+                for subnet in interface.subnets:
+                    subnets.append(subnet)
                 interfaces.append(nb_grpc_utils.Interface(
                     interface.routerid,
                     interface.interface_name,
                     interface.interface_ip,
-                    interface.vpn_prefix
+                    subnets
                 ))
             print('intent otunnel', intent.tunnel)
             # Extract tunnel type
@@ -339,8 +342,10 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 interface_name = interface.interface_name
                 # Extract interface IP address
                 interface_ip = interface.interface_ip
-                # Extract VPN prefix
-                vpn_prefix = interface.vpn_prefix
+                # Extract subnets
+                subnets = list()
+                for subnet in interface.subnets:
+                    subnets.append(subnet)
                 # Topology validation
                 if VALIDATE_TOPO:
                     # Let's check if the router exists
@@ -360,10 +365,16 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # Validate interface IP address
                 if vpn_type == nb_grpc_utils.VPNType.IPv4VPN:
                     is_ip_valid = nb_grpc_utils.validate_ipv4_address(interface_ip)
-                    is_prefix_valid = nb_grpc_utils.validate_ipv4_address(vpn_prefix)
+                    for subnet in subnets:
+                        is_prefix_valid = nb_grpc_utils.validate_ipv4_address(subnet)
+                        if not is_prefix_valid:
+                            break
                 elif vpn_type == nb_grpc_utils.VPNType.IPv6VPN:
                     is_ip_valid = nb_grpc_utils.validate_ipv6_address(interface_ip)
-                    is_prefix_valid = nb_grpc_utils.validate_ipv6_address(vpn_prefix)
+                    for subnet in subnets:
+                        is_prefix_valid = nb_grpc_utils.validate_ipv6_address(subnet)
+                        if not is_prefix_valid:
+                            break
                 else:
                     logger.warning('Invalid VPN type: %s' % vpn_type)
                     # If the VPN type is invalid, return an error message
@@ -373,7 +384,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     # If the IP address is invalid, return an error message
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_IP)
                 if not is_prefix_valid:
-                    logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
+                    logger.warning('Invalid VPN prefix: %s' % subnet)
                     # If the IP address is invalid, return an error message
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
             logger.info('All checks passed')
@@ -408,7 +419,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             for interface in interfaces:
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.vpn_prefix
+                    interface.interface_ip, interface.subnets
                 )
             logger.info('The VPN has been created successfully')
         # Save the VPNs dump to file
@@ -479,7 +490,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             for interface in tunneled_interfaces:
                 self.controller_state.remove_tunnel_from_vpn(
                     vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.vpn_prefix
+                    interface.interface_ip, interface.subnets
                 )
             self.controller_state.remove_vpn(
                 vpn_name, vpn_type, tenantid
@@ -514,11 +525,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
+                subnets = list()
+                for subnet in interface.subnets:
+                    subnets.append(subnet)
                 interfaces.append(nb_grpc_utils.Interface(
                     interface.routerid,
                     interface.interface_name,
                     interface.interface_ip,
-                    interface.vpn_prefix
+                    subnets
                 ))
             # Extract tunnel info
             tunnel_info = intent.tunnel_info
@@ -541,7 +555,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # Get interface IP address assigned to the interface
                 interface_ip = interface.interface_ip
                 # Get VPN prefix assigned to the interface
-                vpn_prefix = interface.vpn_prefix
+                subnets = interface.subnets
                 # Topology validation
                 if VALIDATE_TOPO:
                     # Let's check if the router ID exists
@@ -561,10 +575,16 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 vpn_type = self.controller_state.get_vpn_type(vpn_name)
                 if vpn_type == nb_grpc_utils.VPNType.IPv4VPN:
                     is_ip_valid = nb_grpc_utils.validate_ipv4_address(interface_ip)
-                    is_prefix_valid = nb_grpc_utils.validate_ipv4_address(vpn_prefix)
+                    for subnet in subnets:
+                        is_prefix_valid = nb_grpc_utils.validate_ipv4_address(subnet)
+                        if not is_prefix_valid:
+                            break
                 elif vpn_type == nb_grpc_utils.VPNType.IPv6VPN:
                     is_ip_valid = nb_grpc_utils.validate_ipv6_address(interface_ip)
-                    is_prefix_valid = nb_grpc_utils.validate_ipv6_address(vpn_prefix)
+                    for subnet in subnets:
+                        is_prefix_valid = nb_grpc_utils.validate_ipv6_address(subnet)
+                        if not is_prefix_valid:
+                            break
                 else:
                     logger.warning('Invalid VPN type: %s' % vpn_type)
                     # If the VPN type is invalid, return an error message
@@ -574,7 +594,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     # If the IP address is invalid, return an error message
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_IP)
                 if not is_prefix_valid:
-                    logger.warning('Invalid VPN prefix: %s' % vpn_prefix)
+                    logger.warning('Invalid VPN prefix: %s' % subnet)
                     # If the IP address is invalid, return an error message
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
                 # Let's make sure that the interface is not assigned to another VPN
@@ -627,7 +647,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             for interface in interfaces:
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.vpn_prefix
+                    interface.interface_ip, interface.subnets
                 )
             logger.info('The VPN has been changed successfully')
             # Save the VPNs dump to file
@@ -659,11 +679,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
+                subnets = list()
+                for subnet in interface.subnets:
+                    subnets.append(subnet)
                 interfaces.append(nb_grpc_utils.Interface(
                     interface.routerid,
                     interface.interface_name,
                     interface.interface_ip,
-                    interface.vpn_prefix
+                    subnets
                 ))
             # Extract tunnel info
             tunnel_info = intent.tunnel_info
@@ -740,7 +763,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             for interface in interfaces:
                 self.controller_state.remove_tunnel_from_vpn(
                     vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.vpn_prefix
+                    interface.interface_ip, interface.subnet
                 )
             logger.info('The VPN has been changed successfully')
         # Save the VPNs dump to file
@@ -777,7 +800,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     # Add interface IP
                     _interface.interface_ip = interface.interface_ip
                     # Add VPN prefix
-                    _interface.vpn_prefix = interface.vpn_prefix
+                    _interface.subnets = interface.subnets
         # Return the VPNs list
         logger.debug('Sending response:\n%s' % response)
         return response

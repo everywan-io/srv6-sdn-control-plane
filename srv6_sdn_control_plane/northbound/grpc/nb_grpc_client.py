@@ -310,10 +310,13 @@ class SRv6VPNManager:
                 tableid = int(vpn.tableid)
                 interfaces = list()
                 for intf in vpn.interfaces:
+                    subnets = list()
+                    for subnet in intf.subnets:
+                        subnets.append(text_type(subnet))
                     interfaces.append(Interface(text_type(intf.routerid),
                                                 text_type(intf.interface_name),
                                                 text_type(intf.interface_ip),
-                                                text_type(intf.vpn_prefix)))
+                                                subnets))
                 vpns[vpn_name] = {
                     "tableid": tableid,
                     "interfaces": interfaces
@@ -344,7 +347,8 @@ class SRv6VPNManager:
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
             interface.interface_ip = text_type(intf[2])
-            interface.vpn_prefix = text_type(intf[3])
+            for subnet in intf[3]:
+                interface.subnets.append(text_type(subnet))
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Create the VPN
@@ -381,7 +385,8 @@ class SRv6VPNManager:
         interface.routerid = text_type(intf[0])
         interface.interface_name = text_type(intf[1])
         interface.interface_ip = text_type(intf[2])
-        interface.vpn_prefix = text_type(intf[3])
+        for subnet in intf[3]:
+            interface.subnets.append(text_type(subnet))
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
@@ -427,7 +432,10 @@ class SRv6VPNManager:
                 print("Table ID:", vpns[vpn]["tableid"])
                 print("Interfaces:")
                 for intf in vpns[vpn]["interfaces"]:
-                    print (intf.routerid, intf.interface_name, intf.interface_ip, intf.vpn_prefix)
+                    subnet = list()
+                    for subnet in intf.subnets:
+                        subnets.append(subnet)
+                    print(intf.routerid, intf.interface_name, intf.interface_ip, subnets)
                 print()
                 i += 1
         else:
