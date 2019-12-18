@@ -417,6 +417,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 vpn_name, vpn_type, tenantid
             )
             for interface in interfaces:
+                if interface.routerid not in self.controller_state.vpns[vpn_name].interfaces:
+                    self.controller_state.add_router_to_vpn(interface.routerid, vpn_name)
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, interface.routerid, interface.interface_name,
                     interface.interface_ip, interface.subnets
@@ -786,7 +788,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Set name
             vpn.vpn_name = _vpn.vpn_name
             # Set table ID
-            vpn.tableid = _vpn.tableid
+            #vpn.tableid = _vpn.tableid
             # Set interfaces
             # Iterate on all interfaces
             for interfaces in _vpn.interfaces.values():
@@ -800,7 +802,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     # Add interface IP
                     _interface.interface_ip = interface.interface_ip
                     # Add VPN prefix
-                    _interface.subnets = interface.subnets
+                    for subnet in interface.subnets:
+                        _interface.subnets.append(subnet)
         # Return the VPNs list
         logger.debug('Sending response:\n%s' % response)
         return response

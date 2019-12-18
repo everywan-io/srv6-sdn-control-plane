@@ -37,8 +37,8 @@ import random
 from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
-from ipaddress import IPv4Interface
-from ipaddress import IPv6Interface
+from ipaddress import IPv4Interface, IPv6Interface
+from ipaddress import IPv4Network, IPv6Network
 from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 # NetworkX dependencies
@@ -63,6 +63,37 @@ from srv6_generators import SIDAllocator
 
 # Logger reference
 logger = logging.getLogger(__name__)
+
+
+class VTEPIPv6NetAllocator:
+
+  bit = 16
+  net = u"fcfb::/%d" % bit
+  prefix = 64
+
+  def __init__(self): 
+    print("*** Calculating Available Mgmt Addresses")
+    self.hosts = (IPv6Network(self.net)).hosts()
+  
+  def nextVTEPAddress(self):
+    n_host = next(self.hosts)
+    return n_host.__str__()
+
+
+class VTEPIPv4NetAllocator:
+
+  bit = 8
+  net = u"10.0.0.0/%d" % bit
+  prefix = 16
+
+  def __init__(self): 
+    print("*** Calculating Available Mgmt Addresses")
+    self.vtepnet = (IPv4Network(self.net)).hosts()
+  
+  def nextVTEPAddress(self):
+    n_host = next(self.vtepnet)
+    return n_host.__str__()
+
 
 # Utiliy function to check if the provided table ID is valid
 def validate_table_id(tableid):
@@ -731,6 +762,11 @@ class ControllerState:
         # The interface is not assigned to the VPN
         return False
 
+    # Get router's loopback IP address
+    def get_loopbackip(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        return self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]['addr']
+
     '''
     # Get router's loopback IP address
     def get_loopbackip(self, routerid):
@@ -770,6 +806,11 @@ class ControllerState:
         interfaces.sort()
         return interfaces[0]
     '''
+
+    def get_loopback_ip(self, routerid):
+        routerid = int(IPv4Address(routerid))
+        return self.devices[routerid]['interfaces']['lo']['addr']
+
 
     # Get random router interface
     def get_non_loopback_interface(self, routerid):
