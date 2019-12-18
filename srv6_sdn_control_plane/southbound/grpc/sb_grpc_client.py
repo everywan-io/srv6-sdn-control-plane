@@ -10,7 +10,7 @@ import grpc
 import json
 import sys
 import os
-from socket import AF_INET
+from socket import AF_INET, AF_INET6
 from threading import Thread
 
 
@@ -39,6 +39,7 @@ from threading import Thread
 #sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
+from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_proto import srv6_manager_pb2
 from srv6_sdn_proto import srv6_manager_pb2_grpc
 from srv6_sdn_proto import status_codes_pb2
@@ -76,6 +77,13 @@ class SRv6Manager:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
+        addr_family = sb_grpc_client.getAddressFamily(ip_address)
+        if addr_family == AF_INET6:
+            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+        elif addr_family == AF_INET:
+            ip_address = "ipv4:%s]:%s" % (ip_address, port)
+        else:
+            print('Invalid address: %s' % ip_address)
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -83,11 +91,10 @@ class SRv6Manager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+            channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel("ipv6:[%s]:%s"
-                                            % (ip_address, port))
+            channel = grpc.insecure_channel(ip_address, port))
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(channel), channel)
 
