@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel
+from srv6_sdn_control_plane.northbound.grpc import gre_tunnel
 
 tunnel = dict()
 tunnel_str = dict()
@@ -22,3 +23,4 @@ class TunnelState:
 
     def init_tunnel_modes(self, grpc_client_port, controller_state, verbose):
         self.register_tunnel_mode('SRv6', srv6_tunnel.SRv6Tunnel(grpc_client_port, controller_state, verbose))
+        self.register_tunnel_mode('GRE', gre_tunnel.GRETunnel(grpc_client_port, controller_state, verbose))

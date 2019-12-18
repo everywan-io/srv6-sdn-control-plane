@@ -636,7 +636,7 @@ class SRv6Manager:
     # CRUD IP Address
 
     def create_ipaddr(self, server_ip, server_port,
-                      ip_addr, device, net, family=AF_INET):
+                      ip_addr, device, net='', family=AF_INET):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -713,6 +713,106 @@ class SRv6Manager:
             addr.net = text_type(net)
         # Remove IP Address
         response = srv6_stub.Remove(srv6_request)
+        # Let's close the session
+        channel.close()
+        # Create the response
+        return response.status
+
+    # CRUD GRE interface
+
+    def create_gre_interface(self, server_ip, server_port, name, local='', remote=''):
+        # Get the reference of the stub
+        srv6_stub, channel = (self
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.GREInterface
+        # Create a new interface request
+        gre_interface_request = srv6_request.gre_interface_request
+        # Create a new route
+        gre_interface = gre_interface_request.gre_interfaces.add()
+        # Set address, device, family
+        gre_interface.name = text_type(name)
+        gre_interface.local = text_type(local)
+        gre_interface.remote = text_type(remote)
+        # Create IP Address
+        response = srv6_stub.Create(srv6_request)
+        # Let's close the session
+        channel.close()
+        # Create the response
+        return response.status
+
+    def remove_gre_interface(self, server_ip, server_port, name, local=None, remote=None):
+        # Get the reference of the stub
+        srv6_stub, channel = (self
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.GREInterface
+        # Create a new interface request
+        gre_interface_request = srv6_request.gre_interface_request
+        # Create a new route
+        gre_interface = gre_interface_request.gre_interfaces.add()
+        # Set address, device, family
+        gre_interface.name = text_type(name)
+        gre_interface.local = text_type(local)
+        gre_interface.remote = text_type(remote)
+        # Create IP Address
+        response = srv6_stub.Remove(srv6_request)
+        # Let's close the session
+        channel.close()
+        # Create the response
+        return response.status
+
+    # CRUD IP neigh
+
+    def create_ipneigh(self, server_ip, server_port,
+                       dst, lladdr, device, family=AF_INET):
+        # Get the reference of the stub
+        srv6_stub, channel = (self
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPNeigh
+        # Create a new interface request
+        neigh_request = srv6_request.ipneigh_request
+        # Create a new route
+        neigh = neigh_request.neighs.add()
+        # Set address, device, family
+        neigh.family = int(family)
+        neigh.addr = text_type(dst)
+        neigh.lladdr = text_type(lladdr)
+        neigh.device = text_type(device)
+        # Create IP Address
+        response = srv6_stub.Create(srv6_request)
+        # Let's close the session
+        channel.close()
+        # Create the response
+        return response.status
+
+    def remove_ipneigh(self, server_ip, server_port,
+                       dst, lladdr, device, family=AF_INET):
+        # Get the reference of the stub
+        srv6_stub, channel = (self
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPNeigh
+        # Create a new interface request
+        neigh_request = srv6_request.ipneigh_request
+        # Create a new route
+        neigh = neigh_request.neighs.add()
+        # Set address, device, family
+        neigh.family=int(family)
+        neigh.dst = text_type(dst)
+        neigh.lladdr = text_type(lladdr)
+        neigh.device = text_type(device)
+        # Create IP Address
+        response = srv6_stub.Create(srv6_request)
         # Let's close the session
         channel.close()
         # Create the response
