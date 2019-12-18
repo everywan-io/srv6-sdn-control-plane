@@ -432,7 +432,7 @@ class SRv6VPNManager:
                 print("Table ID:", vpns[vpn]["tableid"])
                 print("Interfaces:")
                 for intf in vpns[vpn]["interfaces"]:
-                    subnet = list()
+                    subnets = list()
                     for subnet in intf.subnets:
                         subnets.append(subnet)
                     print(intf.routerid, intf.interface_name, intf.interface_ip, subnets)
