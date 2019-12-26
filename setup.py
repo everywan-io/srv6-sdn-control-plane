@@ -18,10 +18,14 @@ setup(
     description='SRv6 SDN Control Plane',  # Required
     long_description=long_description,
     long_description_content_type='text/markdown',  # Optional (see note above)
+    entry_points={'console_scripts': ['srv6_controller = srv6_sdn_control_plane.srv6_controller:_main']},
     url='',  # Optional
     packages=['srv6_sdn_control_plane',
+              'srv6_sdn_control_plane.interface_discovery',
+              'srv6_sdn_control_plane.topology',
               'srv6_sdn_control_plane.northbound',
               'srv6_sdn_control_plane.northbound.grpc',
+              'srv6_sdn_control_plane.southbound',
               'srv6_sdn_control_plane.southbound.grpc',
               'srv6_sdn_control_plane.southbound.netconf',
               'srv6_sdn_control_plane.southbound.rest',

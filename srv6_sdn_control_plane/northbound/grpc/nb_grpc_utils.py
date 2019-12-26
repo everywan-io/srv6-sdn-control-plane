@@ -661,6 +661,8 @@ class ControllerState:
         self.initiated_tunnels = set()
         # Number of tunneled interfaces
         self.num_tunneled_interfaces = dict()
+        # Table ID allocator
+        self.tableid_allocator = TableIDAllocator()
         # If VPN dumping is enabled, import the VPNs from the dump
         '''
         if vpn_file is not None:

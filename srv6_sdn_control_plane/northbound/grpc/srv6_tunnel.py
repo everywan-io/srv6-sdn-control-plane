@@ -25,9 +25,11 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
+import itertools
 from six import text_type
 from argparse import ArgumentParser
 from concurrent import futures
+import itertools
 import logging
 import time
 import grpc
@@ -608,7 +610,154 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return res
             self.controller_state_srv6.sites_in_vpn[tunnel_name].remove(l_interface)
 
-    def get_tunnels(self):
+    def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid, overlay_info):
+        # Get routers
+        routers = {interface.routerid for interface in sites}
+        # Initialize the tunnel
+        for routerid in routers:
+            is_first_tunnel = False
+            if routerid not in self.controller_state.num_tunneled_interfaces:
+                self.controller_state.num_tunneled_interfaces[routerid] = dict()
+                is_first_tunnel = True
+            if overlay_name not in self.controller_state.num_tunneled_interfaces[routerid]:
+                self.controller_state.num_tunneled_interfaces[routerid][overlay_name] = 0
+            if self.controller_state.num_tunneled_interfaces[routerid][overlay_name] == 0:
+                res = self.init_tunnel(routerid, overlay_name, overlay_type, tenantid, is_first_tunnel, overlay_info)
+                if res != status_codes_pb2.STATUS_SUCCESS:
+                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
+        # For each pair of interfaces, create a tunnel
+        for l_interface, r_interface in itertools.combinations(sites, 2):
+            res = self.create_tunnel(overlay_name, overlay_type, l_interface, r_interface, tenantid, overlay_info)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=res)
+            self.controller_state.num_tunneled_interfaces[l_interface.routerid][overlay_name] += 1
+            self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name] += 1
+        # Update data structures
+        logger.debug('Updating controller state')
+        self.controller_state.add_vpn(
+            overlay_name, overlay_type, tenantid
+        )
+        for interface in sites:
+            if interface.routerid not in self.controller_state.vpns[overlay_name].interfaces:
+                self.controller_state.add_router_to_vpn(interface.routerid, overlay_name)
+            self.controller_state.add_interface_to_vpn(
+                overlay_name, interface.routerid, interface.interface_name,
+                interface.interface_ip, interface.subnets
+            )
+        logger.info('The VPN has been created successfully')
+
+    def remove_overlay_net(self, overlay_name, tenantid, overlay_info):
+        # Get the VPN type
+        overlay_type = self.controller_state.get_vpn_type(overlay_name)
+        # Get the tunnel mode
+        tunnel_mode = self.controller_state.vpns[overlay_name].tunnel_mode
+        # Get the routers
+        routers = self.controller_state.get_routers_in_vpn(overlay_name)
+        # Get the interfaces belonging to the VPN
+        tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(overlay_name)
+        # For each pair of interfaces, remove the tunnel
+        for l_interface, r_interface in itertools.combinations(tunneled_interfaces, 2):
+            res = tunnel_mode.remove_tunnel(overlay_name, l_interface, r_interface, overlay_info)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=res)
+            self.controller_state.num_tunneled_interfaces[l_interface.routerid][overlay_name] -= 1
+            if self.controller_state.num_tunneled_interfaces[l_interface.routerid][overlay_name] == 0:
+                del self.controller_state.num_tunneled_interfaces[l_interface.routerid][overlay_name]
+            self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name] -= 1
+            if self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name] == 0:
+                del self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name]
+        # Destroy the tunnel
+        for routerid in routers:
+            is_last_tunnel = False
+            if len(self.controller_state.num_tunneled_interfaces[l_interface.routerid]) == 0:
+                is_last_tunnel = True
+                del self.controller_state.num_tunneled_interfaces[l_interface.routerid]
+            res = tunnel_mode.destroy_tunnel(routerid, overlay_name, overlay_type, tenantid, is_last_tunnel, overlay_info)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=res)
+            self.controller_state.initiated_tunnels.remove(routerid)
+        # Update data structures
+        logger.debug('Updating controller state')
+        for interface in tunneled_interfaces:
+            self.controller_state.remove_tunnel_from_vpn(
+                overlay_name, interface.routerid, interface.interface_name,
+                interface.interface_ip, interface.subnets
+            )
+        self.controller_state.remove_vpn(
+            overlay_name, overlay_type, tenantid
+        )
+        logger.info('The VPN has been removed successfully')
+
+    def add_site_to_overlay(self, overlay_name, tenantid, site, overlay_info):
+        # Get the tunnel mode
+        tunnel_mode = self.controller_state.vpns[overlay_name].tunnel_mode
+        # Get the VPN type
+        overlay_type = self.controller_state.get_vpn_type(overlay_name)
+        # Get routers
+        routerid = site.routerid
+        # Get the interfaces belonging to the VPN
+        tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(overlay_name)
+        # Initialize the tunnel
+        if routerid not in self.controller_state.initiated_tunnels:
+            is_first_tunnel = False
+            if routerid not in self.controller_state.num_tunneled_interfaces:
+                self.controller_state.num_tunneled_interfaces[routerid] = dict()
+                is_first_tunnel = True
+            if overlay_name not in self.controller_state.num_tunneled_interfaces[routerid]:
+                self.controller_state.num_tunneled_interfaces[routerid][overlay_name] = 0
+            if self.controller_state.num_tunneled_interfaces[routerid][overlay_name] == 0:
+                res = tunnel_mode.init_tunnel(routerid, overlay_name, overlay_type, tenantid, is_first_tunnel, overlay_info)
+                if res != status_codes_pb2.STATUS_SUCCESS:
+                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
+        # For each pair of interfaces, create a tunnel
+        for r_interface in tunneled_interfaces:
+            res = tunnel_mode.create_tunnel(overlay_name, overlay_type, site, r_interface, tenantid, overlay_info)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=res)
+            self.controller_state.num_tunneled_interfaces[site.routerid][overlay_name] += 1
+            self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name] += 1
+        # Update data structures
+        self.controller_state.add_interface_to_vpn(
+            overlay_name, site.routerid, site.interface_name,
+            site.interface_ip, site.subnets
+        )
+        logger.info('The VPN has been changed successfully')
+
+    def remove_site_from_overlay(self, overlay_name, tenantid, site, overlay_info):
+        # Get the VPN type
+        vpn_type = self.controller_state.get_vpn_type(overlay_name)
+        # Get the tunnel mode
+        tunnel_mode = self.controller_state.vpns[overlay_name].tunnel_mode
+        # Get the routers
+        routerid = site.routerid
+        # Get the interfaces belonging to the VPN
+        tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(overlay_name)
+        # For each pair of interfaces, remove the tunnel
+        for r_interface in tunneled_interfaces:
+            res = tunnel_mode.remove_tunnel(overlay_name, site, r_interface, overlay_info)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=res)
+            self.controller_state.num_tunneled_interfaces[site.routerid][overlay_name] -= 1
+            self.controller_state.num_tunneled_interfaces[r_interface.routerid][overlay_name] -= 1
+            if self.controller_state.num_tunneled_interfaces[site.routerid][overlay_name] == 0:
+                del self.controller_state.num_tunneled_interfaces[site.routerid][overlay_name]
+        # Destroy tunnels
+        is_last_tunnel = False
+        if len(self.controller_state.num_tunneled_interfaces[routerid]) == 0:
+            is_last_tunnel = True
+            del self.controller_state.num_tunneled_interfaces[routerid]
+        res = tunnel_mode.destroy_tunnel(routerid, overlay_name, vpn_type, tenantid, is_last_tunnel, overlay_info)
+        if res != status_codes_pb2.STATUS_SUCCESS:
+            return srv6_vpn_pb2.SRv6VPNReply(status=res)
+        # Update data structures
+        logger.debug('Updating controller state')
+        self.controller_state.remove_tunnel_from_vpn(
+            overlay_name, site.routerid, site.interface_name,
+            site.interface_ip, site.subnet
+        )
+        logger.info('The VPN has been changed successfully')
+
+    def get_overlays(self):
         # Create the response
         response = srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
         # Build the VPNs list

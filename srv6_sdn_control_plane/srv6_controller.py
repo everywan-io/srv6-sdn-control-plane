@@ -18,11 +18,15 @@ from ipaddress import IPv6Interface, IPv4Address
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
-import srv6_controller_utils as utils
+import srv6_sdn_control_plane.srv6_controller_utils as utils
 # SRv6 dependencies
-from interface_discovery.interface_discovery import interface_discovery
-from topology.ti_extraction import draw_topo
-from topology.ti_extraction import connect_and_extract_topology
+
+print(sys.executable)
+
+
+from srv6_sdn_control_plane.interface_discovery.interface_discovery import interface_discovery
+from srv6_sdn_control_plane.topology.ti_extraction import draw_topo
+from srv6_sdn_control_plane.topology.ti_extraction import connect_and_extract_topology
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
 #
@@ -960,7 +964,7 @@ class SRv6Controller(object):
         thread.daemon = True
         thread.start()
         # Start topology information extraction
-        if topo_extraction:
+        if self.topo_extraction:
             self.topology_information_extraction()
         while True:
             time.sleep(100)
@@ -1049,7 +1053,7 @@ def parseArguments():
     return args
 
 
-if __name__ == '__main__':
+def _main():
     # Let's parse input parameters
     args = parseArguments()
     # Get topology filename
@@ -1130,3 +1134,7 @@ if __name__ == '__main__':
     )
     # Start the controller
     srv6_controller.run()
+
+
+if __name__ == '__main__':
+    _main()

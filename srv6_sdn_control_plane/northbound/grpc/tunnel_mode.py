@@ -4,19 +4,18 @@ class TunnelMode(object):
 
     def __init__(self, name):
         self.name = name
-        self.initiated_tunnels = set()
 
-    def init_tunnel(self):
+    def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid, overlay_info):
         raise NotImplementedError
 
-    def destroy_tunnel(self):
+    def remove_overlay_net(self, overlay_name, tenantid, overlay_info):
         raise NotImplementedError
 
-    def create_tunnel(self):
+    def add_site_to_overlay(self, overlay_name, tenantid, site, overlay_info):
         raise NotImplementedError
 
-    def remove_tunnel(self):
+    def remove_site_from_overlay(self, overlay_name, tenantid, site, overlay_info):
         raise NotImplementedError
 
-    def get_tunnels(self):
+    def get_overlays(self):
         raise NotImplementedError

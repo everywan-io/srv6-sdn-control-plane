@@ -39,7 +39,7 @@ from threading import Thread
 #sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
-from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
+from srv6_sdn_control_plane.southbound.grpc import sb_grpc_utils
 from srv6_sdn_proto import srv6_manager_pb2
 from srv6_sdn_proto import srv6_manager_pb2_grpc
 from srv6_sdn_proto import status_codes_pb2
@@ -47,6 +47,8 @@ from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import empty_req_pb2_grpc
+from srv6_sdn_proto import gre_interface_pb2
+
 
 # Network event types
 EVENT_TYPES = {
@@ -77,13 +79,14 @@ class SRv6Manager:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
-        addr_family = sb_grpc_client.getAddressFamily(ip_address)
+        addr_family = sb_grpc_utils.getAddressFamily(ip_address)
         if addr_family == AF_INET6:
             ip_address = "ipv6:[%s]:%s" % (ip_address, port)
         elif addr_family == AF_INET:
-            ip_address = "ipv4:%s]:%s" % (ip_address, port)
+            ip_address = "ipv4:%s:%s" % (ip_address, port)
         else:
             print('Invalid address: %s' % ip_address)
+            return
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -94,7 +97,7 @@ class SRv6Manager:
             channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel(ip_address, port))
+            channel = grpc.insecure_channel(ip_address)
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(channel), channel)
 
@@ -729,7 +732,8 @@ class SRv6Manager:
 
     # CRUD GRE interface
 
-    def create_gre_interface(self, server_ip, server_port, name, local='', remote=''):
+    def create_gre_interface(self, server_ip, server_port, name, local='',
+                             remote='', key=-1, type=gre_interface_pb2.GRE):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -745,6 +749,8 @@ class SRv6Manager:
         gre_interface.name = text_type(name)
         gre_interface.local = text_type(local)
         gre_interface.remote = text_type(remote)
+        gre_interface.key = key
+        gre_interface.type = type
         # Create IP Address
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -845,7 +851,7 @@ class SRv6Manager:
         vxlan.vxlan_id = vxlan_id
         # add vxlan 
         response = srv6_stub.Create(srv6_request)
-        print response
+        print(response)
         # Let's close the session
         channel.close()
         # Create the response
@@ -867,7 +873,7 @@ class SRv6Manager:
         vxlan.ifname = ifname
         # remove vxlan 
         response = srv6_stub.Remove(srv6_request)
-        print response
+        print(response)
         # Let's close the session
         channel.close()
         # Create the response
@@ -890,7 +896,7 @@ class SRv6Manager:
         fdbentries.dst = dst
         # Create fdb entries 
         response = srv6_stub.Create(srv6_request)
-        print response
+        print(response)
         # Let's close the session
         channel.close()
         # Create the response
@@ -913,7 +919,7 @@ class SRv6Manager:
         fdbentries.dst = dst
         # remove fdb entries 
         response = srv6_stub.Remove(srv6_request)
-        print response
+        print(response)
         # Let's close the session
         channel.close()
         # Create the response
@@ -933,6 +939,14 @@ class NetworkEventsListener:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
+        addr_family = sb_grpc_utils.getAddressFamily(ip_address)
+        if addr_family == AF_INET6:
+            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+        elif addr_family == AF_INET:
+            ip_address = "ipv4:%s:%s" % (ip_address, port)
+        else:
+            print('Invalid address: %s' % ip_address)
+            return
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -940,11 +954,10 @@ class NetworkEventsListener:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+            channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel("ipv6:[%s]:%s"
-                                            % (ip_address, port))
+            channel = grpc.insecure_channel(ip_address)
         return (network_events_listener_pb2_grpc
                 .NetworkEventsListenerStub(channel), channel)
 

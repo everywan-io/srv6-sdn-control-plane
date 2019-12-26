@@ -28,7 +28,6 @@ from __future__ import absolute_import, division, print_function
 from six import text_type
 from argparse import ArgumentParser
 from concurrent import futures
-import itertools
 import logging
 import time
 import grpc
@@ -305,7 +304,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     interface.interface_ip,
                     subnets
                 ))
-            print('intent otunnel', intent.tunnel)
             # Extract tunnel type
             tunnel_mode = self.tunnel_modes[intent.tunnel]
             # Extract tunnel info
@@ -389,41 +387,9 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_INVALID_PREFIX)
             logger.info('All checks passed')
             # All checks passed
-            # 
-            # Get routers
-            routers = {interface.routerid for interface in interfaces}
-            # Initialize the tunnel
-            for routerid in routers:
-                is_first_tunnel = False
-                if routerid not in self.controller_state.num_tunneled_interfaces:
-                    self.controller_state.num_tunneled_interfaces[routerid] = dict()
-                    is_first_tunnel = True
-                if vpn_name not in self.controller_state.num_tunneled_interfaces[routerid]:
-                    self.controller_state.num_tunneled_interfaces[routerid][vpn_name] = 0
-                if self.controller_state.num_tunneled_interfaces[routerid][vpn_name] == 0:
-                    res = tunnel_mode.init_tunnel(routerid, vpn_name, vpn_type, tenantid, is_first_tunnel, tunnel_info)
-                    if res != status_codes_pb2.STATUS_SUCCESS:
-                        return srv6_vpn_pb2.SRv6VPNReply(status=res)
-            # For each pair of interfaces, create a tunnel
-            for l_interface, r_interface in itertools.combinations(interfaces, 2):
-                res = tunnel_mode.create_tunnel(vpn_name, vpn_type, l_interface, r_interface, tenantid, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] += 1
-                self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] += 1
-            # Update data structures
-            logger.debug('Updating controller state')
-            self.controller_state.add_vpn(
-                vpn_name, vpn_type, tenantid
-            )
-            for interface in interfaces:
-                if interface.routerid not in self.controller_state.vpns[vpn_name].interfaces:
-                    self.controller_state.add_router_to_vpn(interface.routerid, vpn_name)
-                self.controller_state.add_interface_to_vpn(
-                    vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.subnets
-                )
-            logger.info('The VPN has been created successfully')
+            #
+            # Add the VPN
+            tunnel_mode.create_overlay_net(vpn_name, vpn_type, interfaces, tenantid, tunnel_info)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -457,47 +423,11 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
             logger.debug('Check passed')
             # All checks passed
-            # 
-            # Get the VPN type
-            vpn_type = self.controller_state.get_vpn_type(vpn_name)
+            #
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
-            # Get the routers
-            routers = self.controller_state.get_routers_in_vpn(vpn_name)
-            # Get the interfaces belonging to the VPN
-            tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(vpn_name)
-            # For each pair of interfaces, remove the tunnel
-            for l_interface, r_interface in itertools.combinations(tunneled_interfaces, 2):
-                res = tunnel_mode.remove_tunnel(vpn_name, l_interface, r_interface, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] -= 1
-                if self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] == 0:
-                    del self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name]
-                self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] -= 1
-                if self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] == 0:
-                    del self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name]
-            # Destroy the tunnel
-            for routerid in routers:
-                is_last_tunnel = False
-                if len(self.controller_state.num_tunneled_interfaces[l_interface.routerid]) == 0:
-                    is_last_tunnel = True
-                    del self.controller_state.num_tunneled_interfaces[l_interface.routerid]
-                res = tunnel_mode.destroy_tunnel(routerid, vpn_name, vpn_type, tenantid, is_last_tunnel, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                self.controller_state.initiated_tunnels.remove(routerid)
-            # Update data structures
-            logger.debug('Updating controller state')
-            for interface in tunneled_interfaces:
-                self.controller_state.remove_tunnel_from_vpn(
-                    vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.subnets
-                )
-            self.controller_state.remove_vpn(
-                vpn_name, vpn_type, tenantid
-            )
-            logger.info('The VPN has been removed successfully')
+            # Remove the VPN
+            tunnel_mode.remove_overlay_net(vpn_name, tenantid, tunnel_info)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -611,47 +541,11 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_ALREADY_ASSIGNED)
             logger.info('All checks passed')
             # All checks passed
-            # 
+            #
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
-            # Get routers
-            routers = {interface.routerid for interface in interfaces}
-            # Get the interfaces belonging to the VPN
-            tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(vpn_name)
-            # Initialize the tunnel
-            for routerid in routers - self.controller_state.initiated_tunnels:
-                is_first_tunnel = False
-                if routerid not in self.controller_state.num_tunneled_interfaces:
-                    self.controller_state.num_tunneled_interfaces[routerid] = dict()
-                    is_first_tunnel = True
-                if vpn_name not in self.controller_state.num_tunneled_interfaces[routerid]:
-                    self.controller_state.num_tunneled_interfaces[routerid][vpn_name] = 0
-                if self.controller_state.num_tunneled_interfaces[routerid][vpn_name] == 0:
-                    res = tunnel_mode.init_tunnel(routerid, vpn_name, vpn_type, tenantid, is_first_tunnel, tunnel_info)
-                    if res != status_codes_pb2.STATUS_SUCCESS:
-                        return srv6_vpn_pb2.SRv6VPNReply(status=res)
-            # For each pair of interfaces, create a tunnel
-            for l_interface in interfaces:
-                for r_interface in tunneled_interfaces:
-                    res = tunnel_mode.create_tunnel(vpn_name, vpn_type, l_interface, r_interface, tenantid, tunnel_info)
-                    if res != status_codes_pb2.STATUS_SUCCESS:
-                        return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                    self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] += 1
-                    self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] += 1
-            # For each pair of interfaces, create a tunnel
-            for l_interface, r_interface in itertools.combinations(interfaces, 2):
-                res = tunnel_mode.create_tunnel(vpn_name, vpn_type, l_interface, r_interface, tenantid, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] += 1
-                self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] += 1
-            # Update data structures
-            for interface in interfaces:
-                self.controller_state.add_interface_to_vpn(
-                    vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.subnets
-                )
-            logger.info('The VPN has been changed successfully')
+            # Add the site
+            tunnel_mode.add_site_to_overlay(vpn_name, tenantid, tunnel_info)
             # Save the VPNs dump to file
             if self.controller_state.vpn_file is not None:
                 logger.info('Saving the VPN dump')
@@ -733,41 +627,11 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     )
                     return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_INTF_NOTASSIGNED)
             # All checks passed
-            # 
-            # Get the VPN type
-            vpn_type = self.controller_state.get_vpn_type(vpn_name)
+            #
             # Get the tunnel mode
-            tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
-            # Get the routers
-            routers = {interface.routerid for interface in interfaces}
-            # Get the interfaces belonging to the VPN
-            #tunneled_interfaces = self.controller_state.get_interfaces_in_vpn(vpn_name)
-            # For each pair of interfaces, remove the tunnel
-            for l_interface, r_interface in itertools.combinations(interfaces, 2):
-                res = tunnel_mode.remove_tunnel(vpn_name, l_interface, r_interface, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-                self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] -= 1
-                self.controller_state.num_tunneled_interfaces[r_interface.routerid][vpn_name] -= 1
-                if self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name] == 0:
-                    del self.controller_state.num_tunneled_interfaces[l_interface.routerid][vpn_name]
-            # Destroy tunnels
-            for routerid in routers:
-                is_last_tunnel = False
-                if len(self.controller_state.num_tunneled_interfaces[routerid]) == 0:
-                    is_last_tunnel = True
-                    del self.controller_state.num_tunneled_interfaces[routerid]
-                res = tunnel_mode.destroy_tunnel(routerid, vpn_name, vpn_type, tenantid, is_last_tunnel, tunnel_info)
-                if res != status_codes_pb2.STATUS_SUCCESS:
-                    return srv6_vpn_pb2.SRv6VPNReply(status=res)
-            # Update data structures
-            logger.debug('Updating controller state')
-            for interface in interfaces:
-                self.controller_state.remove_tunnel_from_vpn(
-                    vpn_name, interface.routerid, interface.interface_name,
-                    interface.interface_ip, interface.subnet
-                )
-            logger.info('The VPN has been changed successfully')
+            tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_modes
+            # Remove the site from the overlay
+            tunnel_mode.remove_site_from_overlay(vpn_name, tenantid, tunnel_info)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
