@@ -29,6 +29,7 @@ from six import text_type
 import grpc
 import os
 import sys
+from socket import AF_INET, AF_INET6
 
 #GRPC_FOLDER = '.'
 # Adjust relative paths
@@ -103,6 +104,14 @@ class InventoryService:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
+        addr_family = nb_grpc_utils.getAddressFamily(ip_address)
+        if addr_family == AF_INET6:
+            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+        elif addr_family == AF_INET:
+            ip_address = "ipv4:%s:%s" % (ip_address, port)
+        else:
+            print('Invalid address: %s' % ip_address)
+            return
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -110,10 +119,10 @@ class InventoryService:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+            channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel("ipv6:[%s]:%s" % (ip_address, port))
+            channel = grpc.insecure_channel(ip_address)
         return inventory_service_pb2_grpc.InventoryServiceStub(channel), channel
 
 
@@ -281,6 +290,14 @@ class SRv6VPNManager:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
+        addr_family = nb_grpc_utils.getAddressFamily(ip_address)
+        if addr_family == AF_INET6:
+            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+        elif addr_family == AF_INET:
+            ip_address = "ipv4:%s:%s" % (ip_address, port)
+        else:
+            print('Invalid address: %s' % ip_address)
+            return
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -288,10 +305,10 @@ class SRv6VPNManager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+            channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel("ipv6:[%s]:%s" % (ip_address, port))
+            channel = grpc.insecure_channel(ip_address)
         return srv6_vpn_pb2_grpc.SRv6VPNStub(channel), channel
 
 
