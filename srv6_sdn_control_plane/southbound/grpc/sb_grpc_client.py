@@ -334,9 +334,8 @@ class SRv6Manager:
         # Set name, table
         device.name = text_type(name)
         device.table = int(table)
-        for ifname in interfaces:
-            # Create a new interface
-            device.interfaces.add(text_type(ifname))
+        # Create a new interfaces
+        device.interfaces.extend(interfaces)
         # Create VRF device
         response = srv6_stub.Create(srv6_request)
         # Let's close the session
@@ -836,7 +835,7 @@ class SRv6Manager:
     def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id):
         # Get the reference of the stub
         srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, SECURE))
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -855,12 +854,12 @@ class SRv6Manager:
         # Let's close the session
         channel.close()
         # Create the response
-        return response.message
+        return response.status
 
     def delVxLAN(self, server_ip, server_port, ifname):
         # Get the reference of the stub
         srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, SECURE))
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -877,12 +876,12 @@ class SRv6Manager:
         # Let's close the session
         channel.close()
         # Create the response
-        return response.message
+        return response.status
 
     def addfdbentries(self, server_ip, server_port, ifindex, dst):
         # Get the reference of the stub
         srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, SECURE))
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -900,12 +899,12 @@ class SRv6Manager:
         # Let's close the session
         channel.close()
         # Create the response
-        return response.message
+        return response.status
 
     def delfdbentries(self, server_ip, server_port, ifindex, dst):
         # Get the reference of the stub
         srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, SECURE))
+                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -923,7 +922,7 @@ class SRv6Manager:
         # Let's close the session
         channel.close()
         # Create the response
-        return response.message
+        return response.status
 
 
 class NetworkEventsListener:
@@ -1039,20 +1038,20 @@ if __name__ == "__main__":
     #    thread.join()
 
     # --- tunnel creation test 
-    '''srv6_manager.createVxLAN('10.0.14.45', 'vxlan100','ewED1-eth0', 100)
-    srv6_manager.addfdbentries('10.0.14.45', 'vxlan100', '10.0.16.49')
-    srv6_manager.createVxLAN('10.0.16.49', 'vxlan100','ewED2-eth0', 100)
-    srv6_manager.addfdbentries('10.0.16.49', 'vxlan100', '10.0.14.45')
-    srv6_manager.createIPAddr('10.0.14.45', '10.100.0.1/24', 'vxlan100', '')
-    srv6_manager.createIPAddr('10.0.16.49', '10.100.0.2/24', 'vxlan100', '')
+    '''srv6_manager.createVxLAN('10.0.14.45', 12345, 'vxlan100','ewED1-eth0', 100)
+    srv6_manager.addfdbentries('10.0.14.45', 12345, 'vxlan100', '10.0.16.49')
+    srv6_manager.createVxLAN('10.0.16.49', 12345, 'vxlan100','ewED2-eth0', 100)
+    srv6_manager.addfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
+    srv6_manager.create_ipaddr('10.0.14.45',12345, '10.100.0.1/24', 'vxlan100', '')
+    srv6_manager.create_ipaddr('10.0.16.49',12345, '10.100.0.2/24', 'vxlan100', '')
     
-    srv6_manager.createVRFDevice('10.0.14.45', 'vrf1', 1, ['vxlan100', 'ewED1-eth1'])
-    srv6_manager.createVRFDevice('10.0.16.49', 'vrf1', 1, ['vxlan100', 'ewED2-eth1'])
+    srv6_manager.create_vrf_device('10.0.14.45', 12345, 'vrf1', 1, ['vxlan100', 'ewED1-eth1'])
+    srv6_manager.create_vrf_device('10.0.16.49', 12345, 'vrf1', 1, ['vxlan100', 'ewED2-eth1'])
 
-    srv6_manager.createIPRoute('10.0.14.45', destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
-    srv6_manager.createIPRoute('10.0.16.49', destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)
+    srv6_manager.create_iproute('10.0.14.45', 12345,  destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
+    srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''
     #---- tunnel cancellation test
-    srv6_manager.removeIPRoute('10.0.16.49', destination='192.168.32.0', dst_len=24, table=1)
-    srv6_manager.removeVRFDevice('10.0.14.45', 'vrf1')
-    srv6_manager.delVxLAN('10.0.14.45', 'vxlan100')
-    srv6_manager.delfdbentries('10.0.16.49', 'vxlan100', '10.0.14.45')'''
+    '''srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
+    srv6_manager.remove_vrf_device('10.0.14.45', 12345,  'vrf1')
+    srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
+    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')'''
