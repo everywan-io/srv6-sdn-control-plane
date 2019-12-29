@@ -832,7 +832,7 @@ class SRv6Manager:
         # Create the response
         return response.status
 
-    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id):
+    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -848,6 +848,7 @@ class SRv6Manager:
         vxlan.ifname = ifname
         vxlan.vxlan_link = vxlan_link
         vxlan.vxlan_id = vxlan_id
+        vxlan.vxlan_port = vxlan_port
         # add vxlan 
         response = srv6_stub.Create(srv6_request)
         print(response)
@@ -1038,9 +1039,9 @@ if __name__ == "__main__":
     #    thread.join()
 
     # --- tunnel creation test 
-    '''srv6_manager.createVxLAN('10.0.14.45', 12345, 'vxlan100','ewED1-eth0', 100)
+    '''srv6_manager.createVxLAN('10.0.14.45', 12345, 'vxlan100','ewED1-eth0', 100, 4789)
     srv6_manager.addfdbentries('10.0.14.45', 12345, 'vxlan100', '10.0.16.49')
-    srv6_manager.createVxLAN('10.0.16.49', 12345, 'vxlan100','ewED2-eth0', 100)
+    srv6_manager.createVxLAN('10.0.16.49', 12345, 'vxlan100','ewED2-eth0', 100, 4789)
     srv6_manager.addfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
     srv6_manager.create_ipaddr('10.0.14.45',12345, '10.100.0.1/24', 'vxlan100', '')
     srv6_manager.create_ipaddr('10.0.16.49',12345, '10.100.0.2/24', 'vxlan100', '')
@@ -1051,7 +1052,7 @@ if __name__ == "__main__":
     srv6_manager.create_iproute('10.0.14.45', 12345,  destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
     srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''
     #---- tunnel cancellation test
-    '''srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
+    srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
     srv6_manager.remove_vrf_device('10.0.14.45', 12345,  'vrf1')
     srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
-    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')'''
+    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
