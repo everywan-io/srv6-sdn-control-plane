@@ -105,6 +105,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_GRPC_SERVER_IP = '::'
 DEFAULT_GRPC_SERVER_PORT = 54321
 DEFAULT_GRPC_CLIENT_PORT = 12345
+DEFAULT_PYMERANG_SERVER_IP = '::'
+DEFAULT_PYMERANG_SERVER_PORT = 50061
 # Debug option
 SERVER_DEBUG = False
 # Secure option
@@ -137,7 +139,8 @@ class SRv6Controller(object):
     def __init__(self, nodes, period, topo_file, topo_graph,
                  ospf6d_pwd, sb_interface, nb_interface,
                  secure, key, certificate, grpc_server_ip, grpc_server_port,
-                 grpc_client_port, min_interval_between_topo_dumps,
+                 grpc_client_port, pymerang_server_ip,
+                 pymerang_server_port, min_interval_between_topo_dumps,
                  vpn_dump=None, topo_extraction=False, verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
@@ -170,6 +173,10 @@ class SRv6Controller(object):
         self.grpc_server_port = grpc_server_port
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
+        # IP of the pymerang server
+        self.pymerang_server_ip = pymerang_server_ip
+        # Port of the pymerang server
+        self.pymerang_server_port = pymerang_server_port
         # Secure mode
         self.secure = secure
         # Server key
@@ -918,7 +925,9 @@ class SRv6Controller(object):
     # Start registration server
     def start_registration_server(self):
         logging.info('*** Starting registration server')
-        server = PymerangController(devices=self.controller_state.devices)
+        server = PymerangController(server_ip=self.pymerang_server_ip,
+                                    server_port=self.pymerang_server_port,
+                                    devices=self.controller_state.devices)
         server.load_device_config()
         server.serve()
 
@@ -1029,6 +1038,14 @@ def parseArguments():
     parser.add_argument('--grpc-client-port', dest='grpc_client_port',
                         action='store', default=DEFAULT_GRPC_CLIENT_PORT,
                         help='Port of the northbound gRPC client')
+    # IP address of the pymerang server
+    parser.add_argument('--pymerang-server-ip', dest='pymerang_server_ip',
+                        action='store', default=DEFAULT_PYMERANG_SERVER_IP,
+                        help='IP of the pymerang server')
+    # Port of the pymerang server
+    parser.add_argument('--pymerang-server-port', dest='pymerang_server_port',
+                        action='store', default=DEFAULT_PYMERANG_SERVER_PORT,
+                        help='Port of the pymerang server')
     # Enable secure mode
     parser.add_argument('-s', '--secure', action='store_true',
                         default=DEFAULT_SECURE, help='Activate secure mode')
@@ -1097,6 +1114,10 @@ def _main():
     grpc_server_port = args.grpc_server_port
     # gRPC client port
     grpc_client_port = args.grpc_client_port
+    # pymerang server IP
+    pymerang_server_ip = args.pymerang_server_ip
+    # pymerang server port
+    pymerang_server_port = args.pymerang_server_port
     # Server certificate
     certificate = args.server_cert
     # Server key
@@ -1127,6 +1148,8 @@ def _main():
         grpc_server_ip=grpc_server_ip,
         grpc_server_port=grpc_server_port,
         grpc_client_port=grpc_client_port,
+        pymerang_server_ip=pymerang_server_ip,
+        pymerang_server_port=pymerang_server_port,
         min_interval_between_topo_dumps=min_interval_between_topo_dumps,
         vpn_dump=vpn_dump,
         topo_extraction=topo_extraction,
