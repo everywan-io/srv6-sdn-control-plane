@@ -10,7 +10,7 @@ import grpc
 import json
 import sys
 import os
-from socket import AF_INET
+from socket import AF_INET, AF_INET6
 from threading import Thread
 
 
@@ -94,7 +94,7 @@ class SRv6Manager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel("ipv6:[%s]:%s" % (ip_address, port),
+            channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
             channel = grpc.insecure_channel(ip_address)
