@@ -273,6 +273,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         self.controller_state = controller_state
         # Initialize tunnel state
         self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port, controller_state, verbose).tunnel_modes
+        # VPN sites
+        self.vpn_sites = dict()
     
     """gRPC Server"""
 
@@ -389,7 +391,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # All checks passed
             #
             # Add the VPN
-            tunnel_mode.create_overlay_net(vpn_name, vpn_type, interfaces, tenantid, tunnel_info)
+            #tunnel_mode.create_overlay_net(vpn_name, vpn_type, interfaces, tenantid, tunnel_info)
+            self.vpn_sites[vpn_name] = set()
+            for site1, site2 in itertools.combinations(interfaces, 2):
+                tunnel_mode.create_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                self.vpn_sites[vpn_name].add(site1)
+                self.vpn_sites[vpn_name].add(site2)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -428,6 +435,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Remove the VPN
             tunnel_mode.remove_overlay_net(vpn_name, tenantid, tunnel_info)
+            
+            del self.vpn_sites[vpn_name]
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -545,7 +554,15 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Add the site
-            tunnel_mode.add_site_to_overlay(vpn_name, tenantid, tunnel_info)
+            #tunnel_mode.add_site_to_overlay(vpn_name, tenantid, tunnel_info)
+            
+            for site1 in interfaces:
+                for site2 in self.vpn_sites:
+                    tunnel_mode.create_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                    self.vpn_sites[vpn_name].add(site1)
+                    self.vpn_sites[vpn_name].add(site2)
+                
+                
             # Save the VPNs dump to file
             if self.controller_state.vpn_file is not None:
                 logger.info('Saving the VPN dump')
@@ -631,7 +648,15 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_modes
             # Remove the site from the overlay
-            tunnel_mode.remove_site_from_overlay(vpn_name, tenantid, tunnel_info)
+            #tunnel_mode.remove_site_from_overlay(vpn_name, tenantid, tunnel_info)
+            
+            
+            for site1 in interfaces:
+                for site2 in self.vpn_sites:
+                    tunnel_mode.remove_site_from_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                    self.vpn_sites[vpn_name].remove(site1)
+                    self.vpn_sites[vpn_name].remove(site2)
+            
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
