@@ -112,8 +112,9 @@ class GRETunnel(tunnel_mode.TunnelMode):
             return
 
 
-        routerid = int(IPv4Address(remote_site.routerid))
-        gre_name = 'gre-%s-%s-%s' % (overlay_name, routerid, gre_key)
+        #routerid = int(IPv4Address(remote_site.routerid))
+        routerid = remote_site.routerid
+        gre_name = 'gre-%s-%s-%s' % (overlay_name, routerid[:3], gre_key)
         if gre_name not in self.controller_state_gre.vrf_interfaces[local_router][vrf_name]:
             self.srv6_manager.create_gre_interface(
                 local_router, self.grpc_client_port,
@@ -189,7 +190,7 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 logging.warning('Invalid IP address')
 
             print('FamILY', family)
-
+            
             response = self.srv6_manager.create_ipaddr(
                 local_router, self.grpc_client_port, ip_addr=local_site.interface_ip,
                 device=local_site.interface_name, net=net, family=family

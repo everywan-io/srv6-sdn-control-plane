@@ -693,7 +693,7 @@ class ControllerState:
 
     # Return True if the router exists, False otherwise
     def router_exists(self, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         if routerid in self.devices:
             # Found router ID
             return True
@@ -720,7 +720,7 @@ class ControllerState:
 
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         if routerid not in self.devices or self.devices[routerid].get('interfaces') is None:
             return False
         if interface_name in self.devices[routerid]['interfaces']:
@@ -766,7 +766,7 @@ class ControllerState:
 
     # Get router's loopback IP address
     def get_loopbackip(self, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]['addr']
 
     '''
@@ -781,7 +781,7 @@ class ControllerState:
 
     # Get router's management IP address
     def get_router_mgmtip(self, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['mgmtip']
 
     '''
@@ -810,13 +810,13 @@ class ControllerState:
     '''
 
     def get_loopback_ip(self, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['interfaces']['lo']['addr']
 
 
     # Get random router interface
     def get_non_loopback_interface(self, routerid):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         interfaces = self.devices[routerid]['interfaces']
         for interface in iter(interfaces):
             # Skip loopback interfaces
@@ -949,7 +949,7 @@ class ControllerState:
 
     # Return the IP addresses associated to an interface
     def get_interface_ipv4(self, routerid, interface_name):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         ips = list()
         for addr in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
             ips.append('%s/%s' % (addr['addr'], addr['netmask']))
@@ -957,7 +957,7 @@ class ControllerState:
 
     # Return the IP addresses associated to an interface
     def get_interface_ipv6(self, routerid, interface_name):
-        routerid = int(IPv4Address(routerid))
+        #routerid = int(IPv4Address(routerid))
         ips = list()
         for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
             ips.append('%s/%s' % (addr['addr'], addr['netmask']))
