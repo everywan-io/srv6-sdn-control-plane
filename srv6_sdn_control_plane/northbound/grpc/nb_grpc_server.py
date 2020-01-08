@@ -394,7 +394,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             #tunnel_mode.create_overlay_net(vpn_name, vpn_type, interfaces, tenantid, tunnel_info)
             self.vpn_sites[vpn_name] = set()
             for site1, site2 in itertools.combinations(interfaces, 2):
-                tunnel_mode.create_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                tunnel_mode.create_overlay(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                 self.vpn_sites[vpn_name].add(site1)
                 self.vpn_sites[vpn_name].add(site2)
         # Save the VPNs dump to file
@@ -558,7 +558,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             
             for site1 in interfaces:
                 for site2 in self.vpn_sites:
-                    tunnel_mode.create_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                    tunnel_mode.create_overlay(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                     self.vpn_sites[vpn_name].add(site1)
                     self.vpn_sites[vpn_name].add(site2)
                 
