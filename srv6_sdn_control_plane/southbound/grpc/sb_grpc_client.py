@@ -1052,7 +1052,7 @@ if __name__ == "__main__":
     srv6_manager.create_iproute('10.0.14.45', 12345,  destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
     srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''
     #---- tunnel cancellation test
-    srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
+    '''srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
     srv6_manager.remove_vrf_device('10.0.14.45', 12345,  'vrf1')
-    srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
-    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
+    srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
+    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')'''
