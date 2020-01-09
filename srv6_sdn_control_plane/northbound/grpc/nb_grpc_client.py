@@ -135,7 +135,7 @@ class InventoryService:
         response = inventory_service_stub.GetDeviceInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve devices information
-            devices = dict()
+            devices = list()
             for device in response.device_information.devices:
                 device_id = None
                 loopbackip = None
@@ -197,14 +197,14 @@ class InventoryService:
                             'ipv4_addrs': ipv4_addrs,
                             'ipv6_addrs': ipv6_addrs
                         }
-                devices[device_id] = {
+                devices.append({
                     'device_id': device_id,
                     'loopbackip': loopbackip,
                     'loopbacknet': loopbacknet,
                     'managementip': managementip,
                     'interfaces': interfaces,
                     'mgmtip': mgmtip
-                }
+                })
         else:
             devices = None
         # Let's close the session
