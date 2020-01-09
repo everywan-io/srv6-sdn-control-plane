@@ -174,6 +174,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             router, self.grpc_client_port, segment=sid, action=action,
             device=dev, localsid_table=nb_grpc_utils.LOCAL_SID_TABLE, table=tableid
         )
+        print(dev)
         if response != status_codes_pb2.STATUS_SUCCESS:
             logger.warning(
                 'Cannot create the SRv6 Local Processing function: %s'
@@ -610,7 +611,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return res
             self.controller_state_srv6.sites_in_vpn[tunnel_name].remove(l_interface)
 
-    def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid, overlay_info):
+    def create_overlay(self, overlay_name, overlay_type, site1, site2, tenantid, overlay_info):
+        sites = [site1, site2]
         # Get routers
         routers = {interface.routerid for interface in sites}
         # Initialize the tunnel

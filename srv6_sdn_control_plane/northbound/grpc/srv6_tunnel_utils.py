@@ -113,6 +113,9 @@ class ControllerStateSRv6:
         self.sites_in_vpn = dict()
         # If VPN dumping is enabled, import the VPNs from the dump
 
+        self.ids = dict()
+        
+        self.last_id = 1
         '''
         if vpn_file is not None:
             try:
@@ -130,11 +133,19 @@ class ControllerStateSRv6:
 
     # Return SID
     def get_sid(self, routerid, tableid):
-        return self.sid_allocator.getSID(routerid, tableid)
+        if routerid not in self.ids:
+            self.ids[routerid] = self.last_id
+            self.last_id += 1
+        id = self.ids[routerid]
+        return self.sid_allocator.getSID(id, tableid)
 
     # Return SID
     def get_sid_family(self, routerid):
-        return self.sid_allocator.getSIDFamily(routerid)
+        if routerid not in self.ids:
+            self.ids[routerid] = self.last_id
+            self.last_id += 1
+        id = self.ids[routerid]
+        return self.sid_allocator.getSIDFamily(id)
 
     # Get a new table ID
     def get_new_tableid(self, vpn_name, tenantid):
