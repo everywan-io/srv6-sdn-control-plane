@@ -246,9 +246,12 @@ class InventoryService:
             # Parse response and retrieve tunnel information
             tunnels = list()
             for tunnel in response.tunnel_information.tunnels:
-                name = None
+                name = tunnel.name
+                type = tunnel.type if tunnel.type is not None else None
+                tunnel_mode = tunnel.mode if tunnel.mode is not None else None
+                tenantid = tunnel.tenantid
                 tunnel_interfaces = list()
-                for interface in tunnel.tunnel_interfaces:
+                for interface in tunnel.interfaces:
                     routerid = None
                     interface_name = None
                     interface_ip = None
@@ -258,17 +261,22 @@ class InventoryService:
                         interface_name = text_type(interface.interface_name)
                     if interface.interface_ip is not None:
                         interface_ip = text_type(interface.interface_ip)
-                    if interface.site_prefix is not None:
-                        site_prefix = text_type(interface.site_prefix)
+                    if interface.subnets is not None:
+                        subnets = list()
+                        for subnet in interface.subnets:
+                            subnets.append(text_type(subnet))
                     tunnel_interfaces.append({
-                        'routerid': routerid,
+                        'deviceid': routerid,
                         'interface_name': interface_name,
                         'interface_ip': interface_ip,
-                        'site_prefix': site_prefix
+                        'subnets': subnets
                     })
                 tunnels.append({
                     'name': name,
-                    'tunnel_interfaces': tunnel_interfaces
+                    'type': type,
+                    'interfaces': tunnel_interfaces,
+                    'mode': tunnel_mode,
+                    'tenantid': tenantid
                 })
         else:
             tunnels = None

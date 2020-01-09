@@ -38,6 +38,7 @@ from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv6Interface
+import itertools
 
 
 ################## Setup these variables ##################
@@ -230,24 +231,51 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         response = inventory_service_pb2.InventoryServiceReply(status=status_codes_pb2.STATUS_SUCCESS)
         # Build the tunnels list
         #for _tunnel in self.srv6_controller_state.get_vpns():
-        for _tunnel in self.tunnels_dict:
+        for _tunnel in self.tunnels_dict.values():
             # Add a new tunnel to the tunnels list
             tunnel = response.tunnel_information.tunnels.add()
             # Set name
-            tunnel.name = _tunnel.name
+            tunnel.name = _tunnel.vpn_name
             # Set interfaces
             # Iterate on all interfaces
-            for interface_info in _tunnel.interfaces.values():
-                # Add a new interface to the tunnel
-                _interface = tunnel.interfaces.add()
-                # Add router ID
-                _interface.routerid = interface_info.routerid
-                # Add interface name
-                _interface.interface_name = interface_info.interface_name
-                # Add interface IP
-                _interface.interface_ip = interface_info.interface_ip
-                # Add site prefix
-                _interface.site_prefix = interface_info.site_prefix
+            #for interface_info in _tunnel.interfaces:#.values():
+            #    print('\n\n\nINTERFACE INFO', interface_info)
+            #    print(interface_info.routerid)
+            #    # Add a new interface to the tunnel
+            #    _interface = tunnel.interfaces.add()
+            #    # Add router ID
+            #    _interface.routerid = interface_info.routerid
+            #    # Add interface name
+            #    _interface.interface_name = interface_info.interface_name
+            #    # Add interface IP
+            #    _interface.interface_ip = interface_info.interface_ip
+            #    # Add site prefix
+            #    #_interface.site_prefix = interface_info.site_prefix
+            #    _interface.subnets.extend(interface_info.subnets)
+                
+            # Set type
+            if _tunnel.vpn_type == nb_grpc_utils.VPNType.IPv4VPN:
+                tunnel.type = 'IPv4VPN'
+            elif _tunnel.vpn_type == nb_grpc_utils.VPNType.IPv6VPN:
+                tunnel.type = 'IPv6VPN'
+            else:
+                print('Unrecognized type')
+                exit(-1)
+            tunnel.mode = _tunnel.tunnel_mode.name
+            tunnel.tenantid = int(_tunnel.tenantid)
+            for interfaces in _tunnel.interfaces.values():
+                for interface in interfaces.values():
+                    # Add a new interface to the VPN
+                    _interface = tunnel.interfaces.add()
+                    # Add router ID
+                    _interface.routerid = interface.routerid
+                    # Add interface name
+                    _interface.interface_name = interface.interface_name
+                    # Add interface IP
+                    _interface.interface_ip = interface.interface_ip
+                    # Add VPN prefix
+                    for subnet in interface.subnets:
+                        _interface.subnets.append(subnet)
         # Return the tunnels list
         logger.debug('Sending response:\n%s' % response)
         return response
@@ -397,6 +425,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 tunnel_mode.create_overlay(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                 self.vpn_sites[vpn_name].add(site1)
                 self.vpn_sites[vpn_name].add(site2)
+            self.controller_state.add_vpn(vpn_name, vpn_type, interfaces, tenantid, tunnel_mode)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
