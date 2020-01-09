@@ -346,7 +346,7 @@ class SRv6Manager:
     def get_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
         print('Not yet implemented')
 
-    def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[]):
+    def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[], op=None):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -364,6 +364,12 @@ class SRv6Manager:
             device.table = int(table)
         # Create a new interfaces
         device.interfaces.extend(interfaces)
+        # Operation
+        if op not in [None, 'replace_interfaces', 'add_interfaces', 'del_interfaces']:
+            print('Invalid operation type: %s' % op)
+            return None
+        if op is not None:
+            device.op = op
         # Create VRF device
         response = srv6_stub.Update(srv6_request)
         # Let's close the session
