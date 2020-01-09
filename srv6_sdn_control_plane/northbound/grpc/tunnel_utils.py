@@ -25,4 +25,4 @@ class TunnelState:
     def init_tunnel_modes(self, grpc_client_port, controller_state, verbose):
         self.register_tunnel_mode('SRv6', srv6_tunnel.SRv6Tunnel(grpc_client_port, controller_state, verbose))
         self.register_tunnel_mode('GRE', gre_tunnel.GRETunnel(grpc_client_port, controller_state, verbose))
-        self.register_tunnel_mode('VXLAN' vxlan_tunnel.VXLANTunnel(grpc_client_port, controller_state, verbose))
+        self.register_tunnel_mode('VXLAN', vxlan_tunnel.VXLANTunnel(grpc_client_port, controller_state, verbose))

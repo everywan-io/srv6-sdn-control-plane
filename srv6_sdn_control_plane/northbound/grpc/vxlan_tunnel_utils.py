@@ -67,18 +67,20 @@ class ControllerStateVXLAN:
         self.dev_to_vni = dict()
         #already created overlay bewteen two sites 
         self.created_overlay = dict()
+        # interface in overlay 
+        self.vrfinterfaces = dict()
 
     # Get a new table ID
-    def get_new_tableid(self, overlay_name, deviceid):
-        return self.tableid_allocator.get_new_tableid(overlay_name, deviceid)
+    def get_new_tableid(self, overlay_name):
+        return self.tableid_allocator.get_new_tableid(overlay_name)
 
     # Get table ID
-    def get_tableid(self, overlay_name, deviceid):
-        return self.tableid_allocator.get_tableid(overlay_name, deviceid)
+    def get_tableid(self, overlay_name):
+        return self.tableid_allocator.get_tableid(overlay_name)
 
     # Release table ID
-    def release_tableid(self, overlay_name, deviceid):
-        return self.tableid_allocator.release_tableid(overlay_name, deviceid)
+    def release_tableid(self, overlay_name):
+        return self.tableid_allocator.release_tableid(overlay_name)
 
     # Get a new VNI
     def get_new_vni(self, overlay_name):
@@ -179,7 +181,7 @@ class VTEPIPAllocator:
                 while self.last_allocated_ip in RESERVED_VTEP_IP:
                     # Skip reserved VTEP IP
                     self.last_allocated_ip += 1
-                vtep_ip = self.ip[self.last_allocated_ip]
+                vtep_ip = "%s/%s" %(self.ip[self.last_allocated_ip], 16) 
             # Assign the VTEP IP to the device 
             self.dev_to_ip[(dev_id)] = vtep_ip
             # And return
@@ -218,8 +220,8 @@ class TableIDAllocator:
         self.last_allocated_tableid = -1
 
     # Allocate and return a new table ID for a VPN
-    def get_new_tableid(self, overlay_name, deviceid):
-        if self.overaly_deviceid_to_tableid.get((overlay_name, deviceid)):
+    def get_new_tableid(self, overlay_name):
+        if self.overaly_deviceid_to_tableid.get((overlay_name)):
             # The VPN already has an associated table ID
             return -1
         else:
@@ -235,23 +237,23 @@ class TableIDAllocator:
                     self.last_allocated_tableid += 1
                 tableid = self.last_allocated_tableid
             # Assign the table ID to the overlay name and device id 
-            self.overaly_deviceid_to_tableid[(overlay_name, deviceid)] = tableid
+            self.overaly_deviceid_to_tableid[(overlay_name)] = tableid
             # And return
             return tableid
 
     # Return the table ID 
     # If no table ID associeted, return -1
-    def get_tableid(self, overlay_name, deviceid):
-        return self.overaly_deviceid_to_tableid.get((overlay_name, deviceid), -1)
+    def get_tableid(self, overlay_name):
+        return self.overaly_deviceid_to_tableid.get((overlay_name), -1)
 
     # Release a table ID and mark it as reusable
-    def release_tableid(self, overlay_name, deviceid):
+    def release_tableid(self, overlay_name):
         # Check if the overlay name and table id have an associeted table ID
-        if self.overaly_deviceid_to_tableid.get((overlay_name, deviceid)):
+        if self.overaly_deviceid_to_tableid.get((overlay_name)):
             # There is associated table ID
-            tableid = self.overaly_deviceid_to_tableid[(overlay_name, deviceid)]
+            tableid = self.overaly_deviceid_to_tableid[(overlay_name)]
             # Unassign the table ID
-            del self.overaly_deviceid_to_tableid[(overlay_name, deviceid)]
+            del self.overaly_deviceid_to_tableid[(overlay_name)]
             # Mark the table ID as reusable
             self.reusable_tableids.add(tableid)
             # Return the table ID
