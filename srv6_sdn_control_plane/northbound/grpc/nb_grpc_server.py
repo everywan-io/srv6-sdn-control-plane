@@ -37,7 +37,7 @@ from socket import AF_UNSPEC
 from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
-from ipaddress import IPv6Interface
+from ipaddress import IPv6Interface, IPv4Interface
 import itertools
 
 
@@ -121,6 +121,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
     """gRPC request handler"""
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 srv6_manager=None,
                  topo_graph=None, tunnels_dict=None,
                  devices=None, verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
@@ -133,7 +134,108 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         self.tunnels_dict = tunnels_dict
         # Devices
         self.devices = devices
-
+        # SRv6 Manager
+        self.srv6_manager = srv6_manager
+        
+    def ConfigureDevice(self, request, context):
+        logger.debug('ConfigureDevice request received: %s' % request)
+        logger.info('CreateVPN request received:\n%s', request)
+        # Extract the configurations from the request message
+        for device in request.configuration.devices:
+            logger.info('Processing the configuration:\n%s' % device)
+            # Parameters extraction
+            #
+            # Extract the device ID from the configuration
+            device_id = device.id
+            # Extract the device name from the configuration
+            device_name = device.name
+            # Extract the device description from the configuration
+            device_description = device.description
+            # Extract the device interfaces from the configuration
+            interfaces = self.devices[device_id]['interfaces']
+            for interface in device.interfaces:
+                if len(interface.ipv4_addrs) > 0:
+                    addrs = list()
+                    nets = list()
+                    for addr in interfaces[interface.name]['ipv4_addrs']:
+                        addr = '%s/%s' % (addr['addr'], addr['netmask'])
+                        addrs.append(addr)
+                    response = self.srv6_manager.remove_many_ipaddr(
+                        self.devices[device_id]['mgmtip'], self.grpc_client_port, addrs=addrs,
+                        device=interface.name, family=AF_UNSPEC
+                    )
+                    if response != status_codes_pb2.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning(
+                            'Cannot remove the public addresses from the interface'
+                        )
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    interfaces[interface.name]['ipv4_addrs'] = list()
+                    # Add IP address to the interface
+                    for ipv4_addr in interface.ipv4_addrs:
+                        ip_addr = '%s/%s' % (ipv4_addr.addr, ipv4_addr.netmask)
+                        response = self.srv6_manager.create_ipaddr(
+                            self.devices[device_id]['mgmtip'], self.grpc_client_port, ip_addr=ip_addr,
+                            device=interface.name, family=AF_INET
+                        )
+                        if response != status_codes_pb2.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning(
+                                'Cannot assign the private VPN IP address to the interface'
+                            )
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    interfaces[interface.name]['ipv4_addrs'].append({
+                        'addr': ipv4_addr.addr,
+                        'netmask': ipv4_addr.netmask,
+                        'broadcast': ''
+                    })
+                if len(interface.ipv6_addrs) > 0:
+                    addrs = list()
+                    nets = list()
+                    for addr in interfaces[interface.name]['ipv6_addrs']:
+                        addr = '%s/%s' % (addr['addr'], addr['netmask'])
+                        addrs.append(addr)
+                        nets.append(str(IPv6Interface(addr).network))
+                    response = self.srv6_manager.remove_many_ipaddr(
+                        src_router, self.grpc_client_port, addrs=addrs, nets=nets,
+                        device=interface.name, family=AF_UNSPEC
+                    )
+                    if response != status_codes_pb2.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning(
+                            'Cannot remove the public addresses from the interface'
+                        )
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    interfaces[interface.name]['ipv6_addrs'] = list()
+                    # Add IP address to the interface
+                    for ipv6_addr in interface.ipv6_addrs:
+                        ip_addr = '%s/%s' % (ipv6_addr.addr, ipv6_addr.netmask)
+                        net = IPv6Interface(ip_addr).network.__str__()
+                        response = self.srv6_manager.create_ipaddr(
+                            self.devices[device_id]['mgmtip'], self.grpc_client_port, ip_addr=ip_addr,
+                            device=interface.name, net=net, family=AF_INET6
+                        )
+                        if response != status_codes_pb2.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning(
+                                'Cannot assign the private VPN IP address to the interface'
+                            )
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        interfaces[interface.name]['ipv6_addrs'].append({
+                            'addr': ip_addr.addr,
+                            'netmask': ip_addr.netmask,
+                            'broadcast': ''
+                        })
+                if interface.type != '':
+                    interfaces[interface.name]['type'] = interface.type
+            if device_name != '':
+                self.devices[device_id]['name'] = device_name
+            if device_description != '':
+                self.devices[device_id]['description'] = device_description
+            self.devices[device_id]['status'] = nb_grpc_utils.DeviceStatus.RUNNING
+        logger.info('The device configuration has been saved\n\n')
+        # Create the response
+        return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def GetDeviceInformation(self, request, context):
         logger.debug('GetDeviceInformation request received')
@@ -193,7 +295,19 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                     ipv6_addr.broadcast = addr['broadcast']
                     ipv6_addr.netmask = addr['netmask']
                     ipv6_addr.addr = addr['addr']
-            device.mgmtip = device_info.get('mgmtip')
+                interface.type = ifinfo['type']
+            mgmtip = device_info.get('mgmtip')
+            status = device_info.get('status')
+            name = device_info.get('name')
+            description = device_info.get('description')
+            if mgmtip is not None:
+                device.mgmtip = mgmtip
+            if status is not None:
+                device.status = status
+            if name is not None:
+                device.name = name
+            if description is not None:
+                device.description = description
         # Return the response
         logger.debug('Sending response:\n%s' % response)
         return response
@@ -285,6 +399,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
     """gRPC request handler"""
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
                  controller_state=None, verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
@@ -295,8 +410,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         self.southbound_interface = southbound_interface
         # VPN dict
         self.vpn_dict = controller_state.vpns
-        # Create SRv6 Manager
-        self.srv6_manager = sb_grpc_client.SRv6Manager()
+        # SRv6 Manager
+        self.srv6_manager = srv6_manager
         # Initialize controller state
         self.controller_state = controller_state
         # Initialize tunnel state
@@ -745,18 +860,20 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
         vpn_dict=vpn_dict,
         vpn_file=vpn_file
     )
+    # Create SRv6 Manager
+    srv6_manager = sb_grpc_client.SRv6Manager()
     # Setup gRPC server
     #
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
     srv6_vpn_pb2_grpc.add_SRv6VPNServicer_to_server(
         SRv6VPNManager(
-            grpc_client_port, southbound_interface, controller_state, verbose
+            grpc_client_port, srv6_manager, southbound_interface, controller_state, verbose
         ), grpc_server
     )
     inventory_service_pb2_grpc.add_InventoryServiceServicer_to_server(
         InventoryService(
-            grpc_client_port, topo_graph, vpn_dict, devices, verbose
+            grpc_client_port, srv6_manager, topo_graph, vpn_dict, devices, verbose
         ), grpc_server
     )
     # If secure mode is enabled, we need to create a secure endpoint

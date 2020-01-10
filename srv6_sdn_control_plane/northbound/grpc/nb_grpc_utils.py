@@ -65,6 +65,18 @@ from srv6_generators import SIDAllocator
 logger = logging.getLogger(__name__)
 
 
+class InterfaceType:
+    UNKNOWN = 'unknown'
+    WAN = 'wan'
+    LAN = 'lan'
+
+
+class DeviceStatus:
+    NOT_CONNECTED = 'Not Connected'
+    CONNECTED = 'Connected'
+    RUNNING = 'Running'
+
+
 class VTEPIPv6NetAllocator:
 
   bit = 16
@@ -814,12 +826,22 @@ class ControllerState:
         #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['interfaces']['lo']['addr']
 
+    # Get random router interface
+    def get_wan_interface(self, routerid):
+        #routerid = int(IPv4Address(routerid))
+        interfaces = self.devices[routerid]['interfaces']
+        for ifname, ifinfo in interfaces.items():
+            # Skip loopback interfaces
+            if ifinfo['type'] == InterfaceType.WAN:
+                return ifname
+        # No non-loopback interfaces
+        return None
 
     # Get random router interface
     def get_non_loopback_interface(self, routerid):
         #routerid = int(IPv4Address(routerid))
         interfaces = self.devices[routerid]['interfaces']
-        for interface in iter(interfaces):
+        for interface in interfaces.values():
             # Skip loopback interfaces
             if interface != 'lo':
                 return interface

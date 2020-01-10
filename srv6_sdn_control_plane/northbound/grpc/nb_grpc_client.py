@@ -125,6 +125,40 @@ class InventoryService:
             channel = grpc.insecure_channel(ip_address)
         return inventory_service_pb2_grpc.InventoryServiceStub(channel), channel
 
+    def configure_device(self, server_ip, server_port, device_id, device_name='', device_description='', interfaces=[]):
+        # Create the request
+        request = inventory_service_pb2.ConfigureDeviceRequest()
+        device = request.configuration.devices.add()
+        device.id = device_id
+        device.name = device_name
+        device.description = device_description
+        for _interface in interfaces:
+            interface = device.interfaces.add()
+            interface.name = _interface['name']
+            for ip_addr in _interface['addrs']:
+                addr = ip_addr.split('/')[0]
+                netmask = ip_addr.split('/')[1]
+                family = nb_grpc_utils.getAddressFamily(addr)
+                if family == AF_INET:
+                    ipv4_addr = interface.ipv4_addrs.add()
+                    ipv4_addr.addr = addr
+                    ipv4_addr.netmask = netmask
+                elif family == AF_INET6:
+                    ipv6_addr = interface.ipv6_addrs.add()
+                    ipv6_addr.addr = addr
+                    ipv6_addr.netmask = netmask
+                else:
+                    print('Provided an invalid address: %s' % addr)
+                    return None
+            interface.type = _interface['type']
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        # Configure the devices
+        response = inventory_service_stub.ConfigureDevice(request)
+        # Let's close the session
+        channel.close()
+        # Return
+        return response.status
 
     def get_device_information(self, server_ip, server_port):
         # Create the request
@@ -147,6 +181,12 @@ class InventoryService:
                     device_id = text_type(device.id)
                 if device.mgmtip is not None:
                     mgmtip = text_type(device.mgmtip)
+                if device.name is not None:
+                    device_name = text_type(device.name)
+                if device.description is not None:
+                    device_description = text_type(device.description)
+                if device.status is not None:
+                    device_status = text_type(device.status)
                 '''
                 if device.loopbackip is not None:
                     loopbackip = text_type(device.loopbackip)
@@ -172,6 +212,7 @@ class InventoryService:
                 if device.interfaces is not None:
                     for intf in device.interfaces:
                         ifname = intf.name
+                        type = intf.type
                         mac_addrs = list()
                         for mac_addr in intf.mac_addrs:
                             mac_addrs.append({
@@ -195,7 +236,8 @@ class InventoryService:
                         interfaces[ifname] = {
                             'mac_addrs': mac_addrs,
                             'ipv4_addrs': ipv4_addrs,
-                            'ipv6_addrs': ipv6_addrs
+                            'ipv6_addrs': ipv6_addrs,
+                            'type': type
                         }
                 devices.append({
                     'device_id': device_id,
@@ -203,7 +245,10 @@ class InventoryService:
                     'loopbacknet': loopbacknet,
                     'managementip': managementip,
                     'interfaces': interfaces,
-                    'mgmtip': mgmtip
+                    'mgmtip': mgmtip,
+                    'name': device_name,
+                    'description': device_description,
+                    'status': device_status
                 })
         else:
             devices = None
