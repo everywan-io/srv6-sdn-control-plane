@@ -578,7 +578,13 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Remove the VPN
-            tunnel_mode.remove_overlay_net(vpn_name, tenantid, tunnel_info)
+            #tunnel_mode.remove_overlay_net(vpn_name, tenantid, tunnel_info)
+            for site1, site2 in itertools.combinations(interfaces, 2):
+                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site1, tenantid, tunnel_info)
+                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site2, tenantid, tunnel_info)
+                tunnel_mode.remove_tunnel(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
+                #self.vpn_sites[vpn_name].remove(site1)
+                #self.vpn_sites[vpn_name].remove(site2)
             
             del self.vpn_sites[vpn_name]
         # Save the VPNs dump to file
@@ -793,13 +799,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_modes
             # Remove the site from the overlay
             #tunnel_mode.remove_site_from_overlay(vpn_name, tenantid, tunnel_info)
-            
-            
+
+            for site in interfaces:
+                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site, tenantid, tunnel_info)
+                            
             for site1 in interfaces:
-                for site2 in self.vpn_sites:
-                    tunnel_mode.remove_site_from_overlay(vpn_name, vpn_type, tenantid, site1, site2, tunnel_info)
+                for site2 in self.vpn_sites.copy():
+                    tunnel_mode.remove_tunnel(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                     self.vpn_sites[vpn_name].remove(site1)
-                    self.vpn_sites[vpn_name].remove(site2)
             
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
