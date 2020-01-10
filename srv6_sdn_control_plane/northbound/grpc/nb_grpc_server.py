@@ -348,6 +348,8 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         for _tunnel in self.tunnels_dict.values():
             # Add a new tunnel to the tunnels list
             tunnel = response.tunnel_information.tunnels.add()
+            # Set tunnel ID
+            tunnel.id = _tunnel.id
             # Set name
             tunnel.name = _tunnel.vpn_name
             # Set interfaces
@@ -437,6 +439,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             vpn_name = intent.vpn_name
             # Get the VPN full name (i.e. tenantid-vpn_name)
             vpn_name = '%s-%s' % (tenantid, vpn_name)
+            # Tunnel ID
+            tunnel_id = vpn_name
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
@@ -540,7 +544,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 tunnel_mode.create_overlay(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                 self.vpn_sites[vpn_name].add(site1)
                 self.vpn_sites[vpn_name].add(site2)
-            self.controller_state.add_vpn(vpn_name, vpn_type, interfaces, tenantid, tunnel_mode)
+            self.controller_state.add_vpn(tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')

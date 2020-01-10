@@ -168,7 +168,9 @@ class VPNType:
     IPv6VPN = 2
 
 class VPN:
-    def __init__(self, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #tableid=-1):
+    def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #tableid=-1):
+        # Tunnel ID
+        self.id = tunnel_id
         # VPN name
         self.vpn_name = vpn_name
         # VPN type
@@ -849,12 +851,12 @@ class ControllerState:
         return None
 
     # Add a VPN to the controller state
-    def add_vpn(self, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #, tableid):
+    def add_vpn(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #, tableid):
         # If the VPN already exists, return False
         if vpn_name in self.vpns:
             return False
         # Add the VPN to the VPNs dict
-        self.vpns[vpn_name] = VPN(vpn_name, vpn_type, interfaces, tenantid, tunnel_mode) #, tableid)
+        self.vpns[vpn_name] = VPN(tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode) #, tableid)
         # Success, return True
         return True
 

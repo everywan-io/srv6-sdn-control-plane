@@ -291,6 +291,7 @@ class InventoryService:
             # Parse response and retrieve tunnel information
             tunnels = list()
             for tunnel in response.tunnel_information.tunnels:
+                id = tunnel.id
                 name = tunnel.name
                 type = tunnel.type if tunnel.type is not None else None
                 tunnel_mode = tunnel.mode if tunnel.mode is not None else None
@@ -317,6 +318,7 @@ class InventoryService:
                         'subnets': subnets
                     })
                 tunnels.append({
+                    'id': id,
                     'name': name,
                     'type': type,
                     'interfaces': tunnel_interfaces,
