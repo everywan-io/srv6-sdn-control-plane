@@ -349,7 +349,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         response = self.srv6_manager.update_interface(
             src_router, self.grpc_client_port, name=src_interface.interface_name, ospf_adv=False
         )
-        if response != status_codes_pb2.STATUS_SUCCESS:
+        if response == status_codes_pb2.STATUS_UNREACHABLE_OSPF6D:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot disable OSPF advertisements: ospf6d not running')
+        elif response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning('Cannot disable OSPF advertisements')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
@@ -425,7 +428,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         response = self.srv6_manager.update_interface(
             src_router, self.grpc_client_port, name=src_interface.interface_name, ospf_adv=True
         )
-        if response != status_codes_pb2.STATUS_SUCCESS:
+        if response == status_codes_pb2.STATUS_UNREACHABLE_OSPF6D:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot disable OSPF advertisements: ospf6d not running')
+        elif response != status_codes_pb2.STATUS_SUCCESS:
             # If the operation has failed, return an error message
             logger.warning('Cannot enable OSPF advertisements: %s' % response)
             return status_codes_pb2.STATUS_INTERNAL_ERROR

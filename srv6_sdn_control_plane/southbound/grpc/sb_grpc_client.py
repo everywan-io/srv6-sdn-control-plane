@@ -685,7 +685,7 @@ class SRv6Manager:
                       ip_addr, device, net, family=AF_INET):
         print('Not yet implemented')
 
-    def remove_ipaddr(self, server_ip, server_port, ip_addr, net, device, family=-1):
+    def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='', family=-1):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -709,8 +709,8 @@ class SRv6Manager:
         # Create the response
         return response.status
 
-    def remove_many_ipaddr(self, server_ip, server_port, addrs, nets,
-                           device, family=-1):
+    def remove_many_ipaddr(self, server_ip, server_port, addrs,
+                           device, nets=[], family=-1):
         # Get the reference of the stub
         srv6_stub, channel = (self
                               .get_grpc_session(server_ip, server_port, self.SECURE))
@@ -719,6 +719,12 @@ class SRv6Manager:
         # Set the type of the carried entity
         srv6_request.entity_type = srv6_manager_pb2.IPAddr
         # Create a new interface request
+        if len(nets) == 0:
+            for _ in addrs:
+                nets.append('')
+        elif len(addrs) != len(nets):
+            print('Mismatching addrs and nets')
+            return None
         addr_request = srv6_request.ipaddr_request
         for (ip_addr, net) in zip(addrs, nets):
             # Create a new route
