@@ -81,6 +81,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if id_local_site != id_remote_side:
                 #site does not belong to the new overlay
                 if vni not in self.controller_state_vxlan.dev_to_vni[id_local_site]:
+                        
                         #crete VTEP interface
                         self.srv6_manager.createVxLAN(
                                 mgmt_ip_local_site, self.grpc_client_port,
@@ -89,6 +90,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 vxlan_id=vni,
                                 vxlan_port=vxlan_port_local_site
                             )
+                        self.controller_state_vxlan.dev_to_vni[id_local_site][vni] = set()
                         
                         #add fdb entry 
                         self.srv6_manager.addfdbentries(
@@ -99,20 +101,39 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     
                         #set vtep ip address
                         self.srv6_manager.create_ipaddr(mgmt_ip_local_site, self.grpc_client_port, ip_addr=vtep_ip_local_site, device=vtep_name, net='')
+                        
                         #create vrf 
-                        self.srv6_manager.create_vrf_device(
-                                mgmt_ip_local_site, self.grpc_client_port,
-                                name=vrf_name, table=tableid, interfaces=[lan_intf_local_site, vtep_name]
-                            )
+                        if vrf_name not in self.controller_state_vxlan.vrfinterfaces[id_local_site]:
+                                self.srv6_manager.create_vrf_device(
+                                        mgmt_ip_local_site, self.grpc_client_port,
+                                        name=vrf_name, table=tableid, interfaces=[vtep_name]
+                                     )
+                                self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name] = set()
+                        else:
+                                self.srv6_manager.update_vrf_device(
+                                            mgmt_ip_local_site, self.grpc_client_port,
+                                            name=vrf_name,
+                                            interfaces=[vtep_name],
+                                            op='add_interfaces'
+                                    )
+                        
+                                    
+                        if lan_intf_local_site not in self.controller_state_vxlan.dev_to_vni[id_local_site][vni]:
+                                self.srv6_manager.update_vrf_device(
+                                    mgmt_ip_local_site, self.grpc_client_port,
+                                    name=vrf_name,
+                                    interfaces=[lan_intf_local_site],
+                                    op='add_interfaces'
+                                )
+                                self.controller_state_vxlan.dev_to_vni[id_local_site][vni].add(lan_intf_local_site)
+                                self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name].add(lan_intf_local_site)
+
                         #set route 
                         self.srv6_manager.create_iproute(mgmt_ip_local_site, self.grpc_client_port,
                                 destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split("/")[0],
                                 table=tableid
                             )
-                        self.controller_state_vxlan.dev_to_vni[id_local_site][vni] = set()
-                        self.controller_state_vxlan.dev_to_vni[id_local_site][vni].add(lan_intf_local_site)
-                        self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name] = set()
-                        self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name].add(lan_intf_local_site)
+
                 # site aleady partecipate to this overlay, necessary just to update fdb and set the route for the new site             
                 else: 
                         #add new fdb entry
@@ -126,14 +147,14 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 self.srv6_manager.update_vrf_device(
                                     mgmt_ip_local_site, self.grpc_client_port,
                                     name=vrf_name,
-                                    interfaces=[lan_intf_local_site]
+                                    interfaces=[lan_intf_local_site],
+                                    op='add_interfaces'
                                 )
                                 self.controller_state_vxlan.dev_to_vni[id_local_site][vni] = set()
-                                self.controller_state_vxlan.dev_to_vni[id_local_site][vni].add(lan_intf_local_site)
                                 self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name] = set()
+                                self.controller_state_vxlan.dev_to_vni[id_local_site][vni].add(lan_intf_local_site)
                                 self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name].add(lan_intf_local_site)
                                 
-
                         #set new route 
                         self.srv6_manager.create_iproute(mgmt_ip_local_site, self.grpc_client_port,
                                 destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split("/")[0],
@@ -154,8 +175,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     self.srv6_manager.update_vrf_device(
                                 mgmt_ip_local_site, self.grpc_client_port,
                                 name=vrf_name,
-                                interfaces=[lan_intf_local_site]
-                        )
+                                interfaces=[lan_intf_local_site],
+                                op='add_interfaces'
+                        )   
                 self.controller_state_vxlan.vrfinterfaces[id_local_site][vrf_name].add(lan_intf_local_site)
 
                            
