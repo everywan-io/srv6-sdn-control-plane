@@ -583,9 +583,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Remove the VPN
             #tunnel_mode.remove_overlay_net(vpn_name, tenantid, tunnel_info)
-            for site1, site2 in itertools.combinations(interfaces, 2):
-                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site1, tenantid, tunnel_info)
-                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site2, tenantid, tunnel_info)
+            vpn_type = self.controller_state.get_vpn_type(vpn_name)
+
+            for site in self.vpn_sites[vpn_name]:
+                tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site, tenantid, tunnel_info)
+
+            for site1, site2 in itertools.combinations(self.vpn_sites[vpn_name], 2):
                 tunnel_mode.remove_tunnel(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
                 #self.vpn_sites[vpn_name].remove(site1)
                 #self.vpn_sites[vpn_name].remove(site2)
@@ -802,14 +805,16 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_modes
             # Remove the site from the overlay
             #tunnel_mode.remove_site_from_overlay(vpn_name, tenantid, tunnel_info)
-
+            
+            vpn_type = self.controller_state.get_vpn_type(vpn_name)
+            
             for site in interfaces:
                 tunnel_mode.remove_slice_from_overlay(vpn_name, vpn_type, site, tenantid, tunnel_info)
                             
             for site1 in interfaces:
                 for site2 in self.vpn_sites.copy():
                     tunnel_mode.remove_tunnel(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
-                    self.vpn_sites[vpn_name].remove(site1)
+                self.vpn_sites[vpn_name].remove(site1)
             
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
