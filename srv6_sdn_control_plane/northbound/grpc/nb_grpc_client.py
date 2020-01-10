@@ -445,22 +445,23 @@ class SRv6VPNManager:
         return response.status
 
 
-    def assign_interface_to_vpn(self, server_ip, server_port, vpn_name, tenantid, intf):
+    def assign_interface_to_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
         intent.vpn_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
-        interface = intent.interfaces.add()
-        interface.routerid = text_type(intf[0])
-        interface.interface_name = text_type(intf[1])
-        interface.interface_ip = text_type(intf[2])
-        for subnet in intf[3]:
-            interface.subnets.append(text_type(subnet))
+        for intf in interfaces:
+            interface = intent.interfaces.add()
+            interface.routerid = text_type(intf[0])
+            interface.interface_name = text_type(intf[1])
+            interface.interface_ip = text_type(intf[2])
+            for subnet in intf[3]:
+                interface.subnets.append(text_type(subnet))
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
-        response = srv6_stub.AssignInterfaceToVPN(intent)
+        response = srv6_stub.AssignInterfaceToVPN(request)
         # Let's close the session
         channel.close()
         # Return

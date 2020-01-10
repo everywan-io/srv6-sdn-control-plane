@@ -608,9 +608,9 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Parameters extraction
             #
             # Extract the VPN tenant ID from the intent
-            tenantid = intent.tenantid
+            tenantid = int(intent.tenantid)
             # Extract the VPN name from the intent
-            vpn_name = str(intent.vpn_name)
+            vpn_name = intent.vpn_name
             # Get the VPN full name (i.e. tenantid-vpn_name)
             vpn_name = '%s-%s' % (tenantid, vpn_name)
             # Extract the interfaces
@@ -631,10 +631,10 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             #
             # Let's check if the VPN exists
             logger.debug('Checking the VPN:\n%s' % vpn_name)
-            if not self.controller_state.vpn_exists(vpn_name):
-                # If the VPN already exists, return an error message
-                logger.warning('The VPN %s does not exist' % vpn_name)
-                return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
+            #if not self.controller_state.vpn_exists(vpn_name):
+            #    # If the VPN already exists, return an error message
+            #    logger.warning('The VPN %s does not exist' % vpn_name)
+            #    return srv6_vpn_pb2.SRv6VPNReply(status=status_codes_pb2.STATUS_VPN_NOTFOUND)
             # Iterate on the interfaces and extract the interfaces to be assigned
             # to the VPN and validate them
             for interface in interfaces:
@@ -707,10 +707,9 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             #tunnel_mode.add_site_to_overlay(vpn_name, tenantid, tunnel_info)
             
             for site1 in interfaces:
-                for site2 in self.vpn_sites:
+                for site2 in self.vpn_sites[vpn_name]:
                     tunnel_mode.create_overlay(vpn_name, vpn_type, site1, site2, tenantid, tunnel_info)
-                    self.vpn_sites[vpn_name].add(site1)
-                    self.vpn_sites[vpn_name].add(site2)
+                self.vpn_sites[vpn_name].add(site1)
                 
                 
             # Save the VPNs dump to file

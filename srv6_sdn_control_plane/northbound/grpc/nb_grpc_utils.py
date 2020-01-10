@@ -892,10 +892,10 @@ class ControllerState:
         return True
 
     # Return VPN type
-    #def get_vpn_type(self, vpn_name):
-    #    if vpn_name not in self.vpns:
-    #        return None
-    #    return self.vpns[vpn_name].vpn_type
+    def get_vpn_type(self, vpn_name):
+        if vpn_name not in self.vpns:
+            return None
+        return self.vpns[vpn_name].vpn_type
 
     # Return VPN type
     #def get_vpn_tableid(self, vpn_name):
