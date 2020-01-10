@@ -467,15 +467,16 @@ class SRv6VPNManager:
         return response.status
 
 
-    def remove_interface_from_vpn(self, server_ip, server_port, vpn_name, tenantid, intf):
+    def remove_interface_from_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
         intent = request.intents.add()
         intent.vpn_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
-        interface = intent.interfaces.add()
-        interface.routerid = text_type(intf[0])
-        interface.interface_name = text_type(intf[1])
+        for intf in interfaces:
+            interface = intent.interfaces.add()
+            interface.routerid = text_type(intf[0])
+            interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
