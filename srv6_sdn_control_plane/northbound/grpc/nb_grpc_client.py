@@ -35,11 +35,11 @@ from socket import AF_INET, AF_INET6
 # Adjust relative paths
 #script_path = os.path.dirname(os.path.abspath(__file__))
 #GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
-#sys.path.append(GRPC_FOLDER)
+# sys.path.append(GRPC_FOLDER)
 from . import nb_grpc_utils
 
 # Add path of proto files
-#sys.path.append(nb_grpc_utils.PROTO_FOLDER)
+# sys.path.append(nb_grpc_utils.PROTO_FOLDER)
 
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
@@ -83,12 +83,12 @@ STR_TO_VPN_TYPE = {
 }
 
 
-#ENCAP = {
+# ENCAP = {
 #    'SRv6': srv6_vpn_pb2.SRv6,
 #    'IPsec_ESP_GRE': srv6_vpn_pb2.IPsec_ESP_GRE,
 #    'SRv6_IPsec_ESP_GRE': srv6_vpn_pb2.SRv6_IPsec_ESP_GRE,
 #    'SRv6_IPsec_ESP_IP': srv6_vpn_pb2.SRv6_IPsec_ESP_IP
-#}
+# }
 
 
 class InventoryService:
@@ -150,9 +150,19 @@ class InventoryService:
                 else:
                     print('Provided an invalid address: %s' % addr)
                     return None
+            for subnet in _interface['subnets']:
+                family = nb_grpc_utils.getAddressFamily(subnet)
+                if family == AF_INET:
+                    interface.ipv4_subnets.append(subnet)
+                elif family == AF_INET6:
+                    interface.ipv6_subnets.append(subnet)
+                else:
+                    print('Provided an invalid subnet: %s' % subnet)
+                    return None
             interface.type = _interface['type']
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Configure the devices
         response = inventory_service_stub.ConfigureDevice(request)
         # Let's close the session
@@ -164,7 +174,8 @@ class InventoryService:
         # Create the request
         request = inventory_service_pb2.InventoryServiceRequest()
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Get VPNs
         response = inventory_service_stub.GetDeviceInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -233,10 +244,14 @@ class InventoryService:
                                 'netmask': ipv6_addr.netmask,
                                 'addr': ipv6_addr.addr,
                             })
+                        ipv4_subnets = intf.ipv4_subnets
+                        ipv6_subnets = intf.ipv6_subnets
                         interfaces[ifname] = {
                             'mac_addrs': mac_addrs,
                             'ipv4_addrs': ipv4_addrs,
                             'ipv6_addrs': ipv6_addrs,
+                            'ipv4_subnets': ipv4_subnets,
+                            'ipv6_subnets': ipv6_subnets,
                             'type': type
                         }
                 devices.append({
@@ -256,12 +271,12 @@ class InventoryService:
         channel.close()
         return devices
 
-
     def get_topology_information(self, server_ip, server_port):
         # Create the request
         request = inventory_service_pb2.InventoryServiceRequest()
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Get VPNs
         response = inventory_service_stub.GetTopologyInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -272,19 +287,20 @@ class InventoryService:
             for router in response.topology_information.routers:
                 topology['routers'].append(text_type(router))
             for link in response.topology_information.links:
-                topology['links'].append((text_type(link.l_router), text_type(link.r_router)))
+                topology['links'].append(
+                    (text_type(link.l_router), text_type(link.r_router)))
         else:
             topology = None
         # Let's close the session
         channel.close()
         return topology
 
-
     def get_tunnel_information(self, server_ip, server_port):
         # Create the request
         request = inventory_service_pb2.InventoryServiceRequest()
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Get VPNs
         response = inventory_service_stub.GetTunnelInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -300,22 +316,13 @@ class InventoryService:
                 for interface in tunnel.interfaces:
                     routerid = None
                     interface_name = None
-                    interface_ip = None
                     if interface.routerid is not None:
                         routerid = text_type(interface.routerid)
                     if interface.interface_name is not None:
                         interface_name = text_type(interface.interface_name)
-                    if interface.interface_ip is not None:
-                        interface_ip = text_type(interface.interface_ip)
-                    if interface.subnets is not None:
-                        subnets = list()
-                        for subnet in interface.subnets:
-                            subnets.append(text_type(subnet))
                     tunnel_interfaces.append({
                         'deviceid': routerid,
-                        'interface_name': interface_name,
-                        'interface_ip': interface_ip,
-                        'subnets': subnets
+                        'interface_name': interface_name
                     })
                 tunnels.append({
                     'id': id,
@@ -366,12 +373,12 @@ class SRv6VPNManager:
             channel = grpc.insecure_channel(ip_address)
         return srv6_vpn_pb2_grpc.SRv6VPNStub(channel), channel
 
-
     def get_vpns(self, server_ip, server_port):
         # Create the request
         request = empty_req_pb2.EmptyRequest()
         # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Get VPNs
         response = srv6_stub.GetVPNs(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -382,13 +389,8 @@ class SRv6VPNManager:
                 tableid = int(vpn.tableid)
                 interfaces = list()
                 for intf in vpn.interfaces:
-                    subnets = list()
-                    for subnet in intf.subnets:
-                        subnets.append(text_type(subnet))
                     interfaces.append(Interface(text_type(intf.routerid),
-                                                text_type(intf.interface_name),
-                                                text_type(intf.interface_ip),
-                                                subnets))
+                                                text_type(intf.interface_name)))
                 vpns[vpn_name] = {
                     "tableid": tableid,
                     "interfaces": interfaces
@@ -399,8 +401,7 @@ class SRv6VPNManager:
         channel.close()
         return vpns
 
-
-    def create_vpn(self, server_ip, server_port, 
+    def create_vpn(self, server_ip, server_port,
                    name, type, interfaces, tenantid, encap='SRv6'):
         # Create the request
         request = srv6_vpn_pb2.SRv6VPNRequest()
@@ -410,7 +411,7 @@ class SRv6VPNManager:
         intent.tenantid = int(tenantid)
         #intent.encap = int(ENCAP.get(encap, None))
         intent.tunnel = encap
-        #if intent.encap is None:
+        # if intent.encap is None:
         if intent.tunnel is None:
             print('Invalid encap type')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
@@ -418,18 +419,15 @@ class SRv6VPNManager:
             interface = intent.interfaces.add()
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
-            interface.interface_ip = text_type(intf[2])
-            for subnet in intf[3]:
-                interface.subnets.append(text_type(subnet))
         # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Create the VPN
         response = srv6_stub.CreateVPN(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
-
 
     def remove_vpn(self, server_ip, server_port, vpn_name, tenantid):
         # Create the request
@@ -438,14 +436,14 @@ class SRv6VPNManager:
         intent.vpn_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
         # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Remove the VPN
         response = srv6_stub.RemoveVPN(intent)
         # Let's close the session
         channel.close()
         # Return
         return response.status
-
 
     def assign_interface_to_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
@@ -457,18 +455,15 @@ class SRv6VPNManager:
             interface = intent.interfaces.add()
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
-            interface.interface_ip = text_type(intf[2])
-            for subnet in intf[3]:
-                interface.subnets.append(text_type(subnet))
         # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
         response = srv6_stub.AssignInterfaceToVPN(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
-
 
     def remove_interface_from_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
@@ -481,14 +476,14 @@ class SRv6VPNManager:
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
         response = srv6_stub.RemoveInterfaceFromVPN(intent)
         # Let's close the session
         channel.close()
         # Return
         return response.status
-
 
     def print_vpns(self, server_ip, server_port):
         # Get VPNs
@@ -506,10 +501,7 @@ class SRv6VPNManager:
                 print("Table ID:", vpns[vpn]["tableid"])
                 print("Interfaces:")
                 for intf in vpns[vpn]["interfaces"]:
-                    subnets = list()
-                    for subnet in intf.subnets:
-                        subnets.append(subnet)
-                    print(intf.routerid, intf.interface_name, intf.interface_ip, subnets)
+                    print(intf.routerid, intf.interface_name)
                 print()
                 i += 1
         else:
@@ -643,8 +635,8 @@ if __name__ == '__main__':
                     '172.16.40.1/24', '172.16.40.0/24')
     tenantid = 10
     srv6_vpn_manager.assign_interface_to_vpn(controller_addr,
-                                          controller_port, name,
-                                          tenantid, if1)
+                                             controller_port, name,
+                                             tenantid, if1)
 
     # Remove interface
     name = 'research'

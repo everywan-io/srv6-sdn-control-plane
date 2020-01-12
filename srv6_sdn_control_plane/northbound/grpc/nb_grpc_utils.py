@@ -25,6 +25,7 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
+from srv6_generators import SIDAllocator
 from sshutil.cmd import SSHCommand
 import sys
 import logging
@@ -59,7 +60,6 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 WAIT_TOPOLOGY_INTERVAL = 1
 
 # SRv6 dependencies
-from srv6_generators import SIDAllocator
 
 # Logger reference
 logger = logging.getLogger(__name__)
@@ -79,32 +79,32 @@ class DeviceStatus:
 
 class VTEPIPv6NetAllocator:
 
-  bit = 16
-  net = u"fcfb::/%d" % bit
-  prefix = 64
+    bit = 16
+    net = u"fcfb::/%d" % bit
+    prefix = 64
 
-  def __init__(self): 
-    print("*** Calculating Available Mgmt Addresses")
-    self.hosts = (IPv6Network(self.net)).hosts()
-  
-  def nextVTEPAddress(self):
-    n_host = next(self.hosts)
-    return n_host.__str__()
+    def __init__(self):
+        print("*** Calculating Available Mgmt Addresses")
+        self.hosts = (IPv6Network(self.net)).hosts()
+
+    def nextVTEPAddress(self):
+        n_host = next(self.hosts)
+        return n_host.__str__()
 
 
 class VTEPIPv4NetAllocator:
 
-  bit = 8
-  net = u"10.0.0.0/%d" % bit
-  prefix = 16
+    bit = 8
+    net = u"10.0.0.0/%d" % bit
+    prefix = 16
 
-  def __init__(self): 
-    print("*** Calculating Available Mgmt Addresses")
-    self.vtepnet = (IPv4Network(self.net)).hosts()
-  
-  def nextVTEPAddress(self):
-    n_host = next(self.vtepnet)
-    return n_host.__str__()
+    def __init__(self):
+        print("*** Calculating Available Mgmt Addresses")
+        self.vtepnet = (IPv4Network(self.net)).hosts()
+
+    def nextVTEPAddress(self):
+        n_host = next(self.vtepnet)
+        return n_host.__str__()
 
 
 # Utiliy function to check if the provided table ID is valid
@@ -167,8 +167,10 @@ class VPNType:
     IPv4VPN = 1
     IPv6VPN = 2
 
+
 class VPN:
-    def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #tableid=-1):
+    # tableid=-1):
+    def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode):
         # Tunnel ID
         self.id = tunnel_id
         # VPN name
@@ -176,13 +178,14 @@ class VPN:
         # VPN type
         self.vpn_type = vpn_type
         # Interfaces belonging to the VPN
-        self.interfaces = dict()
-        for interface in interfaces:
-            routerid = interface.routerid
-            interface_name = interface.interface_name
-            if self.interfaces.get(routerid) is None:
-                self.interfaces[routerid] = dict()
-            self.interfaces[routerid][interface_name] = interface
+        self.interfaces = interfaces
+        #self.interfaces = dict()
+        # for interface in interfaces:
+        #    routerid = interface.routerid
+        #    interface_name = interface.interface_name
+        #    if self.interfaces.get(routerid) is None:
+        #        self.interfaces[routerid] = dict()
+        #    self.interfaces[routerid][interface_name] = interface
         # Tenant ID
         self.tenantid = tenantid
         # Table ID
@@ -207,15 +210,11 @@ class VPN:
 
 
 class Interface:
-    def __init__(self, routerid, interface_name, interface_ip=None, subnets=None):
+    def __init__(self, routerid, interface_name):
         # Router ID
         self.routerid = routerid
         # Interface name
         self.interface_name = interface_name
-        # Router IP
-        self.interface_ip = interface_ip
-        # VPN prefix
-        self.subnets = subnets
 
 
 # IPv6 utility functions
@@ -257,8 +256,8 @@ def del_ipv6_nd_prefix_quagga(router, intf, prefix):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-               'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def add_ipv6_nd_prefix_quagga(router, intf, prefix):
@@ -298,8 +297,8 @@ def add_ipv6_nd_prefix_quagga(router, intf, prefix):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-               'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def add_ipv6_address_quagga(router, intf, ip):
@@ -339,8 +338,8 @@ def add_ipv6_address_quagga(router, intf, ip):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-               'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def del_ipv6_address_quagga(router, intf, ip):
@@ -380,8 +379,8 @@ def del_ipv6_address_quagga(router, intf, ip):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-               'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def flush_ipv6_addresses_ssh(router, intf):
@@ -498,8 +497,8 @@ def add_ipv4_address_quagga(router, intf, ip):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-                    'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def del_ipv4_address_quagga(router, intf, ip):
@@ -539,8 +538,8 @@ def del_ipv4_address_quagga(router, intf, ip):
         # Close telnet
         tn.close()
     except socket.error:
-        print('Error: cannot establish a connection ' \
-                    'to %s on port %s' % (str(router), str(port)))
+        print('Error: cannot establish a connection '
+              'to %s on port %s' % (str(router), str(port)))
 
 
 def flush_ipv4_addresses_ssh(router, intf):
@@ -671,13 +670,17 @@ class ControllerState:
         # VPNs dict
         self.vpns = vpn_dict
         # Keep track of how many VPNs are installed in each router
-        self.num_vpn_installed_on_router = dict()
-        # Initiated tunnels
-        self.initiated_tunnels = set()
+        #self.num_vpn_installed_on_router = dict()
         # Number of tunneled interfaces
-        self.num_tunneled_interfaces = dict()
+        #self.num_tunneled_interfaces = dict()
         # Table ID allocator
         self.tableid_allocator = TableIDAllocator()
+
+        self.interfaces_in_overlay = dict()
+
+        # Initiated tunnels
+        #self.initiated_tunnels = dict()
+
         # If VPN dumping is enabled, import the VPNs from the dump
         '''
         if vpn_file is not None:
@@ -715,7 +718,7 @@ class ControllerState:
         else:
             # The router ID has not been found
             return False
-    
+
     '''
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
@@ -784,6 +787,13 @@ class ControllerState:
         #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]['addr']
 
+    # Get router's loopback IP address
+    def get_loopbacknet(self, routerid):
+        #routerid = int(IPv4Address(routerid))
+        loopbackip = self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]
+        loopbackip = '%s/%s' % (loopbackip['addr'], loopbackip['netmask'])
+        return IPv6Interface(loopbackip).network.__str__()
+
     '''
     # Get router's loopback IP address
     def get_loopbackip(self, routerid):
@@ -845,20 +855,10 @@ class ControllerState:
         interfaces = self.devices[routerid]['interfaces']
         for interface in interfaces.values():
             # Skip loopback interfaces
-            if interface != 'lo':
-                return interface
+            if interface['name'] != 'lo':
+                return interface['name']
         # No non-loopback interfaces
         return None
-
-    # Add a VPN to the controller state
-    def add_vpn(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode): #, tableid):
-        # If the VPN already exists, return False
-        if vpn_name in self.vpns:
-            return False
-        # Add the VPN to the VPNs dict
-        self.vpns[vpn_name] = VPN(tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode) #, tableid)
-        # Success, return True
-        return True
 
     # Add a router to a VPN and increase the number of VPNs installed on a
     # router
@@ -900,18 +900,18 @@ class ControllerState:
         return self.vpns[vpn_name].vpn_type
 
     # Return VPN type
-    #def get_vpn_tableid(self, vpn_name):
+    # def get_vpn_tableid(self, vpn_name):
     #    print(self.vpns)
     #    if vpn_name not in self.vpns:
     #        return None
     #    return self.vpns[vpn_name].tableid
 
     # Return SID
-    #def get_sid(self, routerid, tableid):
+    # def get_sid(self, routerid, tableid):
     #    return self.sid_allocator.getSID(routerid, tableid)
 
     # Return SID
-    #def get_sid_family(self, routerid):
+    # def get_sid_family(self, routerid):
     #    return self.sid_allocator.getSIDFamily(routerid)
 
     # Return VPN interfaces
@@ -928,7 +928,7 @@ class ControllerState:
 
     # Return VPN interfaces
     def get_vpn_interface_names(self, vpn_name, routerid=None):
-        #if self.vpns.get(vpn_name) is None:
+        # if self.vpns.get(vpn_name) is None:
         #    return None
         interfaces = set()
         if self.vpns.get(vpn_name) is None:
@@ -987,10 +987,21 @@ class ControllerState:
         for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
             ips.append('%s/%s' % (addr['addr'], addr['netmask']))
         return ips
+    
+    def get_ipv6_subnets_on_interface(self, routerid, interface_name):
+        return self.devices[routerid]['interfaces'][interface_name]['ipv6_subnets']
+    
+    def get_ipv4_subnets_on_interface(self, routerid, interface_name):
+        return self.devices[routerid]['interfaces'][interface_name]['ipv4_subnets']
+    
+    def get_subnets_on_interface(self, routerid, interface_name):
+        return self.get_ipv6_subnets_on_interface(routerid, interface_name) + \
+            self.get_ipv4_subnets_on_interface(routerid, interface_name)
 
     # Return the IP addresses associated to an interface
     def get_interface_ips(self, routerid, interface_name):
-        return self.get_interface_ipv4(routerid, interface_name) + self.get_interface_ipv6(routerid, interface_name)
+        return self.get_interface_ipv4(routerid, interface_name) + \
+            self.get_interface_ipv6(routerid, interface_name)
 
     # Return the VPNs
     def get_vpns(self):
@@ -1001,6 +1012,67 @@ class ControllerState:
         for routerid in self.vpns[vpn_name].interfaces:
             routers.add(routerid)
         return routers
+
+    def get_interfaces_in_vpn(self, vpn_name):
+        return self.vpns[vpn_name].interfaces
+
+    def add_tunnel_mode(self, tunnel_mode):
+        self.interfaces_in_overlay[tunnel_mode] = dict()
+
+    def init_tunnel_mode_on_device(self, tunnel_mode, deviceid):
+        self.interfaces_in_overlay[tunnel_mode][deviceid] = dict()
+
+    def destroy_tunnel_mode_on_device(self, tunnel_mode, deviceid):
+        del self.interfaces_in_overlay[tunnel_mode][deviceid]
+
+    def is_tunnel_mode_initiated_on_device(self, tunnel_mode, deviceid):
+        return deviceid in self.interfaces_in_overlay[tunnel_mode]
+
+    def init_overlay_on_device(self, tunnel_mode, deviceid, overlay_name):
+        self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name] = set()
+
+    def destroy_overlay_on_device(self, tunnel_mode, deviceid, overlay_name):
+        del self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name]
+        if len(self.interfaces_in_overlay[tunnel_mode][deviceid]) == 0:
+            del self.interfaces_in_overlay[tunnel_mode][deviceid]
+
+    def is_overlay_initiated_on_device(self, tunnel_mode, deviceid, overlay_name):
+        return overlay_name in self.interfaces_in_overlay[tunnel_mode][deviceid]
+
+    def add_interface_to_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
+        self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].add(
+            interface)
+
+    def remove_interface_from_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
+        self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].remove(
+            interface)
+        if len(self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name]) == 0:
+            del self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name]
+
+    def is_interface_in_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
+        return interface in self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name]
+
+    # Add a VPN to the controller state
+    # , tableid):
+    def add_vpn(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode):
+        # If the VPN already exists, return False
+        if vpn_name in self.vpns:
+            return False
+        # Add the VPN to the VPNs dict
+        self.vpns[vpn_name] = VPN(
+            tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode)  # , tableid)
+        # Success, return True
+        return True
+
+    # Add an interface to a VPN
+    def add_interface_to_vpn(self, vpn_name, interface):
+        self.vpns[vpn_name].interfaces.add(interface)
+
+    def remove_interface_from_vpn(self, vpn_name, interface):
+        self.vpns[vpn_name].interfaces.remove(interface)
+
+    def remove_vpn(self, vpn_name):
+        del self.vpns[vpn_name]
 
     # Create a dump of the VPNs
     def save_vpns_dump(self):
@@ -1034,7 +1106,7 @@ class ControllerState:
                     })
             # Add VPN to the mapping
             vpn_dump_dict['vpns'][vpn.vpn_name] = {
-                'vpn_name':vpn.vpn_name,
+                'vpn_name': vpn.vpn_name,
                 'tableid': vpn.tableid,
                 'tenantid': vpn.tenantid,
                 'interfaces': interfaces
@@ -1068,10 +1140,10 @@ class ControllerState:
                 interfaces = set()
                 for interface in vpn['interfaces']:
                     interface = Interface(
-                            interface['routerid'],
-                            interface['interface_name'],
-                            interface['interface_ip'],
-                            interface['vpn_prefix']
+                        interface['routerid'],
+                        interface['interface_name'],
+                        interface['interface_ip'],
+                        interface['vpn_prefix']
                     )
                     interfaces.add(interface)
                 # Tenant ID
@@ -1083,13 +1155,14 @@ class ControllerState:
                 # Table ID
                 tableid = vpn['tableid']
                 # Build VPN and add the VPN to the VPNs dict
-                self.vpns[vpn.vpn_name] = VPN(vpn_name, vpn_type, interfaces, tenantid) #, tableid)
+                self.vpns[vpn.vpn_name] = VPN(
+                    vpn_name, vpn_type, interfaces, tenantid)  # , tableid)
             # Process reusable table IDs
-            #for _id in vpn_dump_dict['reusable_tableids']:
+            # for _id in vpn_dump_dict['reusable_tableids']:
             #    self.tableid_allocator.reusable_tableids.add(int(_id))
             # Process table IDs
             #tableid_to_tenantid = vpn_dump_dict['tableid_to_tenantid']
-            #for tableid, tenantid in tableid_to_tenantid.items():
+            # for tableid, tenantid in tableid_to_tenantid.items():
             #    tableid = int(tableid)
             #    tenantid = int(tenantid)
             #    self.tableid_allocator.tableid_to_tenantid[tableid] = tenantid
@@ -1100,11 +1173,11 @@ class ControllerState:
             print('VPN file not found')
 
     # Get a new table ID
-    #def get_new_tableid(self, vpn_name, tenantid):
+    # def get_new_tableid(self, vpn_name, tenantid):
     #    return self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
 
     # Release a table ID
-    #def release_tableid(self, vpn_name):
+    # def release_tableid(self, vpn_name):
     #    return self.tableid_allocator.release_tableid(vpn_name)
 
     '''
@@ -1126,6 +1199,7 @@ class ControllerState:
         logger.info('The topology has been updated')
         return True
     '''
+
 
 '''
 # Update the topology from a JSON file

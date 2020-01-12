@@ -22,51 +22,14 @@
 # @author Stefano Salsano <stefano.salsano@uniroma2.it>
 #
 
-from __future__ import absolute_import, division, print_function
-
 # General imports
-from sshutil.cmd import SSHCommand
-import sys
+from __future__ import absolute_import, division, print_function
 import logging
-import telnetlib
-import socket
-import json
-import time
-import os
-import random
-from socket import AF_INET
-from socket import AF_INET6
 # ipaddress dependencies
-from ipaddress import IPv4Interface
 from ipaddress import IPv6Interface
-from ipaddress import AddressValueError
-# NetworkX dependencies
-import networkx as nx
-from networkx.readwrite import json_graph
+from ipaddress import IPv6Network
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
-
-
-################## Setup these variables ##################
-
-# Path of the proto files
-#PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
-
-###########################################################
-
-
-# Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
-
-# Check paths
-#if PROTO_FOLDER == '':
-#    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
-#    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
-#    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
-#          'points to a non existing folder\n')
-#    sys.exit(-2)
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -81,16 +44,37 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
 WAIT_TOPOLOGY_INTERVAL = 1
 
-# SRv6 dependencies
-from srv6_generators import SIDAllocator
-
 # Logger reference
 logger = logging.getLogger(__name__)
 
-class SRv6SpecificTunnelData:
-    def __init__(self, tableid=-1):
-        # Table ID
-        self.tableid = tableid
+
+class SIDAllocator(object):
+
+    # Address space for SIDs: fcff:xxxx:2:0/64
+    # (e.g. fcff:xxxx:0002:0000:0000:0002:0000:tttt)
+    # where 'xxxx' is the router id and tttt the vpn id
+
+    prefix = 64
+
+    def getSID(self, loopbackip, vpn_id):
+        # Generate the SID
+        prefix = int(IPv6Interface(loopbackip).ip)
+        sid = IPv6Network(prefix | 2 << 80 | vpn_id)
+        # Remove /128 mask and convert to string
+        sid = IPv6Interface(sid).ip.__str__()
+        # Return the SID
+        return sid
+
+    def getSIDFamily(self, loopbackip):
+        # Generate the SID
+        prefix = int(IPv6Interface(loopbackip).ip)
+        sidFamily = IPv6Network(prefix | 2 << 80)
+        # Append prefix /64
+        sidFamily = sidFamily.supernet(new_prefix=SIDAllocator.prefix)
+        # Convert to string
+        sidFamily = IPv6Interface(sidFamily).__str__()
+        # Return the SID
+        return sidFamily
 
 
 class ControllerStateSRv6:
@@ -112,10 +96,6 @@ class ControllerStateSRv6:
         # Sites in VPN
         self.sites_in_vpn = dict()
         # If VPN dumping is enabled, import the VPNs from the dump
-
-        self.ids = dict()
-        
-        self.last_id = 1
         '''
         if vpn_file is not None:
             try:
@@ -123,6 +103,8 @@ class ControllerStateSRv6:
             except:
                 print('Corrupted VPN file')
         '''
+        # Number of tunnels between a device and a slice
+        self.num_tunnels = dict()
 
     # Return VPN type
     def get_vpn_tableid(self, vpn_name):
@@ -133,19 +115,13 @@ class ControllerStateSRv6:
 
     # Return SID
     def get_sid(self, routerid, tableid):
-        if routerid not in self.ids:
-            self.ids[routerid] = self.last_id
-            self.last_id += 1
-        id = self.ids[routerid]
-        return self.sid_allocator.getSID(id, tableid)
+        loopbacknet = self.controller_state.get_loopbacknet(routerid)
+        return self.sid_allocator.getSID(loopbacknet, tableid)
 
     # Return SID
     def get_sid_family(self, routerid):
-        if routerid not in self.ids:
-            self.ids[routerid] = self.last_id
-            self.last_id += 1
-        id = self.ids[routerid]
-        return self.sid_allocator.getSIDFamily(id)
+        loopbacknet = self.controller_state.get_loopbacknet(routerid)
+        return self.sid_allocator.getSIDFamily(loopbacknet)
 
     # Get a new table ID
     def get_new_tableid(self, vpn_name, tenantid):
