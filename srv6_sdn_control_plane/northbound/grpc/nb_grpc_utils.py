@@ -978,7 +978,7 @@ class ControllerState:
     '''
     
     # Return true if the router is running
-    def is_router_running(self, routerid):
+    def is_device_running(self, routerid):
         return self.devices[routerid]['status'] == DeviceStatus.RUNNING
 
     # Return the IP addresses associated to an interface
