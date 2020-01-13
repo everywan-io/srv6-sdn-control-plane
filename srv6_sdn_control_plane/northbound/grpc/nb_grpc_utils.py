@@ -1031,8 +1031,8 @@ class ControllerState:
     def init_tunnel_mode_on_device(self, tunnel_mode, deviceid):
         self.interfaces_in_overlay[tunnel_mode][deviceid] = dict()
 
-    def destroy_tunnel_mode_on_device(self, tunnel_mode, deviceid):
-        self.interfaces_in_overlay[tunnel_mode].pop(deviceid, None)
+    #def destroy_tunnel_mode_on_device(self, tunnel_mode, deviceid):
+    #    self.interfaces_in_overlay[tunnel_mode].pop(deviceid, None)
 
     def is_tunnel_mode_initiated_on_device(self, tunnel_mode, deviceid):
         return deviceid in self.interfaces_in_overlay[tunnel_mode]
@@ -1041,7 +1041,7 @@ class ControllerState:
         self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name] = set()
 
     def destroy_overlay_on_device(self, tunnel_mode, deviceid, overlay_name):
-        self.interfaces_in_overlay[tunnel_mode][deviceid].pop(overlay_name, None)
+        #self.interfaces_in_overlay[tunnel_mode][deviceid].pop(overlay_name, None)
         if len(self.interfaces_in_overlay[tunnel_mode][deviceid]) == 0:
             del self.interfaces_in_overlay[tunnel_mode][deviceid]
 
