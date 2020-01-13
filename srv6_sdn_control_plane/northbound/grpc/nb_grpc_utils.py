@@ -194,18 +194,23 @@ class VPN:
         self.tunnel_mode = tunnel_mode
 
     def removeInterface(self, routerid, interface_name):
-        if self.interfaces.get(routerid) is not None \
-                and self.interfaces[routerid].get(interface_name):
-            del self.interfaces[routerid][interface_name]
-            return True
+        for interface in self.interfaces:
+            if interface.routerid == routerid and interface.interface_name == interface_name:
+                self.interfaces.remove(interface)
+                return True
         return False
 
     def numberOfInterfaces(self, routerid):
-        return len(self.interfaces.get(routerid, dict()))
+        num = 0
+        for interface in self.interfaces:
+            if interface.routerid == routerid:
+                num += 1
+        return num
 
     def getInterface(self, routerid, interface_name):
-        if self.interfaces.get(routerid) is not None:
-            return self.interfaces[routerid].get(interface_name, None)
+        for interface in self.interfaces:
+            if interface.routerid == routerid and interface.interface_name == interface_name:
+                return interface
         return None
 
 
@@ -764,21 +769,21 @@ class ControllerState:
 
     # Return True if the interface is assigned to the VPN, False otherwise
     def interface_in_vpn(self, routerid, interface_name, vpn_name):
-        if self.vpns.get(vpn_name) is not None \
-                and self.vpns[vpn_name].interfaces.get(routerid) is not None \
-                and self.vpns[vpn_name].interfaces[routerid].get(interface_name):
-            # The interface is assigned to the VPN
-            return True
+        if self.vpns.get(vpn_name) is not None:
+            for interface in self.vpns[vpn_name].interfaces:
+                if interface.routerid == routerid and interface.interface_name == interface_name:      
+                    # The interface is assigned to the VPN
+                    return True
         # The interface is not assigned to the VPN
         return False
 
     # Return True if the interface is assigned to any VPN, False otherwise
     def interface_in_any_vpn(self, routerid, ifname):
         for vpn_name in self.vpns:
-            interfaces = self.vpns[vpn_name].interfaces.get(routerid)
-            if interfaces is not None and interfaces.get(ifname) is not None:
-                # The interface is assigned to the VPN
-                return True
+            for interface in self.vpns[vpn_name].interfaces:
+                if interface.routerid == routerid and interface.interface_name == ifname:
+                    # The interface is assigned to the VPN
+                    return True
         # The interface is not assigned to the VPN
         return False
 
@@ -948,12 +953,12 @@ class ControllerState:
         )
 
     # Return VPN prefix assigned to an interface
-    def get_vpn_prefix(self, vpn_name, routerid, interface_name):
-        return self.vpns[vpn_name].interfaces[routerid][interface_name].vpn_prefix
+    #def get_vpn_prefix(self, vpn_name, routerid, interface_name):
+    #    return self.vpns[vpn_name].interfaces[routerid][interface_name].vpn_prefix
 
     # Return VPN prefix assigned to an interface
-    def get_vpn_interface_ip(self, vpn_name, routerid, interface_name):
-        return self.vpns[vpn_name].interfaces[routerid][interface_name].interface_ip
+    #def get_vpn_interface_ip(self, vpn_name, routerid, interface_name):
+    #    return self.vpns[vpn_name].interfaces[routerid][interface_name].interface_ip
 
     # Remove an interface from a VPN
     def remove_interface_from_vpn(self, routerid, interface_name, vpn_name):
