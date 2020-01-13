@@ -87,6 +87,7 @@ VALIDATE_TOPO = False
 STATUS_INTF_NOTASSIGNED = status_codes_pb2.STATUS_INTF_NOTASSIGNED
 STATUS_INTF_NOTFOUND = status_codes_pb2.STATUS_INTF_NOTFOUND
 STATUS_ROUTER_NOTFOUND = status_codes_pb2.STATUS_ROUTER_NOTFOUND
+STATUS_ROUTER_NOTRUNNING = status_codes_pb2.STATUS_ROUTER_NOTRUNNING
 STATUS_SUCCESS = status_codes_pb2.STATUS_SUCCESS
 STATUS_VPN_INVALID_IP = status_codes_pb2.STATUS_VPN_INVALID_IP
 STATUS_VPN_INVALID_TYPE = status_codes_pb2.STATUS_VPN_INVALID_TYPE
@@ -443,6 +444,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 routerid = interface.routerid
                 # Extract the interface name
                 interface_name = interface.interface_name
+                # Check if the device is running
+                if not self.controller_state.is_device_running(routerid):
+                    logger.warning(
+                        'The device %s is not running' % routerid
+                    )
+                    # If the device is not running, return an error message
+                    return (srv6_vpn_pb2
+                            .SRv6VPNReply(status=STATUS_ROUTER_NOTRUNNING))
                 # Topology validation
                 if VALIDATE_TOPO:
                     # Let's check if the router exists
@@ -634,6 +643,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 routerid = interface.routerid
                 # Get interface name
                 interface_name = interface.interface_name
+                # Check if the device is running
+                if not self.controller_state.is_device_running(routerid):
+                    logger.warning(
+                        'The device %s is not running' % routerid
+                    )
+                    # If the device is not running, return an error message
+                    return (srv6_vpn_pb2
+                            .SRv6VPNReply(status=STATUS_ROUTER_NOTRUNNING))
                 # Topology validation
                 if VALIDATE_TOPO:
                     # Let's check if the router ID exists

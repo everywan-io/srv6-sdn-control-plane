@@ -976,6 +976,10 @@ class ControllerState:
                 return interface['ipaddr']
         return None
     '''
+    
+    # Return true if the router is running
+    def is_router_running(self, routerid):
+        return self.devices[routerid]['status'] == DeviceStatus.RUNNING
 
     # Return the IP addresses associated to an interface
     def get_interface_ipv4(self, routerid, interface_name):
