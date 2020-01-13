@@ -133,94 +133,110 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
             # Extract the device interfaces from the configuration
             interfaces = self.devices[device_id]['interfaces']
             for interface in device.interfaces:
-                if len(interface.ipv4_addrs) > 0:
-                    addrs = list()
-                    nets = list()
-                    for addr in interfaces[interface.name]['ipv4_addrs']:
-                        addr = '%s/%s' % (addr['addr'], addr['netmask'])
-                        addrs.append(addr)
-                    response = self.srv6_manager.remove_many_ipaddr(
-                        self.devices[device_id]['mgmtip'],
-                        self.grpc_client_port, addrs=addrs,
-                        device=interface.name, family=AF_UNSPEC
-                    )
-                    if response != STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove the public addresses '
-                            'from the interface'
-                        )
-                        return status_codes_pb2.STATUS_INTERNAL_ERROR
-                    interfaces[interface.name]['ipv4_addrs'] = list()
-                    # Add IP address to the interface
-                    for ipv4_addr in interface.ipv4_addrs:
-                        ip_addr = '%s/%s' % (ipv4_addr.addr, ipv4_addr.netmask)
-                        response = self.srv6_manager.create_ipaddr(
-                            self.devices[device_id]['mgmtip'],
-                            self.grpc_client_port, ip_addr=ip_addr,
-                            device=interface.name, family=AF_INET
-                        )
-                        if response != STATUS_SUCCESS:
-                            # If the operation has failed,
-                            # report an error message
-                            logger.warning(
-                                'Cannot assign the private VPN IP address '
-                                'to the interface'
-                            )
-                            return status_codes_pb2.STATUS_INTERNAL_ERROR
-                    interfaces[interface.name]['ipv4_addrs'].append({
-                        'addr': ipv4_addr.addr,
-                        'netmask': ipv4_addr.netmask,
-                        'broadcast': ''
-                    })
-                if len(interface.ipv6_addrs) > 0:
-                    addrs = list()
-                    nets = list()
-                    for addr in interfaces[interface.name]['ipv6_addrs']:
-                        addr = '%s/%s' % (addr['addr'], addr['netmask'])
-                        addrs.append(addr)
-                        nets.append(str(IPv6Interface(addr).network))
-                    response = self.srv6_manager.remove_many_ipaddr(
-                        self.devices[device_id]['mgmtip'],
-                        self.grpc_client_port, addrs=addrs,
-                        nets=nets, device=interface.name, family=AF_UNSPEC
-                    )
-                    if response != STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove the public addresses '
-                            'from the interface'
-                        )
-                        return status_codes_pb2.STATUS_INTERNAL_ERROR
-                    interfaces[interface.name]['ipv6_addrs'] = list()
-                    # Add IP address to the interface
-                    for ipv6_addr in interface.ipv6_addrs:
-                        ip_addr = '%s/%s' % (ipv6_addr.addr, ipv6_addr.netmask)
-                        net = IPv6Interface(ip_addr).network.__str__()
-                        response = self.srv6_manager.create_ipaddr(
-                            self.devices[device_id]['mgmtip'],
-                            self.grpc_client_port, ip_addr=ip_addr,
-                            device=interface.name, net=net, family=AF_INET6
-                        )
-                        if response != STATUS_SUCCESS:
-                            # If the operation has failed,
-                            # report an error message
-                            logger.warning(
-                                'Cannot assign the private VPN IP address '
-                                'to the interface'
-                            )
-                            return status_codes_pb2.STATUS_INTERNAL_ERROR
-                        interfaces[interface.name]['ipv6_addrs'].append({
-                            'addr': ipv6_addr.addr,
-                            'netmask': ipv6_addr.netmask,
-                            'broadcast': ''
-                        })
-                for subnet in interface.ipv4_subnets:
-                    interfaces[interface.name]['ipv4_subnets'].append(subnet)
-                for subnet in interface.ipv6_subnets:
-                    interfaces[interface.name]['ipv6_subnets'].append(subnet)
                 if interface.type != '':
                     interfaces[interface.name]['type'] = interface.type
+                if interface.type == nb_grpc_utils.InterfaceType.WAN:
+                    if len(interface.ipv4_addrs) > 0 or \
+                            len(interface.ipv6_addrs) > 0:
+                        logger.warning(
+                            'Cannot set IP addrs for a WAN interface')
+                    if len(interface.ipv4_subnets) > 0 or \
+                            len(interface.ipv6_subnets) > 0:
+                        logger.warning(
+                            'Cannot set subnets for a WAN interface')
+                else:
+                    if len(interface.ipv4_addrs) > 0:
+                        addrs = list()
+                        nets = list()
+                        for addr in interfaces[interface.name]['ipv4_addrs']:
+                            addr = '%s/%s' % (addr['addr'], addr['netmask'])
+                            addrs.append(addr)
+                        response = self.srv6_manager.remove_many_ipaddr(
+                            self.devices[device_id]['mgmtip'],
+                            self.grpc_client_port, addrs=addrs,
+                            device=interface.name, family=AF_UNSPEC
+                        )
+                        if response != STATUS_SUCCESS:
+                            # If the operation has failed,
+                            # report an error message
+                            logger.warning(
+                                'Cannot remove the public addresses '
+                                'from the interface'
+                            )
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        interfaces[interface.name]['ipv4_addrs'] = list()
+                        # Add IP address to the interface
+                        for ipv4_addr in interface.ipv4_addrs:
+                            ip_addr = '%s/%s' % (ipv4_addr.addr,
+                                                 ipv4_addr.netmask)
+                            response = self.srv6_manager.create_ipaddr(
+                                self.devices[device_id]['mgmtip'],
+                                self.grpc_client_port, ip_addr=ip_addr,
+                                device=interface.name, family=AF_INET
+                            )
+                            if response != STATUS_SUCCESS:
+                                # If the operation has failed,
+                                # report an error message
+                                logger.warning(
+                                    'Cannot assign the private VPN IP address '
+                                    'to the interface'
+                                )
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        interfaces[interface.name]['ipv4_addrs'].append({
+                            'addr': ipv4_addr.addr,
+                            'netmask': ipv4_addr.netmask,
+                            'broadcast': ''
+                        })
+                    if len(interface.ipv6_addrs) > 0:
+                        addrs = list()
+                        nets = list()
+                        for addr in interfaces[interface.name]['ipv6_addrs']:
+                            addr = '%s/%s' % (addr['addr'], addr['netmask'])
+                            addrs.append(addr)
+                            nets.append(str(IPv6Interface(addr).network))
+                        response = self.srv6_manager.remove_many_ipaddr(
+                            self.devices[device_id]['mgmtip'],
+                            self.grpc_client_port, addrs=addrs,
+                            nets=nets, device=interface.name, family=AF_UNSPEC
+                        )
+                        if response != STATUS_SUCCESS:
+                            # If the operation has failed,
+                            # report an error message
+                            logger.warning(
+                                'Cannot remove the public addresses '
+                                'from the interface'
+                            )
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        interfaces[interface.name]['ipv6_addrs'] = list()
+                        # Add IP address to the interface
+                        for ipv6_addr in interface.ipv6_addrs:
+                            ip_addr = '%s/%s' % (ipv6_addr.addr,
+                                                 ipv6_addr.netmask)
+                            net = IPv6Interface(ip_addr).network.__str__()
+                            response = self.srv6_manager.create_ipaddr(
+                                self.devices[device_id]['mgmtip'],
+                                self.grpc_client_port, ip_addr=ip_addr,
+                                device=interface.name, net=net, family=AF_INET6
+                            )
+                            if response != STATUS_SUCCESS:
+                                # If the operation has failed,
+                                # report an error message
+                                logger.warning(
+                                    'Cannot assign the private VPN IP address '
+                                    'to the interface'
+                                )
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            interfaces[interface.name]['ipv6_addrs'].append({
+                                'addr': ipv6_addr.addr,
+                                'netmask': ipv6_addr.netmask,
+                                'broadcast': ''
+                            })
+                    for subnet in interface.ipv4_subnets:
+                        interfaces[interface.name]['ipv4_subnets'].append(
+                            subnet)
+                    for subnet in interface.ipv6_subnets:
+                        interfaces[interface.name]['ipv6_subnets'].append(
+                            subnet)
             if device_name != '':
                 self.devices[device_id]['name'] = device_name
             if device_description != '':
@@ -655,6 +671,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             #
             # TODO fix id
             tunnel_id = vpn_name
+            # Get the overlay type
+            vpn_type = self.controller_state.get_vpn_type(vpn_name)
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Let's assign the interface to the VPN

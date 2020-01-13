@@ -135,31 +135,34 @@ class InventoryService:
         for _interface in interfaces:
             interface = device.interfaces.add()
             interface.name = _interface['name']
-            for ip_addr in _interface['addrs']:
-                addr = ip_addr.split('/')[0]
-                netmask = ip_addr.split('/')[1]
-                family = nb_grpc_utils.getAddressFamily(addr)
-                if family == AF_INET:
-                    ipv4_addr = interface.ipv4_addrs.add()
-                    ipv4_addr.addr = addr
-                    ipv4_addr.netmask = netmask
-                elif family == AF_INET6:
-                    ipv6_addr = interface.ipv6_addrs.add()
-                    ipv6_addr.addr = addr
-                    ipv6_addr.netmask = netmask
-                else:
-                    print('Provided an invalid address: %s' % addr)
-                    return None
-            for subnet in _interface['subnets']:
-                family = nb_grpc_utils.getAddressFamily(subnet)
-                if family == AF_INET:
-                    interface.ipv4_subnets.append(subnet)
-                elif family == AF_INET6:
-                    interface.ipv6_subnets.append(subnet)
-                else:
-                    print('Provided an invalid subnet: %s' % subnet)
-                    return None
-            interface.type = _interface['type']
+            if 'addrs' in _interface:
+                for ip_addr in _interface['addrs']:
+                    addr = ip_addr.split('/')[0]
+                    netmask = ip_addr.split('/')[1]
+                    family = nb_grpc_utils.getAddressFamily(addr)
+                    if family == AF_INET:
+                        ipv4_addr = interface.ipv4_addrs.add()
+                        ipv4_addr.addr = addr
+                        ipv4_addr.netmask = netmask
+                    elif family == AF_INET6:
+                        ipv6_addr = interface.ipv6_addrs.add()
+                        ipv6_addr.addr = addr
+                        ipv6_addr.netmask = netmask
+                    else:
+                        print('Provided an invalid address: %s' % addr)
+                        return None
+            if 'subnets' in _interface:
+                for subnet in _interface['subnets']:
+                    family = nb_grpc_utils.getAddressFamily(subnet)
+                    if family == AF_INET:
+                        interface.ipv4_subnets.append(subnet)
+                    elif family == AF_INET6:
+                        interface.ipv6_subnets.append(subnet)
+                    else:
+                        print('Provided an invalid subnet: %s' % subnet)
+                        return None
+            if 'type' in _interface:
+                interface.type = _interface['type']
         # Get the reference of the stub
         inventory_service_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
