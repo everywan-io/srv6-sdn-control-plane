@@ -811,7 +811,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Get the interfaces belonging to the VPN
-            interfaces = self.controller_state.vpns[vpn_name].interfaces
+            #interfaces = self.controller_state.vpns[vpn_name].interfaces
             # Let's remove the interface from the VPN
             # Remove the tunnel between all the pairs of interfaces
             for site1 in interfaces:
