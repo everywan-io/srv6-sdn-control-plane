@@ -442,7 +442,7 @@ class SRv6VPNManager:
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Remove the VPN
-        response = srv6_stub.RemoveVPN(intent)
+        response = srv6_stub.RemoveVPN(request)
         # Let's close the session
         channel.close()
         # Return
@@ -482,7 +482,7 @@ class SRv6VPNManager:
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
-        response = srv6_stub.RemoveInterfaceFromVPN(intent)
+        response = srv6_stub.RemoveInterfaceFromVPN(request)
         # Let's close the session
         channel.close()
         # Return
