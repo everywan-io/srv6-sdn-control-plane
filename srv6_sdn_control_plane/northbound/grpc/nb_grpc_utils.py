@@ -1078,7 +1078,9 @@ class ControllerState:
         self.vpns[vpn_name].interfaces.add(interface)
 
     def remove_interface_from_vpn(self, vpn_name, interface):
-        self.vpns[vpn_name].interfaces.remove(interface)
+        for _interface in self.vpns[vpn_name].interfaces:
+            if interface.routerid == _interface.routerid and interface.interface_name == _interface.interface_name:
+                self.vpns[vpn_name].interfaces.remove(_interface)
 
     def remove_vpn(self, vpn_name):
         del self.vpns[vpn_name]
