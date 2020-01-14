@@ -44,7 +44,7 @@ from srv6_generators import SIDAllocator
 # Logger reference
 logger = logging.getLogger(__name__)
 
-RESERVED_VNI = [0]
+RESERVED_VNI = [0, 1]
 RESERVED_VTEP_IP = [0, 65536]
 
 class ControllerStateVXLAN:
@@ -63,13 +63,9 @@ class ControllerStateVXLAN:
         self.controller_state = controller_state
         # Overlay types
         self.overlay_type = dict()
-        # map device to vni 
-        self.dev_to_vni = dict()
-        #already created overlay bewteen two sites 
-        self.created_overlay = dict()
-        # interface in overlay 
-        self.vrfinterfaces = dict()
-
+        # Slice in overlay per site  
+        self.slice_in_overlay = dict()
+       
     # Get a new table ID
     def get_new_tableid(self, overlay_name):
         return self.tableid_allocator.get_new_tableid(overlay_name)
@@ -101,6 +97,11 @@ class ControllerStateVXLAN:
     # Get VTEP IP 
     def get_vtep_ip(self, dev_id):
         return self.vtep_ip_allocator.get_vtep_ip(dev_id)
+
+    # Release VTEP IP 
+    def release_vtep_ip(self, dev_id):
+        return self.vtep_ip_allocator.release_vtep_ip(dev_id)
+
     
 
 # VNI Allocator
@@ -133,6 +134,7 @@ class VNIAllocator:
             self.overlay_to_vni[(overlay_name)] = vni
             # And return
             return vni
+
 
     # Return the VNI assigned to the VPN
     # If the VPN has no assigned VNI, return -1
@@ -264,10 +266,10 @@ class TableIDAllocator:
        
 
 if __name__ == "__main__":
-    TableIDAllocator = TableIDAllocator()
+    ''''TableIDAllocator = TableIDAllocator()
     TableIDAllocator.get_new_tableid('ov3', 11)
     TableIDAllocator.get_new_tableid('ov3', 12)
-    print('%s' %TableIDAllocator.get_tableid('ov3', 12))
+    print('%s' %TableIDAllocator.get_tableid('ov3', 12))'''
 
     '''VNIAllocator = VNIAllocator()
     VNIAllocator.get_new_vni('ov1')
