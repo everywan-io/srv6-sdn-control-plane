@@ -194,7 +194,7 @@ class VPN:
         self.tunnel_mode = tunnel_mode
 
     def removeInterface(self, routerid, interface_name):
-        for interface in self.interfaces:
+        for interface in self.interfaces.copy():
             if interface.routerid == routerid and interface.interface_name == interface_name:
                 self.interfaces.remove(interface)
                 return True
@@ -1078,7 +1078,7 @@ class ControllerState:
         self.vpns[vpn_name].interfaces.add(interface)
 
     def remove_interface_from_vpn(self, vpn_name, interface):
-        for _interface in self.vpns[vpn_name].interfaces:
+        for _interface in self.vpns[vpn_name].interfaces.copy():
             if interface.routerid == _interface.routerid and interface.interface_name == _interface.interface_name:
                 self.vpns[vpn_name].interfaces.remove(_interface)
 
