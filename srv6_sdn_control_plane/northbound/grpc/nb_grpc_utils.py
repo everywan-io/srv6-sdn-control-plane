@@ -946,11 +946,11 @@ class ControllerState:
         return interfaces
 
     # Add an interface to a VPN
-    def add_interface_to_vpn(self, vpn_name, routerid, interface_name,
-                             interface_ip, vpn_prefix):
-        self.vpns[vpn_name].interfaces[routerid][interface_name] = Interface(
-            routerid, interface_name, interface_ip, vpn_prefix
-        )
+    #def add_interface_to_vpn(self, vpn_name, routerid, interface_name,
+    #                         interface_ip, vpn_prefix):
+    #    self.vpns[vpn_name].interfaces[routerid][interface_name] = Interface(
+    #        routerid, interface_name, interface_ip, vpn_prefix
+    #    )
 
     # Return VPN prefix assigned to an interface
     #def get_vpn_prefix(self, vpn_name, routerid, interface_name):

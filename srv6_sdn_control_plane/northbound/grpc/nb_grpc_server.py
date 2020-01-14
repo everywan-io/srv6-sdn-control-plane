@@ -727,7 +727,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Add the interfaces to the VPN
             for interface in interfaces:
                 self.controller_state.add_interface_to_vpn(
-                    tunnel_id, vpn_name, interface)
+                    vpn_name, interface)
             # Save the VPNs dump to file
             if self.controller_state.vpn_file is not None:
                 logger.info('Saving the VPN dump')
@@ -843,7 +843,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         tunnel_name,
                         routerid)):
                     tunnel_mode.destroy_tunnel_mode(routerid, tunnel_info)
-                    #(self.controller_state
+                    # (self.controller_state
                     # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
         # Delete the VPN
         for interface in interfaces:
