@@ -178,7 +178,7 @@ class VPN:
         # VPN type
         self.vpn_type = vpn_type
         # Interfaces belonging to the VPN
-        self.interfaces = interfaces
+        self.interfaces = set(interfaces)
         #self.interfaces = dict()
         # for interface in interfaces:
         #    routerid = interface.routerid
