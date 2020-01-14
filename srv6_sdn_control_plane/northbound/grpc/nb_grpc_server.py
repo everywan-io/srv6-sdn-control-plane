@@ -597,8 +597,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         .is_tunnel_mode_initiated_on_device(tunnel_name,
                                                             routerid)):
                     tunnel_mode.destroy_tunnel_mode(routerid, tunnel_info)
-                    (self.controller_state
-                     .destroy_tunnel_mode_on_device(tunnel_name, routerid))
+                    #(self.controller_state
+                    # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
                 # Delete the interface from the VPN
                 self.controller_state.remove_interface_from_vpn(
                     vpn_name, site1)
