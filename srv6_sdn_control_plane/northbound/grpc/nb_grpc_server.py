@@ -477,9 +477,12 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Let's create the VPN
             # Create overlay daata structure
             tunnel_mode.init_overlay_data(vpn_name, tenantid, tunnel_info)
-            for interface in interfaces:
-                routerid = interface.routerid
-                interface_name = interface.interface_name
+            # Add the VPN to the VPNs set
+            self.controller_state.add_vpn(tunnel_id, vpn_name, vpn_type,
+                                          set(), tenantid, tunnel_mode)
+            for site1 in interfaces:
+                routerid = site1.routerid
+                interface_name = site1.interface_name
                 tunnel_name = tunnel_mode.name
                 # Init tunnel mode on the devices
                 if not (self.controller_state
@@ -505,14 +508,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                                                                routerid,
                                                                vpn_name,
                                                                interface_name)
-            # Create the tunnel between all the pairs of interfaces
-            for site1, site2 in itertools.combinations(interfaces, 2):
-                if site1.routerid != site2.routerid:
-                    tunnel_mode.create_tunnel(vpn_name, vpn_type, site1,
-                                              site2, tenantid, tunnel_info)
-            # Add the VPN to the VPNs set
-            self.controller_state.add_vpn(tunnel_id, vpn_name, vpn_type,
-                                          interfaces, tenantid, tunnel_mode)
+                # Create the tunnel between all the pairs of interfaces
+                for site2 in self.controller_state.get_interfaces_in_vpn(vpn_name):
+                    if site1.routerid != site2.routerid:
+                        tunnel_mode.create_tunnel(vpn_name, vpn_type, site1,
+                                                  site2, tenantid, tunnel_info)
+                # Add the interfaces to the VPN
+                self.controller_state.add_interface_to_vpn(
+                    vpn_name, site1)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -553,17 +556,18 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Get the interfaces belonging to the VPN
-            interfaces = self.controller_state.vpns[vpn_name].interfaces
+            interfaces_in_vpn = self.controller_state.get_interfaces_in_vpn(vpn_name).copy()
             # Let's remove the VPN
             # Remove the tunnel between all the pairs of interfaces
-            for site1, site2 in itertools.combinations(interfaces, 2):
-                if site1.routerid != site2.routerid:
-                    tunnel_mode.remove_tunnel(
-                        vpn_name, vpn_type, site1,
-                        site2, tenantid, tunnel_info)
-            for interface in interfaces:
-                routerid = interface.routerid
-                interface_name = interface.interface_name
+            for site1 in interfaces_in_vpn:
+                for site2 in self.controller_state.get_interfaces_in_vpn(
+                        vpn_name):
+                    if site1.routerid != site2.routerid:
+                        tunnel_mode.remove_tunnel(
+                            vpn_name, vpn_type, site1,
+                            site2, tenantid, tunnel_info)
+                routerid = site1.routerid
+                interface_name = site1.interface_name
                 tunnel_name = tunnel_mode.name
                 # Remove the interface from the overlay
                 tunnel_mode.remove_slice_from_overlay(vpn_name,
@@ -595,6 +599,9 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     tunnel_mode.destroy_tunnel_mode(routerid, tunnel_info)
                     (self.controller_state
                      .destroy_tunnel_mode_on_device(tunnel_name, routerid))
+                # Delete the interface from the VPN
+                self.controller_state.remove_interface_from_vpn(
+                    vpn_name, site1)
             # Destroy overlay data structure
             tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
         # Delete the VPN
@@ -693,9 +700,9 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Let's assign the interface to the VPN
-            for interface in interfaces:
-                routerid = interface.routerid
-                interface_name = interface.interface_name
+            for site1 in interfaces:
+                routerid = site1.routerid
+                interface_name = site1.interface_name
                 tunnel_name = tunnel_mode.name
                 # Init tunnel mode on the devices
                 if not (self.controller_state
@@ -716,16 +723,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     vpn_name, routerid, interface_name, tunnel_info)
                 self.controller_state.add_interface_to_overlay(
                     tunnel_name, routerid, vpn_name, interface_name)
-            # Create the tunnel between all the pairs of interfaces
-            for site1 in interfaces:
+                # Create the tunnel between all the pairs of interfaces
                 for site2 in self.controller_state.get_interfaces_in_vpn(
                         vpn_name):
                     if site1.routerid != site2.routerid:
                         tunnel_mode.create_tunnel(
                             vpn_name, vpn_type, site1,
                             site2, tenantid, tunnel_info)
-            # Add the interfaces to the VPN
-            for interface in interfaces:
+                # Add the interfaces to the VPN
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, interface)
             # Save the VPNs dump to file
@@ -821,9 +826,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         tunnel_mode.remove_tunnel(
                             vpn_name, vpn_type, site1,
                             site2, tenantid, tunnel_info)
-            for interface in interfaces:
-                routerid = interface.routerid
-                interface_name = interface.interface_name
+                routerid = site1.routerid
+                interface_name = site1.interface_name
                 tunnel_name = tunnel_mode.name
                 # Remove the interface from the overlay
                 tunnel_mode.remove_slice_from_overlay(
@@ -839,16 +843,15 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         tunnel_name, routerid, vpn_name)
                 # Destroy tunnel mode on the devices
                 if not (
-                    self.controller_state .is_tunnel_mode_initiated_on_device(
+                    self.controller_state.is_tunnel_mode_initiated_on_device(
                         tunnel_name,
                         routerid)):
                     tunnel_mode.destroy_tunnel_mode(routerid, tunnel_info)
                     # (self.controller_state
                     # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
-        # Delete the VPN
-        for interface in interfaces:
-            self.controller_state.remove_interface_from_vpn(
-                vpn_name, interface)
+                # Delete the interface from the VPN
+                self.controller_state.remove_interface_from_vpn(
+                    vpn_name, site1)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
