@@ -732,7 +732,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                             site2, tenantid, tunnel_info)
                 # Add the interfaces to the VPN
                 self.controller_state.add_interface_to_vpn(
-                    vpn_name, interface)
+                    vpn_name, site1)
             # Save the VPNs dump to file
             if self.controller_state.vpn_file is not None:
                 logger.info('Saving the VPN dump')
