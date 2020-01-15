@@ -28,6 +28,10 @@ from srv6_sdn_proto import status_codes_pb2
 
 # Global variables definition
 
+# Status codes
+STATUS_SUCCESS = status_codes_pb2.STATUS_SUCCESS
+STATUS_INTERNAL_ERROR = status_codes_pb2.STATUS_INTERNAL_ERROR
+
 # Default gRPC client port
 DEFAULT_GRPC_CLIENT_PORT = 12345
 # Verbose mode
@@ -61,12 +65,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # retrive VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # add slice to the VRF
-        self.srv6_manager.update_vrf_device(
+        response = self.srv6_manager.update_vrf_device(
             mgmt_ip_site, self.grpc_client_port,
             name=vrf_name,
             interfaces=[interface_name],
             op='add_interfaces'
         )
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot add interface %s to the VRF %s in %s'
+                            % (interface_name, vrf_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
               
     def create_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
         id_remote_site = remote_site.routerid
@@ -100,38 +109,61 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         
         if vni not in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
             # add FDB entry in local site 
-            self.srv6_manager.addfdbentries(
+            response = self.srv6_manager.addfdbentries(
                     mgmt_ip_local_site, self.grpc_client_port,
                     ifindex=vtep_name,
                     dst=wan_ip_remote_site
                 )
+            if response != STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                               % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site))
+                return STATUS_INTERNAL_ERROR
+
             self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni] = set()
 
         if vni not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:    
             # add FDB entry in remote site 
-            self.srv6_manager.addfdbentries(
+            response = self.srv6_manager.addfdbentries(
                     mgmt_ip_remote_site, self.grpc_client_port,
                     ifindex=vtep_name,
                     dst=wan_ip_local_site
                 )
+            if response != STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                               % (wan_ip_local_site, vtep_name, mgmt_ip_remote_site))
+                return STATUS_INTERNAL_ERROR
+
             self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni] = set()
 
         if lan_sub_remote_site not in self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni]:
             # set route in local site  
-            self.srv6_manager.create_iproute(
+            response = self.srv6_manager.create_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
                     destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split("/")[0],
                     table=tableid
                 )
+            if response != STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot set route for %s in %s '
+                               % (wan_ip_remote_site, mgmt_ip_local_site))
+                return STATUS_INTERNAL_ERROR
+            
             self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni].add(lan_sub_remote_site)
 
         if lan_sub_local_site not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni]:
             # set route in remote site 
-            self.srv6_manager.create_iproute(
+            response = self.srv6_manager.create_iproute(
                     mgmt_ip_remote_site, self.grpc_client_port,
                     destination=lan_sub_local_site, gateway=vtep_ip_local_site.split("/")[0],
                     table=tableid
                 )  
+            if response != STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot set route for %s in %s '
+                               % (lan_sub_local_site, mgmt_ip_remote_site))
+                return STATUS_INTERNAL_ERROR          
             self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni].add(lan_sub_local_site)
 
     def init_overlay(self, overlay_name, overlay_type, routerid, overlay_info):
@@ -150,25 +182,39 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vtep_name = 'vxlan-%s' %  (vni)
         # retrive VTEP IP address
         vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid)
-
+        
         # crete VTEP interface
-        self.srv6_manager.createVxLAN(
+        response = self.srv6_manager.createVxLAN(
                 mgmt_ip_site, self.grpc_client_port,
                 ifname=vtep_name, 
                 vxlan_link=wan_intf_site,
                 vxlan_id=vni,
                 vxlan_port=vxlan_port_site
             )
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot create VTEP %s in %s'
+                            % (vtep_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
 
         # set VTEP IP address
-        self.srv6_manager.create_ipaddr(mgmt_ip_site, self.grpc_client_port, ip_addr=vtep_ip_site, device=vtep_name, net='')
-
+        response = self.srv6_manager.create_ipaddr(mgmt_ip_site, self.grpc_client_port, ip_addr=vtep_ip_site, device=vtep_name, net='')
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot set IP %s for VTEP %s in %s'
+                            % (vtep_ip_site, vtep_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
         # create VRF and add the VTEP interface 
-        self.srv6_manager.create_vrf_device(
+        response = self.srv6_manager.create_vrf_device(
                 mgmt_ip_site, self.grpc_client_port,
                 name=vrf_name, table=tableid, interfaces=[vtep_name]
                 )
-
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot create VRF %s in %s'
+                            % (vrf_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
+        
     def init_overlay_data(self, overlay_name, tenantid, overlay_info):
         #get VNI for the overlay 
         vni = self.controller_state_vxlan.get_vni(overlay_name) 
@@ -193,12 +239,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # retrive VRF name  
         vrf_name = 'vrf-%s' % (tableid) 
         
-        self.srv6_manager.update_vrf_device(
+        response = self.srv6_manager.update_vrf_device(
                 mgmt_ip_site, self.grpc_client_port,
                 name=vrf_name,
                 interfaces=[interface_name],
                 op = 'del_interfaces'
             ) 
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove interface %s from VRF %s in %s'
+                            % (interface_name, vrf_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
         
     def remove_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
         id_local_site = local_site.routerid
@@ -224,11 +275,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
             if lan_sub_local_site in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]:
                 # remove route in remote site         
-                self.srv6_manager.remove_iproute(
+                response = self.srv6_manager.remove_iproute(
                         mgmt_ip_remote_site, self.grpc_client_port, 
                         destination=lan_sub_local_site,
                         table=tableid
                     )
+                if response != STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot remove route to %s in %s'
+                                % (lan_sub_local_site, mgmt_ip_remote_site))
+                    return STATUS_INTERNAL_ERROR
+
                 self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni].remove(lan_sub_local_site) 
                 
             # The slice removed is the last slice in the considered overlay in the local site 
@@ -236,30 +293,47 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             
                 if lan_sub_remote_site in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]:
                     # remove route in local site 
-                    self.srv6_manager.remove_iproute(
+                    response = self.srv6_manager.remove_iproute(
                             mgmt_ip_local_site, self.grpc_client_port,
                             destination=lan_sub_remote_site,
                             table=tableid
                         )
+                    if response != STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove route to %s in %s'
+                                    % (lan_sub_remote_site, mgmt_ip_local_site))
+                        return STATUS_INTERNAL_ERROR
+
                     self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni].remove(lan_sub_remote_site)
-                    
             
                 if vni in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
                     # remove FDB entry in local site 
-                    self.srv6_manager.delfdbentries(
+                    response = self.srv6_manager.delfdbentries(
                             mgmt_ip_local_site, self.grpc_client_port,
                             ifindex=vtep_name,
                             dst=wan_ip_remote_site
                         )
+                    if response != STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove FDB entry %s in %s'
+                                    % (wan_ip_remote_site, mgmt_ip_local_site))
+                        return STATUS_INTERNAL_ERROR
+
                     del self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]
 
                 if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
                 # remove FDB entry in remote site 
-                    self.srv6_manager.delfdbentries(
+                    response = self.srv6_manager.delfdbentries(
                             mgmt_ip_remote_site, self.grpc_client_port,
                             ifindex=vtep_name,
                             dst=wan_ip_local_site
                         )
+                    if response != STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove FDB entry %s in %s'
+                                    % (wan_ip_local_site, mgmt_ip_remote_site))
+                        return STATUS_INTERNAL_ERROR
+
                     del self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]
 
     def destroy_overlay(self, overlay_name, overlay_type, routerid, overlay_info):
@@ -274,16 +348,26 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vtep_name = 'vxlan-%s' %  (vni)
         
         # remove VTEP 
-        self.srv6_manager.delVxLAN(
+        response = self.srv6_manager.delVxLAN(
                 mgmt_ip_site, self.grpc_client_port, 
                 ifname = vtep_name
             )
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove VTEP %s in %s'
+                        % (vtep_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
+
         # remove VRF device 
-        self.srv6_manager.remove_vrf_device(
+        response = self.srv6_manager.remove_vrf_device(
                 mgmt_ip_site, self.grpc_client_port, 
                 name=vrf_name
         )
-        
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove VRF %s in %s'
+                        % (vrf_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
  
     def destroy_overlay_data(self, overlay_name, tenantid, overlay_info):
         # release VNI 

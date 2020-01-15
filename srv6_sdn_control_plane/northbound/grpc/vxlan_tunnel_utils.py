@@ -209,7 +209,6 @@ class VTEPIPAllocator:
             # The device has no associeted VTEP IP
             return -1
 
-
 # todo: assigne table ID based on the overlay name and on the device ID
 # Table ID Allocator
 class TableIDAllocator:
