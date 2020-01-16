@@ -996,6 +996,28 @@ class ControllerState:
         for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
             ips.append('%s/%s' % (addr['addr'], addr['netmask']))
         return ips
+
+    # Return the external IP addresses associated to an interface
+    def get_external_ipv4(self, routerid, interface_name):
+        #routerid = int(IPv4Address(routerid))
+        if 'ext_addr' in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
+            return [self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']['ext_addr']]
+        else:
+            ips = list()
+            for addr in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
+                ips.append('%s/%s' % (addr['addr'], addr['netmask']))
+            return ips
+
+    # Return the external IP addresses associated to an interface
+    def get_external_ipv6(self, routerid, interface_name):
+        #routerid = int(IPv4Address(routerid))
+        if 'ext_addr' in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
+            return [self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']['ext_addr']]
+        else:
+            ips = list()
+            for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
+                ips.append('%s/%s' % (addr['addr'], addr['netmask']))
+            return ips
     
     def get_ipv6_subnets_on_interface(self, routerid, interface_name):
         return self.devices[routerid]['interfaces'][interface_name]['ipv6_subnets']

@@ -239,6 +239,7 @@ class InventoryService:
                                 'broadcast': ipv4_addr.broadcast,
                                 'netmask': ipv4_addr.netmask,
                                 'addr': ipv4_addr.addr,
+                                'ext_addr': ipv4_addr.ext_addr,
                             })
                         ipv6_addrs = list()
                         for ipv6_addr in intf.ipv6_addrs:
@@ -246,6 +247,7 @@ class InventoryService:
                                 'broadcast': ipv6_addr.broadcast,
                                 'netmask': ipv6_addr.netmask,
                                 'addr': ipv6_addr.addr,
+                                'ext_addr': ipv6_addr.ext_addr,
                             })
                         ipv4_subnets = intf.ipv4_subnets
                         ipv6_subnets = intf.ipv6_subnets
