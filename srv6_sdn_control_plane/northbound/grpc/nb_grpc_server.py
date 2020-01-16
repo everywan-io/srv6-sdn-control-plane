@@ -183,11 +183,12 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                                     'to the interface'
                                 )
                                 return status_codes_pb2.STATUS_INTERNAL_ERROR
-                        interfaces[interface.name]['ipv4_addrs'].append({
-                            'addr': ipv4_addr.addr,
-                            'netmask': ipv4_addr.netmask,
-                            'broadcast': ''
-                        })
+                            interfaces[interface.name]['ipv4_addrs'].append({
+                                'addr': ipv4_addr.addr,
+                                'netmask': ipv4_addr.netmask,
+                                'broadcast': '',
+                                'ext_addr': ipv4_addr.ext_addr
+                            })
                     if len(interface.ipv6_addrs) > 0:
                         addrs = list()
                         nets = list()
@@ -230,7 +231,8 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                             interfaces[interface.name]['ipv6_addrs'].append({
                                 'addr': ipv6_addr.addr,
                                 'netmask': ipv6_addr.netmask,
-                                'broadcast': ''
+                                'broadcast': '',
+                                'ext_addr': ipv6_addr.ext_addr
                             })
                     for subnet in interface.ipv4_subnets:
                         interfaces[interface.name]['ipv4_subnets'].append(
@@ -273,11 +275,13 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                     ipv4_addr.broadcast = addr['broadcast']
                     ipv4_addr.netmask = addr['netmask']
                     ipv4_addr.addr = addr['addr']
+                    ipv4_addr.ext_addr = addr['ext_addr']
                 for addr in ifinfo['ipv6_addrs']:
                     ipv6_addr = interface.ipv6_addrs.add()
                     ipv6_addr.broadcast = addr['broadcast']
                     ipv6_addr.netmask = addr['netmask']
                     ipv6_addr.addr = addr['addr']
+                    ipv6_addr.ext_addr = addr['ext_addr']
                 interface.ipv4_subnets.extend(ifinfo['ipv4_subnets'])
                 interface.ipv6_subnets.extend(ifinfo['ipv6_subnets'])
                 interface.type = ifinfo['type']
