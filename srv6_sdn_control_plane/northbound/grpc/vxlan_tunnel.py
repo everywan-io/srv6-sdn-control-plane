@@ -97,9 +97,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vtep_name = 'vxlan-%s' %  (vni)
         # retrive WAN IP address for loal site and remote site 
         wan_intf_local_site = self.controller_state.get_wan_interface(id_local_site)
-        wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
+        #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
         wan_intf_remote_site = self.controller_state.get_wan_interface(id_remote_site)
-        wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
+        #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
+        
+        wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
+        wan_ip_remote_site = self.controller_state.get_external_ipv4(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
          
         if (id_local_site, id_remote_site) not in self.controller_state_vxlan.slice_in_overlay:
             self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)] = dict()
@@ -261,9 +264,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(id_local_site)
         # retrive wan IP local and remote site 
         wan_intf_local_site = self.controller_state.get_wan_interface(id_local_site)
-        wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
+        #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
         wan_intf_remote_site = self.controller_state.get_wan_interface(id_remote_site)
-        wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
+        #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
+
+        wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
+        wan_ip_remote_site = self.controller_state.get_external_ipv4(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
+              
         # retrive subnet local and remote site  
         lan_sub_local_site = self.controller_state.get_subnets_on_interface(id_local_site, local_site.interface_name)[0]
         lan_sub_remote_site = self.controller_state.get_subnets_on_interface(id_remote_site, remote_site.interface_name)[0]
