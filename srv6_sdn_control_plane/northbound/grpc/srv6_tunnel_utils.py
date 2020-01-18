@@ -128,9 +128,9 @@ class ControllerStateSRv6:
         return self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
 
     # Get a new table ID
-    def get_tableid(self, vpn_name):
-        return self.tableid_allocator.get_tableid(vpn_name)
+    def get_tableid(self, vpn_name, tenantid):
+        return self.tableid_allocator.get_tableid(vpn_name, tenantid)
 
     # Release a table ID
-    def release_tableid(self, vpn_name):
-        return self.tableid_allocator.release_tableid(vpn_name)
+    def release_tableid(self, vpn_name, tenantid):
+        return self.tableid_allocator.release_tableid(vpn_name, tenantid)

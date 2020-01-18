@@ -602,57 +602,66 @@ def json_file_to_graph(topo_file):
 
 
 # Table ID Allocator
-class TableIDAllocator:
+class TableIDAllocator:    
+
     def __init__(self):
-        # Mapping VPN name to table ID
+        # Mapping VPN name to table ID, indexed by tenant ID
         self.vpn_to_tableid = dict()
-        # Mapping table ID to tenant ID
-        self.tableid_to_tenantid = dict()
-        # Set of reusable table IDs
-        self.reusable_tableids = set()
-        # Last used table ID
-        self.last_allocated_tableid = -1
+        # Set of reusable table IDs, indexed by tenant ID
+        self.reusable_tableids = dict()
+        # Last used table ID, indexed by tenant ID
+        self.last_allocated_tableid = dict()
 
     # Allocate and return a new table ID for a VPN
     def get_new_tableid(self, vpn_name, tenantid):
-        if self.vpn_to_tableid.get(vpn_name):
+        if tenantid not in self.vpn_to_tableid:
+            # Initialize data structures
+            self.vpn_to_tableid[tenantid] = dict()
+            self.reusable_tableids[tenantid] = set()
+            self.last_allocated_tableid[tenantid] = -1
+        # Get the new table ID
+        if self.vpn_to_tableid[tenantid].get(vpn_name):
             # The VPN already has an associated table ID
             return -1
         else:
             # Check if a reusable table ID is available
-            if self.reusable_tableids:
-                tableid = self.reusable_tableids.pop()
+            if self.reusable_tableids[tenantid]:
+                tableid = self.reusable_tableids[tenantid].pop()
             else:
                 # If not, get a new table ID
-                self.last_allocated_tableid += 1
-                while self.last_allocated_tableid in RESERVED_TABLEIDS:
+                self.last_allocated_tableid[tenantid] += 1
+                while self.last_allocated_tableid[tenantid] in RESERVED_TABLEIDS:
                     # Skip reserved table IDs
-                    self.last_allocated_tableid += 1
-                tableid = self.last_allocated_tableid
+                    self.last_allocated_tableid[tenantid] += 1
+                tableid = self.last_allocated_tableid[tenantid]
             # Assign the table ID to the VPN name
-            self.vpn_to_tableid[vpn_name] = tableid
-            # Associate the table ID to the tenant ID
-            self.tableid_to_tenantid[tableid] = tenantid
+            self.vpn_to_tableid[tenantid][vpn_name] = tableid
             # And return
             return tableid
 
     # Return the table ID assigned to the VPN
     # If the VPN has no assigned table IDs, return -1
-    def get_tableid(self, vpn_name):
-        return self.vpn_to_tableid.get(vpn_name, -1)
+    def get_tableid(self, vpn_name, tenantid):
+        if tenantid not in self.vpn_to_tableid:
+            return -1
+        return self.vpn_to_tableid[tenantid].get(vpn_name, -1)
 
     # Release a table ID and mark it as reusable
-    def release_tableid(self, vpn_name):
+    def release_tableid(self, vpn_name, tenantid):
         # Check if the VPN has an associated table ID
-        if self.vpn_to_tableid.get(vpn_name):
+        if self.vpn_to_tableid[tenantid].get(vpn_name):
             # The VPN has an associated table ID
-            tableid = self.vpn_to_tableid[vpn_name]
+            tableid = self.vpn_to_tableid[tenantid][vpn_name]
             # Unassign the table ID
-            del self.vpn_to_tableid[vpn_name]
-            # Delete the association table ID - tenant ID
-            del self.tableid_to_tenantid[tableid]
+            del self.vpn_to_tableid[tenantid][vpn_name]
             # Mark the table ID as reusable
-            self.reusable_tableids.add(tableid)
+            self.reusable_tableids[tenantid].add(tableid)
+            # If the tenant has no VPNs,
+            # destory data structures
+            if len(self.vpn_to_tableid[tenantid]) == 0:
+                del self.vpn_to_tableid[tenantid]
+                del self.reusable_tableids[tenantid]
+                del self.last_allocated_tableid[tenantid]
             # Return the table ID
             return tableid
         else:
