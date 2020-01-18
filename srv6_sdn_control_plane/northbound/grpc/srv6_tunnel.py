@@ -112,7 +112,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get WAN interface')
             return STATUS_INTERNAL_ERROR
         # Get the table ID
-        tableid = self.controller_state_srv6.get_tableid(overlay_name)
+        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
         if tableid == -1:
             logger.warning('Cannot retrieve VPN table ID')
             return STATUS_INTERNAL_ERROR
@@ -166,7 +166,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get the router address')
             return STATUS_INTERNAL_ERROR
         # Get the table ID
-        tableid = self.controller_state_srv6.get_tableid(overlay_name)
+        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
         if tableid == -1:
             logger.warning('Cannot retrieve VPN table ID')
             return STATUS_INTERNAL_ERROR
@@ -269,7 +269,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % deviceid)
         return STATUS_SUCCESS
 
-    def init_overlay(self, overlay_name, overlay_type, deviceid, overlay_info):
+    def init_overlay(self, overlay_name, overlay_type, tenantid, deviceid, overlay_info):
         logger.debug('Initiating overlay %s on the device %s'
                      % (overlay_name, deviceid))
         # Get the router address
@@ -293,7 +293,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Get the table ID for the VPN
         logger.debug('Attempting to retrieve the table ID assigned to the VPN')
         tableid = self.controller_state_srv6.get_tableid(
-            overlay_name
+            overlay_name, tenantid
         )
         if tableid == -1:
             # Table ID not yet assigned
@@ -412,7 +412,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                              overlay_type, tenantid, overlay_info):
         logger.debug('Trying to destroy the overlay data structure')
         # Release the table ID
-        res = self.controller_state.release_tableid(overlay_name)
+        res = self.controller_state.release_tableid(overlay_name, tenantid)
         if res == -1:
             logger.debug('Cannot release the table ID')
             return STATUS_INTERNAL_ERROR
@@ -464,7 +464,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('Destroy tunnel mode completed')
         return STATUS_SUCCESS
 
-    def destroy_overlay(self, overlay_name, deviceid, overlay_info):
+    def destroy_overlay(self, overlay_name, tenantid, deviceid, overlay_info):
         logger.debug('Tryingto destroy the overlay %s on device %s'
                      % (overlay_name, deviceid))
         # Get the router address
@@ -474,7 +474,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get the router address')
             return STATUS_INTERNAL_ERROR
         # Extract params from the VPN
-        tableid = self.controller_state_srv6.get_tableid(overlay_name)
+        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
         if tableid == -1:
             # If the operation has failed, return an error message
             logger.warning('Cannot get table ID for the VPN %s' % overlay_name)

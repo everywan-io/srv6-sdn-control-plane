@@ -12,7 +12,7 @@ class TunnelMode(object):
     def init_tunnel_mode(self, deviceid, overlay_info):
         pass
 
-    def init_overlay(self, overlay_name, overlay_type, deviceid, overlay_info):
+    def init_overlay(self, overlay_name, overlay_type, tenantid, deviceid, overlay_info):
         pass
 
     def add_slice_to_overlay(self, overlay_name,
@@ -30,7 +30,7 @@ class TunnelMode(object):
         pass
 
     def destroy_overlay(self, overlay_name,
-                        overlay_type, deviceid, overlay_info):
+                        overlay_type, tenantid, deviceid, overlay_info):
         pass
 
     def remove_slice_from_overlay(self, overlay_name,

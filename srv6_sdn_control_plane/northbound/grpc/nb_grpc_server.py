@@ -498,7 +498,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # Init overlay on the devices
                 if not self.controller_state.is_overlay_initiated_on_device(
                         tunnel_name, routerid, vpn_name):
-                    tunnel_mode.init_overlay(vpn_name, vpn_type,
+                    tunnel_mode.init_overlay(vpn_name, vpn_type, tenantid,
                                              routerid, tunnel_info)
                     (self.controller_state
                      .init_overlay_on_device(tunnel_name,
@@ -560,7 +560,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Get the tunnel mode
             tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
             # Get the interfaces belonging to the VPN
-            interfaces_in_vpn = self.controller_state.get_interfaces_in_vpn(vpn_name).copy()
+            interfaces_in_vpn = self.controller_state.get_interfaces_in_vpn(
+                vpn_name).copy()
             # Let's remove the VPN
             # Remove the tunnel between all the pairs of interfaces
             for site1 in interfaces_in_vpn:
@@ -590,6 +591,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                                                         vpn_name)):
                     tunnel_mode.destroy_overlay(vpn_name,
                                                 vpn_type,
+                                                tenantid,
                                                 routerid,
                                                 tunnel_info)
                     (self.controller_state
@@ -601,7 +603,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         .is_tunnel_mode_initiated_on_device(tunnel_name,
                                                             routerid)):
                     tunnel_mode.destroy_tunnel_mode(routerid, tunnel_info)
-                    #(self.controller_state
+                    # (self.controller_state
                     # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
                 # Delete the interface from the VPN
                 self.controller_state.remove_interface_from_vpn(
@@ -719,7 +721,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 if not self.controller_state.is_overlay_initiated_on_device(
                         tunnel_name, routerid, vpn_name):
                     tunnel_mode.init_overlay(
-                        vpn_name, vpn_type, routerid, tunnel_info)
+                        vpn_name, vpn_type, tenantid, routerid, tunnel_info)
                     self.controller_state.init_overlay_on_device(
                         tunnel_name, routerid, vpn_name)
                 # Add the interface to the overlay
@@ -842,7 +844,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 if not self.controller_state.is_overlay_initiated_on_device(
                         tunnel_name, routerid, vpn_name):
                     tunnel_mode.destroy_overlay(
-                        vpn_name, vpn_type, routerid, tunnel_info)
+                        vpn_name, vpn_type, tenantid, routerid, tunnel_info)
                     self.controller_state.destroy_overlay_on_device(
                         tunnel_name, routerid, vpn_name)
                 # Destroy tunnel mode on the devices
