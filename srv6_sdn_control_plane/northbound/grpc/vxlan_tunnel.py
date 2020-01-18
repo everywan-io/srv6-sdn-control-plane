@@ -58,10 +58,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         self.controller_state_vxlan = vxlan_tunnel_utils.ControllerStateVXLAN(controller_state)
         
 
-    def add_slice_to_overlay(self, overlay_name, routerid, interface_name, overlay_info):
+    def add_slice_to_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # retrive table ID 
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # add slice to the VRF
@@ -87,12 +87,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         lan_sub_remote_site = self.controller_state.get_subnets_on_interface(id_remote_site, remote_site.interface_name)[0]
         lan_sub_local_site = self.controller_state.get_subnets_on_interface(id_local_site, local_site.interface_name)[0]
         # retriv table ID 
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VTEP IP remote site and local site 
-        vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(id_remote_site)
-        vtep_ip_local_site = self.controller_state_vxlan.get_vtep_ip(id_local_site)
+        vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(id_remote_site, tenantid)
+        vtep_ip_local_site = self.controller_state_vxlan.get_vtep_ip(id_local_site, tenantid)
         # retrive VNI 
-        vni = self.controller_state_vxlan.get_vni(overlay_name)
+        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
         # retrive WAN IP address for loal site and remote site 
@@ -169,22 +169,22 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 return STATUS_INTERNAL_ERROR          
             self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni].add(lan_sub_local_site)
 
-    def init_overlay(self, overlay_name, overlay_type, routerid, overlay_info):
+    def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # for the first case the vxlan dport is the default one 
         vxlan_port_site = 4789 
         # retrive table ID 
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface 
         wan_intf_site = self.controller_state.get_wan_interface(routerid)
         # retrive VNI for the overlay 
-        vni = self.controller_state_vxlan.get_vni(overlay_name) 
+        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid) 
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
         # retrive VTEP IP address
-        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid)
+        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
         
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
@@ -220,25 +220,25 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         
     def init_overlay_data(self, overlay_name, tenantid, overlay_info):
         #get VNI for the overlay 
-        vni = self.controller_state_vxlan.get_vni(overlay_name) 
+        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid) 
         if vni == -1: 
-            vni = self.controller_state_vxlan.get_new_vni(overlay_name)
+            vni = self.controller_state_vxlan.get_new_vni(overlay_name, tenantid)
 
         #get table ID
-        tableid = self.controller_state_vxlan.get_new_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_new_tableid(overlay_name, tenantid)
         if tableid == -1:
-            tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+            tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
 
-    def init_tunnel_mode(self, routerid, overlay_info):
+    def init_tunnel_mode(self, routerid, tenantid, overlay_info):
         # get VTEP IP address for site1
-        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid)
+        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
         if vtep_ip_site == -1: 
-            vtep_ip_site = self.controller_state_vxlan.get_new_vtep_ip(routerid)
+            vtep_ip_site = self.controller_state_vxlan.get_new_vtep_ip(routerid, tenantid)
 
-    def remove_slice_from_overlay(self, overlay_name, routerid, interface_name, overlay_info):
+    def remove_slice_from_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # retrive table ID
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name  
         vrf_name = 'vrf-%s' % (tableid) 
         
@@ -258,7 +258,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_local_site = local_site.routerid
         id_remote_site = remote_site.routerid
         # retrive VNI
-        vni = self.controller_state_vxlan.get_vni(overlay_name)
+        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # retrive management IP local and remote site 
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(id_remote_site)
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(id_local_site)
@@ -275,7 +275,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         lan_sub_local_site = self.controller_state.get_subnets_on_interface(id_local_site, local_site.interface_name)[0]
         lan_sub_remote_site = self.controller_state.get_subnets_on_interface(id_remote_site, remote_site.interface_name)[0]
         # retrive table ID
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
 
@@ -343,12 +343,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
                     del self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]
 
-    def destroy_overlay(self, overlay_name, overlay_type, routerid, overlay_info):
+    def destroy_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # retrive VNI 
-        vni = self.controller_state_vxlan.get_vni(overlay_name)
+        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # retrive table ID 
-        tableid = self.controller_state_vxlan.get_tableid(overlay_name)
+        tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # retrive VTEP name 
@@ -378,13 +378,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
  
     def destroy_overlay_data(self, overlay_name, tenantid, overlay_info):
         # release VNI 
-        self.controller_state_vxlan.release_vni(overlay_name)
+        self.controller_state_vxlan.release_vni(overlay_name, tenantid)
         # release tableid 
-        self.controller_state_vxlan.release_tableid(overlay_name)
+        self.controller_state_vxlan.release_tableid(overlay_name, tenantid )
     
-    def destroy_tunnel_mode(self, routerid, overlay_info):
+    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device 
-        self.controller_state_vxlan.release_vtep_ip(routerid)
+        self.controller_state_vxlan.release_vtep_ip(routerid, tenantid)
 
     def get_overlays(self):
         raise NotImplementedError
