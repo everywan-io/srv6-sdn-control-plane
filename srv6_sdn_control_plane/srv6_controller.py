@@ -20,70 +20,15 @@ import networkx as nx
 from networkx.readwrite import json_graph
 import srv6_sdn_control_plane.srv6_controller_utils as utils
 # SRv6 dependencies
-
-print(sys.executable)
-
-
 from srv6_sdn_control_plane.interface_discovery.interface_discovery import interface_discovery
 from srv6_sdn_control_plane.topology.ti_extraction import draw_topo
 from srv6_sdn_control_plane.topology.ti_extraction import connect_and_extract_topology
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
-#
+# pymerang dependencies
 from pymerang.pymerang_server import PymerangController
 
-################## Setup these variables ##################
-
-# Path of the proto files
-#PROTO_FOLDER = '../srv6-sdn-proto/'
-# Mapping router ID to management IP
-#ROUTERID_TO_MGMTIP = {
-#    #'0.0.0.1': '2000::1',
-#    #'0.0.0.2': '2000::2',
-#    #'0.0.0.3': '2000::3'
-#    '0.0.0.1': '2000:0:0:1::1',
-#    '0.0.0.2': '2000:0:0:2::1',
-#    '0.0.0.3': '2000:0:0:3::1',
-#}
-
-###########################################################
-
-# Path of the interface discovery module
-#INTERFACE_DISCOVERY_PATH = './interface_discovery'
-# Path of the topology information extraction module
-#TI_EXTRACTION_PATH = './topology'
-# Path of the gRPC Southbound client
-#SB_GRPC_CLIENT_PATH = './southbound/grpc/'
-# Path of the gRPC Northbound server
-#NB_GRPC_CLIENT_PATH = './northbound/grpc/'
-
-# Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#INTERFACE_DISCOVERY_PATH = os.path.join(script_path, INTERFACE_DISCOVERY_PATH)
-#TI_EXTRACTION_PATH = os.path.join(script_path, TI_EXTRACTION_PATH)
-#SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
-#NB_GRPC_CLIENT_PATH = os.path.join(script_path, NB_GRPC_CLIENT_PATH)
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
-
-# Check paths
-#if PROTO_FOLDER == '':
-#    utils.print_and_die('Error: Set PROTO_FOLDER '
-#                        'variable in srv6_controller.py')
-#if not os.path.exists(PROTO_FOLDER):
-#    utils.print_and_die('Error: PROTO_FOLDER variable in srv6_controller.py '
-#                        'points to a non existing file\n')
-
-# Add path of interface discovery
-#sys.path.append(INTERFACE_DISCOVERY_PATH)
-# Add path of topology information extraction
-#sys.path.append(TI_EXTRACTION_PATH)
-# Add path of gRPC southbound client
-#sys.path.append(SB_GRPC_CLIENT_PATH)
-# Add path of gRPC northbound client
-#sys.path.append(NB_GRPC_CLIENT_PATH)
-# Add path of proto files
-#sys.path.append(PROTO_FOLDER)
-
+# Global variables
 
 # In our experiment we use srv6 as default password
 DEFAULT_OSPF6D_PASSWORD = 'srv6'
@@ -928,7 +873,6 @@ class SRv6Controller(object):
         server = PymerangController(server_ip=self.pymerang_server_ip,
                                     server_port=self.pymerang_server_port,
                                     devices=self.controller_state.devices)
-        server.load_device_config()
         server.serve()
 
     # Run the SRv6 controller
