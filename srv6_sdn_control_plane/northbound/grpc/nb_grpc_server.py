@@ -102,7 +102,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  srv6_manager=None,
-                 topo_graph=None, tunnels_dict=None,
+                 topo_graph=None, tunnels_dict=None, controller_state=None,
                  devices=None, verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
@@ -116,6 +116,39 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         self.devices = devices
         # SRv6 Manager
         self.srv6_manager = srv6_manager
+        # Initialize state
+        self.controller_state = controller_state
+        
+
+    def ConfigureTenant(self, request, context):
+        logger.debug('Configure tenant request received: %s' % request)
+        # Extract parmeters from the request m essage 
+        port = request.port
+        info = request.info 
+        # Generate token  
+        token = nb_grpc_utils.generate_token()
+        # Set dictionary 
+        self.controller_state.token_to_tenant[token] = dict()
+        # Get a tenant ID for the token  
+        tenantid  = self.controller_state.get_new_tenantid(token)
+        # Save tenant parameters 
+        self.controller_state.token_to_tenant[token]['tenantid'] = tenantid
+        self.controller_state.token_to_tenant[token]['port'] = port
+        self.controller_state.token_to_tenant[token]['info'] = info 
+        # Response 
+        return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token = token)
+    
+    def RemoveTenant(self, request, context):
+        # Extract token 
+        token = request.token
+        # Release tenantid 
+        if token in self.controller_state.token_to_tenant:
+            self.controller_state.release_tenantid(token)
+            # Remove tenant info 
+            del self.controller_state.token_to_tenant[token]  
+            # Response 
+        return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS)   
+        # TODO remove tenant states   
 
     def ConfigureDevice(self, request, context):
         logger.debug('ConfigureDevice request received: %s' % request)
@@ -925,7 +958,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     inventory_service_pb2_grpc.add_InventoryServiceServicer_to_server(
         InventoryService(
             grpc_client_port, srv6_manager,
-            topo_graph, vpn_dict, devices, verbose
+            topo_graph, vpn_dict, controller_state, devices, verbose
         ), grpc_server
     )
     # If secure mode is enabled, we need to create a secure endpoint

@@ -57,6 +57,8 @@ LOCAL_SID_TABLE = 1
 RESERVED_TABLEIDS = [0, 253, 254, 255]
 RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
+RESERVED_TENANTIDS = [0]
+
 WAIT_TOPOLOGY_INTERVAL = 1
 
 # SRv6 dependencies
@@ -603,6 +605,59 @@ def json_file_to_graph(topo_file):
     # Return graph from JSON file
     return json_graph.node_link_graph(topo_json)
 
+class TenantIDAllocator:
+    def __init__(self):
+        # Mapping token to tenant ID 
+        self.token_to_tenantid = dict()
+        # Set of reusable tenant ID
+        self.reusable_tenantids = set()
+        # Last used tenant ID
+        self.last_allocated_tenantid = -1
+
+    # Allocate and return a new tenant ID for a token 
+    def get_new_tenantid(self, token):
+        if self.token_to_tenantid.get(token):
+            # The token already has a tenant ID 
+            return -1
+        else:
+            # Check if a reusable tenant ID is available 
+            if self.reusable_tenantids:
+                tenantid = self.reusable_tenantids.pop()
+            else:
+                # Get new tenant ID
+                self.last_allocated_tenantid += 1 
+                while self.last_allocated_tenantid in RESERVED_TENANTIDS:
+                    # Skip reserved tenant ID 
+                    self.last_allocated_tenantid += 1
+                tenantid = self.last_allocated_tenantid
+
+            # If tenant ID is valid 
+            if validate_tenantid(tenantid) == True:
+                # Assigne tenant ID to the token 
+                self.token_to_tenantid[token] = tenantid
+                return tenantid
+            # Return -1 if tenant IDs are finished 
+            else:
+                return -1
+
+    # Return tenant ID, if no tenant ID assigned to the token return -1
+    def get_tenantid(self, token):
+        return self.token_to_tenantid.get((token), -1)
+
+    # Release tenant ID and mark it as reusable 
+    def release_tenantid(self, token):
+        # Check if the token has an associated tenantid 
+        if self.token_to_tenantid.get(token):
+            tenantid = self.token_to_tenantid[token]
+            # Unassigne the tenant ID
+            del self.token_to_tenantid[token]
+            # Mark the tenant ID as reusable 
+            self.reusable_tenantids.add(tenantid)
+
+            return tenantid
+        else:
+            # The token has not an associated tenant ID
+            return -1 
 
 # Table ID Allocator
 class TableIDAllocator:    
@@ -686,12 +741,19 @@ class ControllerState:
         self.vpn_file = vpn_file
         # VPNs dict
         self.vpns = vpn_dict
+        # Map tokne to tenant ID 
+        self.token_to_tenant = dict()
+
         # Keep track of how many VPNs are installed in each router
         #self.num_vpn_installed_on_router = dict()
         # Number of tunneled interfaces
         #self.num_tunneled_interfaces = dict()
         # Table ID allocator
         self.tableid_allocator = TableIDAllocator()
+        # Tenant ID allocator 
+        self.tenantid_allocator = TenantIDAllocator()
+        
+
 
         self.interfaces_in_overlay = dict()
 
@@ -706,6 +768,15 @@ class ControllerState:
             except:
                 print('Corrupted VPN file')
         '''
+    # Get new tenant ID
+    def get_new_tenantid(self, token):
+        self.tenantid_allocator.get_new_tenantid(token)
+    # Get tenant ID 
+    def get_tenantid(self, token):
+        self.tenantid_allocator.get_tenantid(token)
+    # Release tenant ID
+    def release_tenantid(self, token):
+        self.tenantid_allocator.release_tenantid(token)
 
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):

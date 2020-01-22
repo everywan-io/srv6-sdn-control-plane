@@ -36,7 +36,7 @@ from socket import AF_INET, AF_INET6
 #script_path = os.path.dirname(os.path.abspath(__file__))
 #GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
 # sys.path.append(GRPC_FOLDER)
-from . import nb_grpc_utils
+from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
 
 # Add path of proto files
 # sys.path.append(nb_grpc_utils.PROTO_FOLDER)
@@ -48,9 +48,9 @@ from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import inventory_service_pb2_grpc
 from srv6_sdn_proto import inventory_service_pb2
-from .nb_grpc_utils import VPN
-from .nb_grpc_utils import Interface
-from .nb_grpc_utils import VPNType
+from nb_grpc_utils import VPN
+from nb_grpc_utils import Interface
+from nb_grpc_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
 #IP_ADDRESS = '2000::a'
@@ -124,6 +124,36 @@ class InventoryService:
         else:
             channel = grpc.insecure_channel(ip_address)
         return inventory_service_pb2_grpc.InventoryServiceStub(channel), channel
+    
+    def configure_tenant(self, server_ip, server_port, port, info):
+        # Create request 
+        request = inventory_service_pb2.Tenant()
+        request.port = port
+        request.info = info
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
+        # Configure the tenant 
+        response = inventory_service_stub.ConfigureTenant(request)
+        # Let's close the session
+        channel.close()
+        # Return
+        return response.status, response.token 
+    
+    def remove_tenant(self, server_ip, server_port, token):
+        # Create request 
+        request = inventory_service_pb2.RemoveTenantRequest()
+        request.token = token 
+        # Get the reference of the stub
+        inventory_service_stub, channel = self.get_grpc_session(
+            server_ip, server_port, self.SECURE)
+        # Remove tenant 
+        response = inventory_service_stub.RemoveTenant(request)
+        # Let's close the session
+        channel.close()
+        # Return
+        return response.status
+
 
     def configure_device(self, server_ip, server_port, device_id, device_name='', device_description='', interfaces=[]):
         # Create the request
@@ -514,7 +544,7 @@ class SRv6VPNManager:
 
 
 if __name__ == '__main__':
-    # Test IPv6-VPN APIs
+    '''# Test IPv6-VPN APIs
     srv6_vpn_manager = SRv6VPNManager()
 
     # Controller address and port
@@ -666,4 +696,12 @@ if __name__ == '__main__':
     nb_grpc_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth3', '10.2.0.1/24')
     nb_grpc_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
-                                          'sur1-eth4', '10.5.0.1/24')
+                                          'sur1-eth4', '10.5.0.1/24')'''
+                
+    InventoryService = InventoryService()
+    response = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
+    response1 = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
+    print('Risposta tenant cration: %s --- %s' % (response[0], response[1]))
+    print('Risposta tenant cration: %s --- %s' % (response1[0], response1[1]))
+    response2 = InventoryService.remove_tenant('11.3.160.61', 12345, 'SCpCTX6WQiMO5GsaMjwQwx20tGPSqibEZU823mMzvEtCiE1s9ZS7vw3OMyzLzS6GtR1WK2pmBnqGkGiZMHW6IX7G21PE7vqBtD7PHdYUm0qDSebmMg3qY9a14n96lNl7')
+    print('%s' % response2)
