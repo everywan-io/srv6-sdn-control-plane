@@ -64,6 +64,9 @@ WAIT_TOPOLOGY_INTERVAL = 1
 # Logger reference
 logger = logging.getLogger(__name__)
 
+# Initialize random seed
+random.seed(0)
+
 
 class InterfaceType:
     UNKNOWN = 'unknown'
@@ -1213,6 +1216,17 @@ class ControllerState:
             #self.tableid_allocator.last_allocated_tableid = last_tableid
         except IOError:
             print('VPN file not found')
+
+
+# Generate a random token used to authenticate the tenant
+def generate_token():
+    # Example of token: J4Ie2QKOHz3IVSQs8yA1ahAKfl1ySrtVxGVuT6NkuElGfC8cm55rFhyzkc79pjSLOsr7zKOu7rkMgNMyEHlze4iXVNoX1AtifuieNrrW4rrCroScpGdQqHMETJU46okS
+    seq = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
+    token = ''
+    for _ in range(0, 128):
+        token += random.choice(seq)
+    # Return the token
+    return token
 
     # Get a new table ID
     # def get_new_tableid(self, vpn_name, tenantid):
