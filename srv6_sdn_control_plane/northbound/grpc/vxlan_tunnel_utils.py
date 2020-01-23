@@ -22,8 +22,6 @@ from ipaddress import IPv4Network
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
-# SRv6 dependencies
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22

@@ -36,10 +36,10 @@ from socket import AF_INET, AF_INET6
 #script_path = os.path.dirname(os.path.abspath(__file__))
 #GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
 # sys.path.append(GRPC_FOLDER)
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
+from srv6_sdn_control_plane import srv6_controller_utils
 
 # Add path of proto files
-# sys.path.append(nb_grpc_utils.PROTO_FOLDER)
+# sys.path.append(srv6_controller_utils.PROTO_FOLDER)
 
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
@@ -48,9 +48,9 @@ from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import inventory_service_pb2_grpc
 from srv6_sdn_proto import inventory_service_pb2
-from nb_grpc_utils import VPN
-from nb_grpc_utils import Interface
-from nb_grpc_utils import VPNType
+from srv6_controller_utils import VPN
+from srv6_controller_utils import Interface
+from srv6_controller_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
 #IP_ADDRESS = '2000::a'
@@ -104,7 +104,7 @@ class InventoryService:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
-        addr_family = nb_grpc_utils.getAddressFamily(ip_address)
+        addr_family = srv6_controller_utils.getAddressFamily(ip_address)
         if addr_family == AF_INET6:
             ip_address = "ipv6:[%s]:%s" % (ip_address, port)
         elif addr_family == AF_INET:
@@ -169,7 +169,7 @@ class InventoryService:
                 for ip_addr in _interface['addrs']:
                     addr = ip_addr.split('/')[0]
                     netmask = ip_addr.split('/')[1]
-                    family = nb_grpc_utils.getAddressFamily(addr)
+                    family = srv6_controller_utils.getAddressFamily(addr)
                     if family == AF_INET:
                         ipv4_addr = interface.ipv4_addrs.add()
                         ipv4_addr.addr = addr
@@ -183,7 +183,7 @@ class InventoryService:
                         return None
             if 'subnets' in _interface:
                 for subnet in _interface['subnets']:
-                    family = nb_grpc_utils.getAddressFamily(subnet)
+                    family = srv6_controller_utils.getAddressFamily(subnet)
                     if family == AF_INET:
                         interface.ipv4_subnets.append(subnet)
                     elif family == AF_INET6:
@@ -387,7 +387,7 @@ class SRv6VPNManager:
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
-        addr_family = nb_grpc_utils.getAddressFamily(ip_address)
+        addr_family = srv6_controller_utils.getAddressFamily(ip_address)
         if addr_family == AF_INET6:
             ip_address = "ipv6:[%s]:%s" % (ip_address, port)
         elif addr_family == AF_INET:
@@ -572,12 +572,12 @@ if __name__ == '__main__':
                                 name, VPNType.IPv6VPN, interfaces,
                                 tenantid)
     # Remove all addresses in the hosts
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::4', 'hads11-eth1')
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::6', 'hads21-eth1')
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::4', 'hads11-eth1')
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::6', 'hads21-eth1')
     # Add the private addresses to the interfaces in the hosts
-    nb_grpc_utils.add_ipv6_address_ssh('2000::4', 'hads11-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::4', 'hads11-eth1',
                                        'fd00:0:1:1::2/48')
-    nb_grpc_utils.add_ipv6_address_ssh('2000::6', 'hads21-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::6', 'hads21-eth1',
                                        'fd00:0:1:3::2/48')
 
     # Add interface to the VPN
@@ -590,9 +590,9 @@ if __name__ == '__main__':
                                              controller_port,
                                              name, tenantid, if1)
     # Remove all addresses in the hosts
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::5', 'hads12-eth1')
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::5', 'hads12-eth1')
     # Add the public addresses to the interfaces in the hosts
-    nb_grpc_utils.add_ipv6_address_ssh('2000::5', 'hads12-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::5', 'hads12-eth1',
                                        'fd00:0:1:2::2')
 
     # Remove interface from the VPN
@@ -606,38 +606,38 @@ if __name__ == '__main__':
                                                controller_port, name,
                                                tenantid, if1)
     # Add the public prefixes to the interfaces in the routers
-    nb_grpc_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth4',
+    srv6_controller_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth4',
                                             'fd00:0:1:3:2::/64')
     # Add the public addresses to the interfaces in the routers
-    nb_grpc_utils.add_ipv6_address_quagga('2000::1', 'ads1-eth4',
+    srv6_controller_utils.add_ipv6_address_quagga('2000::1', 'ads1-eth4',
                                           'fd00:0:1:3:2::1')
     # Remove all addresses in the hosts
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::5',
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::5',
                                            'hads12-eth1')
     # Add the public addresses to the interfaces in the hosts
-    nb_grpc_utils.add_ipv6_address_ssh('2000::5', 'hads12-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::5', 'hads12-eth1',
                                        'fd00:0:1:3:2::2')
 
     # Remove VPN 10-research
     srv6_vpn_manager.remove_vpn(controller_addr,
                                 controller_port, 'research', 10)
     # Add the public prefixes addresses to the interfaces in the routers
-    nb_grpc_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth3',
+    srv6_controller_utils.add_ipv6_nd_prefix_quagga('2000::1', 'ads1-eth3',
                                             'fd00:0:1:3:1::/64')
-    nb_grpc_utils.add_ipv6_nd_prefix_quagga('2000::2', 'ads2-eth3',
+    srv6_controller_utils.add_ipv6_nd_prefix_quagga('2000::2', 'ads2-eth3',
                                             'fd00:0:2:3:1::/64')
     # Add the public addresses to the interfaces in the routers
-    nb_grpc_utils.add_ipv6_address_quagga('2000::1', 'ads1-eth3',
+    srv6_controller_utils.add_ipv6_address_quagga('2000::1', 'ads1-eth3',
                                           'fd00:0:1:3:1::1')
-    nb_grpc_utils.add_ipv6_address_quagga('2000::2', 'ads2-eth3',
+    srv6_controller_utils.add_ipv6_address_quagga('2000::2', 'ads2-eth3',
                                           'fd00:0:2:3:1::1')
     # Remove all addresses in the hosts
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::5', 'hads11-eth1')
-    nb_grpc_utils.flush_ipv6_addresses_ssh('2000::6', 'hads21-eth1')
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::5', 'hads11-eth1')
+    srv6_controller_utils.flush_ipv6_addresses_ssh('2000::6', 'hads21-eth1')
     # Add the public addresses to the interfaces in the hosts
-    nb_grpc_utils.add_ipv6_address_ssh('2000::5', 'hads11-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::5', 'hads11-eth1',
                                        'fd00:0:2:3:1::/64')
-    nb_grpc_utils.add_ipv6_address_ssh('2000::6', 'hads21-eth1',
+    srv6_controller_utils.add_ipv6_address_ssh('2000::6', 'hads21-eth1',
                                        'fd00:0:2:3:1::/64')
 
     # Test IPv4-VPN APIs
@@ -684,18 +684,18 @@ if __name__ == '__main__':
                                                controller_port, name,
                                                tenantid, if1)
     # Add the public addresses to the interfaces in the routers
-    nb_grpc_utils.add_ipv4_address_quagga('fdff::1',
+    srv6_controller_utils.add_ipv4_address_quagga('fdff::1',
                                           'ads1-eth4', '10.3.0.1/16')
 
     # Remove VPN 10-research
     srv6_vpn_manager.remove_vpn(controller_addr,
                                 controller_port, 'research', 10)
     # Add the public addresses to the interfaces in the hosts
-    nb_grpc_utils.add_ipv4_address_quagga('fdff::1',
+    srv6_controller_utils.add_ipv4_address_quagga('fdff::1',
                                           'ads1-eth3', '10.3.0.1/16')
-    nb_grpc_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
+    srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth3', '10.2.0.1/24')
-    nb_grpc_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
+    srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth4', '10.5.0.1/24')'''
                 
     InventoryService = InventoryService()

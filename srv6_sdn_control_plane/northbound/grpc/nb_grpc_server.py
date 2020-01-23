@@ -44,7 +44,8 @@ from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import inventory_service_pb2_grpc
 from srv6_sdn_proto import inventory_service_pb2
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
+from srv6_sdn_control_plane import srv6_controller_utils
+from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.northbound.grpc import tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_proto import status_codes_pb2
@@ -126,7 +127,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         port = request.port
         info = request.info 
         # Generate token  
-        token = nb_grpc_utils.generate_token()
+        token = srv6_controller_utils.generate_token()
         # Set dictionary 
         self.controller_state.token_to_tenant[token] = dict()
         # Get a tenant ID for the token  
@@ -169,7 +170,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
             for interface in device.interfaces:
                 if interface.type != '':
                     interfaces[interface.name]['type'] = interface.type
-                if interface.type == nb_grpc_utils.InterfaceType.WAN:
+                if interface.type == srv6_controller_utils.InterfaceType.WAN:
                     if len(interface.ipv4_addrs) > 0 or \
                             len(interface.ipv6_addrs) > 0:
                         logger.warning(
@@ -278,7 +279,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
             if device_description != '':
                 self.devices[device_id]['description'] = device_description
             self.devices[device_id]['status'] = \
-                nb_grpc_utils.DeviceStatus.RUNNING
+                srv6_controller_utils.DeviceStatus.RUNNING
         logger.info('The device configuration has been saved\n\n')
         # Create the response
         return srv6_vpn_pb2.SRv6VPNReply(status=STATUS_SUCCESS)
@@ -370,9 +371,9 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
             # Set name
             tunnel.name = _tunnel.vpn_name
             # Set type
-            if _tunnel.vpn_type == nb_grpc_utils.VPNType.IPv4VPN:
+            if _tunnel.vpn_type == srv6_controller_utils.VPNType.IPv4VPN:
                 tunnel.type = 'IPv4VPN'
-            elif _tunnel.vpn_type == nb_grpc_utils.VPNType.IPv6VPN:
+            elif _tunnel.vpn_type == srv6_controller_utils.VPNType.IPv6VPN:
                 tunnel.type = 'IPv6VPN'
             else:
                 print('Unrecognized type')
@@ -441,7 +442,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
-                interfaces.append(nb_grpc_utils.Interface(
+                interfaces.append(srv6_controller_utils.Interface(
                     interface.routerid,
                     interface.interface_name
                 ))
@@ -453,14 +454,14 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             #
             # Validate the tenant ID
             logger.debug('Validating the tenant ID:\n%s' % tenantid)
-            if not nb_grpc_utils.validate_tenantid(tenantid):
+            if not srv6_controller_utils.validate_tenantid(tenantid):
                 logger.warning('Invalid tenant ID: %s' % tenantid)
                 # If tenant ID is invalid, return an error message
                 return (srv6_vpn_pb2
                         .SRv6VPNReply(status=STATUS_VPN_INVALID_TENANTID))
             # Validate the VPN type
             logger.debug('Validating the VPN type:\n%s' % vpn_type)
-            if not nb_grpc_utils.validate_vpn_type(vpn_type):
+            if not srv6_controller_utils.validate_vpn_type(vpn_type):
                 logger.warning('Invalid VPN type: %s' % vpn_type)
                 # If the VPN type is invalid, return an error message
                 return (srv6_vpn_pb2
@@ -671,7 +672,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
-                interfaces.append(nb_grpc_utils.Interface(
+                interfaces.append(srv6_controller_utils.Interface(
                     interface.routerid,
                     interface.interface_name
                 ))
@@ -798,7 +799,7 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Extract the interfaces
             interfaces = list()
             for interface in intent.interfaces:
-                interfaces.append(nb_grpc_utils.Interface(
+                interfaces.append(srv6_controller_utils.Interface(
                     interface.routerid,
                     interface.interface_name
                 ))
@@ -938,7 +939,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  controller_state=None,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
-    #controller_state = nb_grpc_utils.ControllerState(
+    #controller_state = srv6_controller_utils.ControllerState(
     #    topology=topo_graph,
     #    devices=devices,
     #    vpn_dict=vpn_dict,
@@ -1113,7 +1114,7 @@ if __name__ == '__main__':
         print('Waiting for TOPOLOGY_FILE...')
         time.sleep(INTERVAL_CHECK_FILES)
     # Update the topology
-    topo_graph = nb_grpc_utils.load_topology_from_json_dump(topo_file)
+    topo_graph = srv6_controller_utils.load_topology_from_json_dump(topo_file)
     if topo_graph is not None:
         # Start server
         start_server(

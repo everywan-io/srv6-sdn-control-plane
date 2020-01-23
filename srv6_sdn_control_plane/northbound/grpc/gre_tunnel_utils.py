@@ -43,8 +43,6 @@ from ipaddress import AddressValueError
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
-# SRv6 dependencies
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
 
 # Reserved GRE keys
 RESERVED_GRE_KEYS = []

@@ -29,7 +29,8 @@ import logging
 from ipaddress import IPv6Interface
 from ipaddress import IPv6Network
 # SRv6 dependencies
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
+#from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
+from srv6_sdn_control_plane import srv6_controller_utils
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -84,7 +85,7 @@ class ControllerStateSRv6:
 
     def __init__(self, controller_state):
         # Create Table IDs allocator
-        self.tableid_allocator = nb_grpc_utils.TableIDAllocator()
+        self.tableid_allocator = srv6_controller_utils.TableIDAllocator()
         # Create SIDs allocator
         self.sid_allocator = SIDAllocator()
         # Controller state

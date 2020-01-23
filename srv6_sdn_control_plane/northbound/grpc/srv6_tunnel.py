@@ -31,7 +31,7 @@ from socket import AF_INET6
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
-from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
+from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 
@@ -121,10 +121,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             r_slice.routerid, tableid
         )
         # Get the subnets
-        if overlay_type == nb_grpc_utils.VPNType.IPv6VPN:
+        if overlay_type == srv6_controller_utils.VPNType.IPv6VPN:
             subnets = self.controller_state.get_ipv6_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
-        elif overlay_type == nb_grpc_utils.VPNType.IPv4VPN:
+        elif overlay_type == srv6_controller_utils.VPNType.IPv4VPN:
             subnets = self.controller_state.get_ipv4_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
         else:
@@ -171,10 +171,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot retrieve VPN table ID')
             return STATUS_INTERNAL_ERROR
         # Get the subnets
-        if overlay_type == nb_grpc_utils.VPNType.IPv6VPN:
+        if overlay_type == srv6_controller_utils.VPNType.IPv6VPN:
             subnets = self.controller_state.get_ipv6_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
-        elif overlay_type == nb_grpc_utils.VPNType.IPv4VPN:
+        elif overlay_type == srv6_controller_utils.VPNType.IPv4VPN:
             subnets = self.controller_state.get_ipv4_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
         else:
@@ -208,7 +208,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('New table ID assigned to the VPN:%s', tableid)
         logger.debug('Validating the table ID:\n%s' % tableid)
         # Validate the table ID
-        if not nb_grpc_utils.validate_table_id(tableid):
+        if not srv6_controller_utils.validate_table_id(tableid):
             logger.warning('Invalid table ID: %s' % tableid)
             # If the table ID is not valid, return an error message
             return STATUS_INTERNAL_ERROR
@@ -244,7 +244,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add the rule to steer the SIDs through the local SID table
         response = self.srv6_manager.create_iprule(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            table=nb_grpc_utils.LOCAL_SID_TABLE, destination=sid_family
+            table=srv6_controller_utils.LOCAL_SID_TABLE, destination=sid_family
         )
         if response != STATUS_SUCCESS:
             logger.warning(
@@ -256,7 +256,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add a blackhole route to drop all unknown active segments
         response = self.srv6_manager.create_iproute(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            type='blackhole', table=nb_grpc_utils.LOCAL_SID_TABLE
+            type='blackhole', table=srv6_controller_utils.LOCAL_SID_TABLE
         )
         if response != STATUS_SUCCESS:
             logger.warning(
@@ -279,11 +279,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get the router address')
             return STATUS_INTERNAL_ERROR
         # Second step is the creation of the decapsulation and lookup route
-        if overlay_type == nb_grpc_utils.VPNType.IPv6VPN:
+        if overlay_type == srv6_controller_utils.VPNType.IPv6VPN:
             # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
             # table. This behavior is realized by End.DT6 SRv6 action
             action = 'End.DT6'
-        elif overlay_type == nb_grpc_utils.VPNType.IPv4VPN:
+        elif overlay_type == srv6_controller_utils.VPNType.IPv4VPN:
             # For IPv4 VPN we have to perform decap and lookup in IPv6 routing
             # table. This behavior is realized by End.DT4 SRv6 action
             action = 'End.DT4'
@@ -317,7 +317,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         response = self.srv6_manager.create_srv6_local_processing_function(
             deviceip, self.grpc_client_port, segment=sid,
             action=action, device=dev,
-            localsid_table=nb_grpc_utils.LOCAL_SID_TABLE, table=tableid
+            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE, table=tableid
         )
         if response != STATUS_SUCCESS:
             logger.warning(
@@ -440,7 +440,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Remove rule for SIDs
         response = self.srv6_manager.remove_iprule(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            table=nb_grpc_utils.LOCAL_SID_TABLE,
+            table=srv6_controller_utils.LOCAL_SID_TABLE,
             destination=sid_family
         )
         if response != STATUS_SUCCESS:
@@ -452,7 +452,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Remove blackhole route
         response = self.srv6_manager.remove_iproute(
             deviceip, self.grpc_client_port, family=AF_INET6, type='blackhole',
-            table=nb_grpc_utils.LOCAL_SID_TABLE
+            table=srv6_controller_utils.LOCAL_SID_TABLE
         )
         if response != STATUS_SUCCESS:
             # If the operation has failed, return an error message
@@ -489,7 +489,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # route)
         response = self.srv6_manager.remove_srv6_local_processing_function(
             deviceip, self.grpc_client_port, segment=sid,
-            localsid_table=nb_grpc_utils.LOCAL_SID_TABLE
+            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
         )
         if response != STATUS_SUCCESS:
             # If the operation has failed, return an error message

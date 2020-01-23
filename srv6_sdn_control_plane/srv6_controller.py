@@ -68,18 +68,6 @@ DEFAULT_NB_INTERFACE = 'gRPC'
 DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
 
 
-class SDWANControllerState:
-
-    def __init__(self):
-        self.devices = dict()
-        self.token_to_tenant = dict()   # TODO check this!!
-
-    # Get router's management IP address
-    def get_router_mgmtip(self, routerid):
-        routerid = int(IPv4Address(routerid))
-        return self.devices[routerid]['mgmtip']
-
-
 class SRv6Controller(object):
 
     def __init__(self, nodes, period, topo_file, topo_graph,
@@ -149,6 +137,8 @@ class SRv6Controller(object):
         self.topo_graph_lock = Lock()
         # Minimum interval between dumps
         self.min_interval_between_topo_dumps = min_interval_between_topo_dumps
+        # Devices
+        self.devices = dict()
         # Topology information extraction
         self.topo_extraction = topo_extraction
         if self.VERBOSE:
@@ -167,7 +157,7 @@ class SRv6Controller(object):
             print(('*** Selected northbound interface: %s' % self.nb_interface))
             print()
         # Controller state
-        self.controller_state = SDWANControllerState()
+        self.controller_state = utils.SDWANControllerState(self.topology_file, self.devices, self.vpn_dict, self.vpn_file)
 
     # Get the interface of the router facing on a net
     def get_interface_facing_on_net(self, routerid, net):
