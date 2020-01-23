@@ -27,15 +27,9 @@ from __future__ import absolute_import, division, print_function
 # General imports
 from six import text_type
 import grpc
-import os
 import sys
 from socket import AF_INET, AF_INET6
 
-#GRPC_FOLDER = '.'
-# Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#GRPC_FOLDER = os.path.join(script_path, GRPC_FOLDER)
-# sys.path.append(GRPC_FOLDER)
 from srv6_sdn_control_plane import srv6_controller_utils
 
 # Add path of proto files
