@@ -300,22 +300,11 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
             for ifname, ifinfo in _interfaces.items():
                 interface = device.interfaces.add()
                 interface.name = ifname
-                for addr in ifinfo['mac_addrs']:
-                    mac_addr = interface.mac_addrs.add()
-                    mac_addr.broadcast = addr['broadcast']
-                    mac_addr.addr = addr['addr']
-                for addr in ifinfo['ipv4_addrs']:
-                    ipv4_addr = interface.ipv4_addrs.add()
-                    ipv4_addr.broadcast = addr['broadcast']
-                    ipv4_addr.netmask = addr['netmask']
-                    ipv4_addr.addr = addr['addr']
-                    ipv4_addr.ext_addr = addr['ext_addr']
-                for addr in ifinfo['ipv6_addrs']:
-                    ipv6_addr = interface.ipv6_addrs.add()
-                    ipv6_addr.broadcast = addr['broadcast']
-                    ipv6_addr.netmask = addr['netmask']
-                    ipv6_addr.addr = addr['addr']
-                    ipv6_addr.ext_addr = addr['ext_addr']
+                interface.mac_addr = ifinfo['mac_addr']
+                interface.ipv4_addrs.extend(ifinfo['ipv4_addrs'])
+                interface.ipv6_addrs.extend(ifinfo['ipv6_addrs'])
+                interface.ext_ipv4_addrs.extend(ifinfo['ext_ipv4_addrs'])
+                interface.ext_ipv6_addrs.extend(ifinfo['ext_ipv6_addrs'])
                 interface.ipv4_subnets.extend(ifinfo['ipv4_subnets'])
                 interface.ipv6_subnets.extend(ifinfo['ipv6_subnets'])
                 interface.type = ifinfo['type']
