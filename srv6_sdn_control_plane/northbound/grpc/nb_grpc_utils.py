@@ -67,7 +67,7 @@ WAIT_TOPOLOGY_INTERVAL = 1
 logger = logging.getLogger(__name__)
 
 # Initialize random seed
-random.seed(0)
+random.seed(time.time())
 
 
 class InterfaceType:

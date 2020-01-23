@@ -935,14 +935,15 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  topo_graph=None, vpn_dict=None,
                  devices=None,
                  vpn_file=DEFAULT_VPN_DUMP,
+                 controller_state=None,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
-    controller_state = nb_grpc_utils.ControllerState(
-        topology=topo_graph,
-        devices=devices,
-        vpn_dict=vpn_dict,
-        vpn_file=vpn_file
-    )
+    #controller_state = nb_grpc_utils.ControllerState(
+    #    topology=topo_graph,
+    #    devices=devices,
+    #    vpn_dict=vpn_dict,
+    #    vpn_file=vpn_file
+    #)
     # Create SRv6 Manager
     srv6_manager = sb_grpc_client.SRv6Manager()
     # Setup gRPC server

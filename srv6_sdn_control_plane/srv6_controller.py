@@ -72,6 +72,7 @@ class SDWANControllerState:
 
     def __init__(self):
         self.devices = dict()
+        self.token_to_tenant = dict()   # TODO check this!!
 
     # Get router's management IP address
     def get_router_mgmtip(self, routerid):
@@ -872,7 +873,8 @@ class SRv6Controller(object):
         logging.info('*** Starting registration server')
         server = PymerangController(server_ip=self.pymerang_server_ip,
                                     server_port=self.pymerang_server_port,
-                                    devices=self.controller_state.devices)
+                                    devices=self.controller_state.devices,
+                                    controller_state=self.controller_state)
         server.serve()
 
     # Run the SRv6 controller
@@ -898,6 +900,7 @@ class SRv6Controller(object):
                         'vpn_dict': self.vpn_dict,
                         'devices': self.controller_state.devices,
                         'vpn_file': self.vpn_file,
+                        'controller_state': self.controller_state,
                         'verbose': self.VERBOSE
                     }
                 )
