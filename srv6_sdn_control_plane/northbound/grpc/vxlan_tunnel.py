@@ -171,7 +171,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # for the first case the vxlan dport is the default one 
-        vxlan_port_site = 4789 
+        vxlan_port_site = 40000
         # retrive table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   

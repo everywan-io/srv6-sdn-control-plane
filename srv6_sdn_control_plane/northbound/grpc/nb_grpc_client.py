@@ -42,9 +42,9 @@ from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import inventory_service_pb2_grpc
 from srv6_sdn_proto import inventory_service_pb2
-from srv6_controller_utils import VPN
-from srv6_controller_utils import Interface
-from srv6_controller_utils import VPNType
+from srv6_sdn_control_plane.srv6_controller_utils import VPN
+from srv6_sdn_control_plane.srv6_controller_utils import Interface
+from srv6_sdn_control_plane.srv6_controller_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
 #IP_ADDRESS = '2000::a'
@@ -692,10 +692,8 @@ if __name__ == '__main__':
     srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth4', '10.5.0.1/24')'''
                 
-    InventoryService = InventoryService()
-    response = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
-    response1 = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
-    print('Risposta tenant cration: %s --- %s' % (response[0], response[1]))
-    print('Risposta tenant cration: %s --- %s' % (response1[0], response1[1]))
-    response2 = InventoryService.remove_tenant('11.3.160.61', 12345, 'SCpCTX6WQiMO5GsaMjwQwx20tGPSqibEZU823mMzvEtCiE1s9ZS7vw3OMyzLzS6GtR1WK2pmBnqGkGiZMHW6IX7G21PE7vqBtD7PHdYUm0qDSebmMg3qY9a14n96lNl7')
-    print('%s' % response2)
+    #InventoryService = InventoryService()
+    #response = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
+    #print('Risposta tenant cration: %s --- %s' % (response[0], response[1]))
+
+  

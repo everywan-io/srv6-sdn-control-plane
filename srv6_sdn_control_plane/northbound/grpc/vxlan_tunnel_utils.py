@@ -42,7 +42,7 @@ from srv6_generators import SIDAllocator
 # Logger reference
 logger = logging.getLogger(__name__)
 
-RESERVED_VNI = [0, 1, 2, 3, 4]
+RESERVED_VNI = [0, 1]
 RESERVED_VTEP_IP = [0, 65536]
 
 class ControllerStateVXLAN:
