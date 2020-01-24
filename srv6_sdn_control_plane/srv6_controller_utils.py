@@ -630,9 +630,9 @@ class SDWANControllerState:
 
     # Get router's management IP address
 
-    def get_router_mgmtip(self, routerid):
-        routerid = int(IPv4Address(routerid))
-        return self.devices[routerid]['mgmtip']
+    #def get_router_mgmtip(self, routerid):
+    #    routerid = int(IPv4Address(routerid))
+    #    return self.devices[routerid]['mgmtip']
 
 
 # Generate a random token used to authenticate the tenant
