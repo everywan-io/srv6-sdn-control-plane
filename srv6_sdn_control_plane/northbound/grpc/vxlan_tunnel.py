@@ -170,8 +170,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
-        # for the first case the vxlan dport is the default one 
-        vxlan_port_site = 40000
+        # Get vxlan port set by user 
+        vxlan_port_site = self.controller_state.tenant_info[tenantid].get('port')
         # retrive table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   
@@ -352,7 +352,20 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vrf_name = 'vrf-%s' % (tableid)
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
-        
+        # Retrive VTEP IP address
+        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
+
+        #remove VTEP IP address 
+        response = self.srv6_manager.remove_ipaddr(
+            mgmt_ip_site, self.grpc_client_port,
+            ip_addr = vtep_ip_site,
+            device = vtep_name
+        )
+        if response != STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove the address %s of VTEP %s in %s'
+                        % (vtep_ip_site, vtep_name, mgmt_ip_site))
+            return STATUS_INTERNAL_ERROR
         # remove VTEP 
         response = self.srv6_manager.delVxLAN(
                 mgmt_ip_site, self.grpc_client_port, 
