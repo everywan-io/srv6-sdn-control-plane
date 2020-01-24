@@ -96,6 +96,8 @@ STATUS_VPN_NAME_UNAVAILABLE = status_codes_pb2.STATUS_VPN_NAME_UNAVAILABLE
 STATUS_VPN_INVALID_PREFIX = status_codes_pb2.STATUS_VPN_INVALID_PREFIX
 STATUS_VPN_NOTFOUND = status_codes_pb2.STATUS_VPN_NOTFOUND
 STATUS_VPN_INVALID_TENANTID = status_codes_pb2.STATUS_VPN_INVALID_TENANTID
+STATUS_INVALID_ACTION = status_codes_pb2.STATUS_INVALID_ACTION
+
 
 
 class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
@@ -128,27 +130,35 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         info = request.info 
         # Generate token  
         token = srv6_controller_utils.generate_token()
-        # Set dictionary 
-        self.controller_state.token_to_tenant[token] = dict()
         # Get a tenant ID for the token  
         tenantid  = self.controller_state.get_new_tenantid(token)
-        # Save tenant parameters 
-        self.controller_state.token_to_tenant[token]['tenantid'] = tenantid
-        self.controller_state.token_to_tenant[token]['port'] = port
-        self.controller_state.token_to_tenant[token]['info'] = info 
+        # Set dictionary 
+        self.controller_state.tenant_info[tenantid] = dict()
+        # Save tenant info
+        self.controller_state.tenant_info[tenantid]['port'] = port
+        self.controller_state.tenant_info[tenantid]['info'] = info 
         # Response 
         return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token = token)
     
     def RemoveTenant(self, request, context):
         # Extract token 
         token = request.token
+        # Get tenant ID 
+        tenantid = self.controller_state.get_tenantid(token)
+        print('TOKEN: %s' % token)
+        print('+++++++ %s' % tenantid)
+        # Check if the passed token has an associeted tenant ID 
+        if tenantid == -1:
+            return inventory_service_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)   
+
         # Release tenantid 
-        if token in self.controller_state.token_to_tenant:
+        if tenantid in self.controller_state.tenant_info:
             self.controller_state.release_tenantid(token)
             # Remove tenant info 
-            del self.controller_state.token_to_tenant[token]  
+            del self.controller_state.tenant_info[tenantid] 
             # Response 
         return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS)   
+        
         # TODO remove tenant states   
 
     def ConfigureDevice(self, request, context):

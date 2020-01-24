@@ -676,5 +676,7 @@ if __name__ == '__main__':
     #InventoryService = InventoryService()
     #response = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
     #print('Risposta tenant cration: %s --- %s' % (response[0], response[1]))
+    #response2 =InventoryService.remove_tenant('11.3.160.61', 12345, 'knXgmEk6srjderYuwEKCnCuAshGVugOClP2AfPBSYQbroR5FhMDfpdoimlu4wDgw6y6yvOFqccCuPDHmfspTVakJIpRWgxLvEzj5qt02fAMwIZOmNqYCbT5GKxAXfmtb')
+    #print('Rispost remove tenat: %s' % response2)
 
   

@@ -81,8 +81,8 @@ class SDWANControllerState:
         # VPNs dict
         self.vpns = vpn_dict
         # Map tokne to tenant ID
-        self.token_to_tenant = dict()
-
+        self.tenant_info = dict()
+        
         # Keep track of how many VPNs are installed in each router
         #self.num_vpn_installed_on_router = dict()
         # Number of tunneled interfaces
@@ -108,15 +108,15 @@ class SDWANControllerState:
     # Get new tenant ID
 
     def get_new_tenantid(self, token):
-        self.tenantid_allocator.get_new_tenantid(token)
+        return self.tenantid_allocator.get_new_tenantid(token)
 
     # Get tenant ID
     def get_tenantid(self, token):
-        self.tenantid_allocator.get_tenantid(token)
+        return self.tenantid_allocator.get_tenantid(token)
 
     # Release tenant ID
     def release_tenantid(self, token):
-        self.tenantid_allocator.release_tenantid(token)
+        return self.tenantid_allocator.release_tenantid(token)
 
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
@@ -663,13 +663,13 @@ def print_and_die(msg, code=-2):
 
 class TenantIDAllocator:
     def __init__(self):
-        # Mapping token to tenant ID
-        self.token_to_tenantid = dict()
         # Set of reusable tenant ID
         self.reusable_tenantids = set()
         # Last used tenant ID
         self.last_allocated_tenantid = -1
-
+        # Mapping token to tenant ID
+        self.token_to_tenantid = dict()
+       
     # Allocate and return a new tenant ID for a token
     def get_new_tenantid(self, token):
         if self.token_to_tenantid.get(token):
@@ -698,12 +698,12 @@ class TenantIDAllocator:
 
     # Return tenant ID, if no tenant ID assigned to the token return -1
     def get_tenantid(self, token):
-        return self.token_to_tenantid.get((token), -1)
+        return self.token_to_tenantid.get(token, -1)
 
     # Release tenant ID and mark it as reusable
     def release_tenantid(self, token):
         # Check if the token has an associated tenantid
-        if self.token_to_tenantid.get(token):
+        if token in self.token_to_tenantid:
             tenantid = self.token_to_tenantid[token]
             # Unassigne the tenant ID
             del self.token_to_tenantid[token]
