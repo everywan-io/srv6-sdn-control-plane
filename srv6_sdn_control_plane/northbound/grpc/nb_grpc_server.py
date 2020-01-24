@@ -184,7 +184,6 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                         addrs = list()
                         nets = list()
                         for addr in interfaces[interface.name]['ipv4_addrs']:
-                            addr = '%s/%s' % (addr['addr'], addr['netmask'])
                             addrs.append(addr)
                         response = self.srv6_manager.remove_many_ipaddr(
                             self.devices[device_id]['mgmtip'],
@@ -202,11 +201,9 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                         interfaces[interface.name]['ipv4_addrs'] = list()
                         # Add IP address to the interface
                         for ipv4_addr in interface.ipv4_addrs:
-                            ip_addr = '%s/%s' % (ipv4_addr.addr,
-                                                 ipv4_addr.netmask)
                             response = self.srv6_manager.create_ipaddr(
                                 self.devices[device_id]['mgmtip'],
-                                self.grpc_client_port, ip_addr=ip_addr,
+                                self.grpc_client_port, ip_addr=ipv4_addr,
                                 device=interface.name, family=AF_INET
                             )
                             if response != STATUS_SUCCESS:
@@ -217,17 +214,11 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                                     'to the interface'
                                 )
                                 return status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv4_addrs'].append({
-                                'addr': ipv4_addr.addr,
-                                'netmask': ipv4_addr.netmask,
-                                'broadcast': '',
-                                'ext_addr': ipv4_addr.ext_addr
-                            })
+                            interfaces[interface.name]['ipv4_addrs'].append(ipv4_addr)
                     if len(interface.ipv6_addrs) > 0:
                         addrs = list()
                         nets = list()
                         for addr in interfaces[interface.name]['ipv6_addrs']:
-                            addr = '%s/%s' % (addr['addr'], addr['netmask'])
                             addrs.append(addr)
                             nets.append(str(IPv6Interface(addr).network))
                         response = self.srv6_manager.remove_many_ipaddr(
@@ -246,12 +237,10 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                         interfaces[interface.name]['ipv6_addrs'] = list()
                         # Add IP address to the interface
                         for ipv6_addr in interface.ipv6_addrs:
-                            ip_addr = '%s/%s' % (ipv6_addr.addr,
-                                                 ipv6_addr.netmask)
-                            net = IPv6Interface(ip_addr).network.__str__()
+                            net = IPv6Interface(ipv6_addr).network.__str__()
                             response = self.srv6_manager.create_ipaddr(
                                 self.devices[device_id]['mgmtip'],
-                                self.grpc_client_port, ip_addr=ip_addr,
+                                self.grpc_client_port, ip_addr=ipv6_addr,
                                 device=interface.name, net=net, family=AF_INET6
                             )
                             if response != STATUS_SUCCESS:
@@ -262,12 +251,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                                     'to the interface'
                                 )
                                 return status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv6_addrs'].append({
-                                'addr': ipv6_addr.addr,
-                                'netmask': ipv6_addr.netmask,
-                                'broadcast': '',
-                                'ext_addr': ipv6_addr.ext_addr
-                            })
+                            interfaces[interface.name]['ipv6_addrs'].append(ipv6_addr)
                     for subnet in interface.ipv4_subnets:
                         interfaces[interface.name]['ipv4_subnets'].append(
                             subnet)
