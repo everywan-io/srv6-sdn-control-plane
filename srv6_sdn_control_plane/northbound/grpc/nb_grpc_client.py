@@ -162,16 +162,11 @@ class InventoryService:
             if 'addrs' in _interface:
                 for ip_addr in _interface['addrs']:
                     addr = ip_addr.split('/')[0]
-                    netmask = ip_addr.split('/')[1]
                     family = srv6_controller_utils.getAddressFamily(addr)
                     if family == AF_INET:
-                        ipv4_addr = interface.ipv4_addrs.add()
-                        ipv4_addr.addr = addr
-                        ipv4_addr.netmask = netmask
+                        interface.ipv4_addrs.append(ip_addr)
                     elif family == AF_INET6:
-                        ipv6_addr = interface.ipv6_addrs.add()
-                        ipv6_addr.addr = addr
-                        ipv6_addr.netmask = netmask
+                        interface.ipv6_addrs.append(ip_addr)
                     else:
                         print('Provided an invalid address: %s' % addr)
                         return None
@@ -251,34 +246,20 @@ class InventoryService:
                     for intf in device.interfaces:
                         ifname = intf.name
                         type = intf.type
-                        mac_addrs = list()
-                        for mac_addr in intf.mac_addrs:
-                            mac_addrs.append({
-                                'broadcast': mac_addr.broadcast,
-                                'addr': mac_addr.addr,
-                            })
+                        mac_addr = intf.mac_addr
                         ipv4_addrs = list()
-                        for ipv4_addr in intf.ipv4_addrs:
-                            ipv4_addrs.append({
-                                'broadcast': ipv4_addr.broadcast,
-                                'netmask': ipv4_addr.netmask,
-                                'addr': ipv4_addr.addr,
-                                'ext_addr': ipv4_addr.ext_addr,
-                            })
-                        ipv6_addrs = list()
-                        for ipv6_addr in intf.ipv6_addrs:
-                            ipv6_addrs.append({
-                                'broadcast': ipv6_addr.broadcast,
-                                'netmask': ipv6_addr.netmask,
-                                'addr': ipv6_addr.addr,
-                                'ext_addr': ipv6_addr.ext_addr,
-                            })
+                        ipv4_addrs = intf.ipv4_addrs
+                        ipv6_addrs = intf.ipv6_addrs
+                        ext_ipv4_addrs = intf.ext_ipv4_addrs
+                        ext_ipv6_addrs = intf.ext_ipv6_addrs
                         ipv4_subnets = intf.ipv4_subnets
                         ipv6_subnets = intf.ipv6_subnets
                         interfaces[ifname] = {
-                            'mac_addrs': mac_addrs,
+                            'mac_addr': mac_addr,
                             'ipv4_addrs': ipv4_addrs,
                             'ipv6_addrs': ipv6_addrs,
+                            'ext_ipv4_addrs': ext_ipv4_addrs,
+                            'ext_ipv6_addrs': ext_ipv6_addrs,
                             'ipv4_subnets': ipv4_subnets,
                             'ipv6_subnets': ipv6_subnets,
                             'type': type
