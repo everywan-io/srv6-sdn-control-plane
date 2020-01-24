@@ -211,15 +211,21 @@ class SDWANControllerState:
         return False
 
     # Get router's loopback IP address
-    def get_loopbackip(self, routerid):
-        #routerid = int(IPv4Address(routerid))
-        return self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]['addr']
+    def get_loopbackip_ipv4(self, routerid):
+        return self.devices[routerid]['interfaces']['lo']['ipv4_addrs'][0]
 
     # Get router's loopback IP address
-    def get_loopbacknet(self, routerid):
-        #routerid = int(IPv4Address(routerid))
+    def get_loopbacknet_ipv4(self, routerid):
+        loopbackip = self.devices[routerid]['interfaces']['lo']['ipv4_addrs'][0]
+        return IPv4Interface(loopbackip).network.__str__()
+
+    # Get router's loopback IP address
+    def get_loopbackip_ipv6(self, routerid):
+        return self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]
+
+    # Get router's loopback IP address
+    def get_loopbacknet_ipv6(self, routerid):
         loopbackip = self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]
-        loopbackip = '%s/%s' % (loopbackip['addr'], loopbackip['netmask'])
         return IPv6Interface(loopbackip).network.__str__()
 
     '''
@@ -406,41 +412,25 @@ class SDWANControllerState:
 
     # Return the IP addresses associated to an interface
     def get_interface_ipv4(self, routerid, interface_name):
-        #routerid = int(IPv4Address(routerid))
-        ips = list()
-        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
-            ips.append('%s/%s' % (addr['addr'], addr['netmask']))
-        return ips
+        return self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']
 
     # Return the IP addresses associated to an interface
     def get_interface_ipv6(self, routerid, interface_name):
-        #routerid = int(IPv4Address(routerid))
-        ips = list()
-        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
-            ips.append('%s/%s' % (addr['addr'], addr['netmask']))
-        return ips
+        return self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']
 
     # Return the external IP addresses associated to an interface
     def get_external_ipv4(self, routerid, interface_name):
-        #routerid = int(IPv4Address(routerid))
-        ips = list()
-        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']:
-            if 'ext_addr' in addr and addr['ext_addr'] != '':
-                ips.append(addr['ext_addr'])
-            else:
-                ips.append('%s/%s' % (addr['addr'], addr['netmask']))
-        return ips
+        addrs = self.devices[routerid]['interfaces'][interface_name]['ext_ipv4_addrs']
+        if len(addrs) == 0:
+            addrs = self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']
+        return addrs
 
     # Return the external IP addresses associated to an interface
     def get_external_ipv6(self, routerid, interface_name):
-        #routerid = int(IPv4Address(routerid))
-        ips = list()
-        for addr in self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']:
-            if 'ext_addr' in addr and addr['ext_addr'] != '':
-                ips.append(addr['ext_addr'])
-            else:
-                ips.append('%s/%s' % (addr['addr'], addr['netmask']))
-        return ips
+        addrs = self.devices[routerid]['interfaces'][interface_name]['ext_ipv6_addrs']
+        if len(addrs) == 0:
+            addrs = self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']
+        return addrs
 
     def get_ipv6_subnets_on_interface(self, routerid, interface_name):
         return self.devices[routerid]['interfaces'][interface_name]['ipv6_subnets']
