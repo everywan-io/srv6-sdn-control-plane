@@ -132,7 +132,7 @@ class InventoryService:
         # Let's close the session
         channel.close()
         # Return
-        return response.status, response.token 
+        return response.status, response.token, response.tenantid 
     
     def remove_tenant(self, server_ip, server_port, token):
         # Create request 
@@ -675,8 +675,8 @@ if __name__ == '__main__':
                 
     #InventoryService = InventoryService()
     #response = InventoryService.configure_tenant('11.3.160.61', 12345, 40000, '')
-    #print('Risposta tenant cration: %s --- %s' % (response[0], response[1]))
-    #response2 =InventoryService.remove_tenant('11.3.160.61', 12345, 'knXgmEk6srjderYuwEKCnCuAshGVugOClP2AfPBSYQbroR5FhMDfpdoimlu4wDgw6y6yvOFqccCuPDHmfspTVakJIpRWgxLvEzj5qt02fAMwIZOmNqYCbT5GKxAXfmtb')
+    #print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
+    #response2 =InventoryService.remove_tenant('11.3.160.61', 12345, '9RSBghQa8TfEN2luzidOJgKQoEpHbQ76SAjEr9ycAT3ldwgyihbAszR2symjBk8piMQ8Hsz5QD9ClvwdiCB7Vmatm8pMZaeyktpBFuNE40WPQasTGkQn6Ip4jd0PqfTD')
     #print('Rispost remove tenat: %s' % response2)
 
   
