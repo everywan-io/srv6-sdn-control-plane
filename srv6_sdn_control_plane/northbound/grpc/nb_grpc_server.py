@@ -138,15 +138,15 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         self.controller_state.tenant_info[tenantid]['port'] = port
         self.controller_state.tenant_info[tenantid]['info'] = info 
         # Response 
-        return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token = token)
+        return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token = token, tenantid = tenantid)
     
     def RemoveTenant(self, request, context):
+        logger.debug('Remove tenant request received: %s' % request)
         # Extract token 
         token = request.token
         # Get tenant ID 
         tenantid = self.controller_state.get_tenantid(token)
-        print('TOKEN: %s' % token)
-        print('+++++++ %s' % tenantid)
+        
         # Check if the passed token has an associeted tenant ID 
         if tenantid == -1:
             return inventory_service_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)   
