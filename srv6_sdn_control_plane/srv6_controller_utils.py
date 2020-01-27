@@ -105,8 +105,8 @@ class SDWANControllerState:
             except:
                 print('Corrupted VPN file')
         '''
+    
     # Get new tenant ID
-
     def get_new_tenantid(self, token):
         return self.tenantid_allocator.get_new_tenantid(token)
 
@@ -117,6 +117,10 @@ class SDWANControllerState:
     # Release tenant ID
     def release_tenantid(self, token):
         return self.tenantid_allocator.release_tenantid(token)
+    
+    # Return the tenant ID
+    def deviceid_to_tenantid(self, deviceid):
+        return self.devices[deviceid]['tenantid']
 
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):

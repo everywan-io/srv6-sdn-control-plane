@@ -97,7 +97,7 @@ STATUS_VPN_INVALID_PREFIX = status_codes_pb2.STATUS_VPN_INVALID_PREFIX
 STATUS_VPN_NOTFOUND = status_codes_pb2.STATUS_VPN_NOTFOUND
 STATUS_VPN_INVALID_TENANTID = status_codes_pb2.STATUS_VPN_INVALID_TENANTID
 STATUS_INVALID_ACTION = status_codes_pb2.STATUS_INVALID_ACTION
-
+STATUS_INTERNAL_ERROR = status_codes_pb2.STATUS_INTERNAL_ERROR
 
 
 class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
@@ -121,14 +121,13 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         self.srv6_manager = srv6_manager
         # Initialize state
         self.controller_state = controller_state
-        
 
     def ConfigureTenant(self, request, context):
         logger.debug('Configure tenant request received: %s' % request)
-        # Extract parmeters from the request m essage 
+        # Extract parmeters from the request m essage
         port = request.port
-        info = request.info 
-        # Generate token  
+        info = request.info
+        # Generate token
         token = srv6_controller_utils.generate_token()
         # Get a tenant ID for the token  
         tenantid  = self.controller_state.get_new_tenantid(token)
@@ -224,7 +223,8 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                                     'to the interface'
                                 )
                                 return status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv4_addrs'].append(ipv4_addr)
+                            interfaces[interface.name]['ipv4_addrs'].append(
+                                ipv4_addr)
                     if len(interface.ipv6_addrs) > 0:
                         addrs = list()
                         nets = list()
@@ -261,7 +261,8 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
                                     'to the interface'
                                 )
                                 return status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv6_addrs'].append(ipv6_addr)
+                            interfaces[interface.name]['ipv6_addrs'].append(
+                                ipv6_addr)
                     for subnet in interface.ipv4_subnets:
                         interfaces[interface.name]['ipv4_subnets'].append(
                             subnet)
@@ -492,6 +493,16 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                         # message
                         return (srv6_vpn_pb2
                                 .SRv6VPNReply(status=STATUS_INTF_NOTFOUND))
+            # All the devices must belong to the same tenant
+            for interface in intent.interfaces:
+                _tenantid = self.controller_state.deviceid_to_tenantid(
+                    interface.routerid)
+                if tenantid != _tenantid:
+                    logger.warning('Error while processing the intent: '
+                                   'All the devices must belong to the '
+                                   'same tenant %s' % tenantid)
+                    return (srv6_vpn_pb2
+                            .SRv6VPNReply(status=STATUS_INTERNAL_ERROR))
             logger.info('All checks passed')
             # All checks passed
             #
@@ -509,7 +520,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 if not (self.controller_state
                         .is_tunnel_mode_initiated_on_device(tunnel_name,
                                                             routerid)):
-                    tunnel_mode.init_tunnel_mode(routerid, tenantid, tunnel_info)
+                    tunnel_mode.init_tunnel_mode(
+                        routerid, tenantid, tunnel_info)
                     (self.controller_state
                      .init_tunnel_mode_on_device(tunnel_name, routerid))
                 # Init overlay on the devices
@@ -620,7 +632,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 if not (self.controller_state
                         .is_tunnel_mode_initiated_on_device(tunnel_name,
                                                             routerid)):
-                    tunnel_mode.destroy_tunnel_mode(routerid, tenantid, tunnel_info)
+                    tunnel_mode.destroy_tunnel_mode(
+                        routerid, tenantid, tunnel_info)
                     # (self.controller_state
                     # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
                 # Delete the interface from the VPN
@@ -714,6 +727,16 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     )
                     return srv6_vpn_pb2.SRv6VPNReply(
                         status=status_codes_pb2.STATUS_INTF_ALREADY_ASSIGNED)
+            # All the devices must belong to the same tenant
+            for interface in intent.interfaces:
+                _tenantid = self.controller_state.deviceid_to_tenantid(
+                    interface.routerid)
+                if tenantid != _tenantid:
+                    logger.warning('Error while processing the intent: '
+                                   'All the devices must belong to the '
+                                   'same tenant %s' % tenantid)
+                    return (srv6_vpn_pb2
+                            .SRv6VPNReply(status=STATUS_INTERNAL_ERROR))
             logger.info('All checks passed')
             # All checks passed
             #
@@ -732,7 +755,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 if not (self.controller_state
                         .is_tunnel_mode_initiated_on_device(tunnel_name,
                                                             routerid)):
-                    tunnel_mode.init_tunnel_mode(routerid, tenantid, tunnel_info)
+                    tunnel_mode.init_tunnel_mode(
+                        routerid, tenantid, tunnel_info)
                     self.controller_state.init_tunnel_mode_on_device(
                         tunnel_name, routerid)
                 # Init overlay on the devices
@@ -870,7 +894,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     self.controller_state.is_tunnel_mode_initiated_on_device(
                         tunnel_name,
                         routerid)):
-                    tunnel_mode.destroy_tunnel_mode(routerid, tenantid, tunnel_info)
+                    tunnel_mode.destroy_tunnel_mode(
+                        routerid, tenantid, tunnel_info)
                     # (self.controller_state
                     # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
                 # Delete the interface from the VPN
@@ -922,12 +947,12 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  controller_state=None,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
-    #controller_state = srv6_controller_utils.ControllerState(
+    # controller_state = srv6_controller_utils.ControllerState(
     #    topology=topo_graph,
     #    devices=devices,
     #    vpn_dict=vpn_dict,
     #    vpn_file=vpn_file
-    #)
+    # )
     # Create SRv6 Manager
     srv6_manager = sb_grpc_client.SRv6Manager()
     # Setup gRPC server
