@@ -547,6 +547,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # Add the interfaces to the VPN
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, site1)
+            # Update mapping tenant ID to overlays
+            self.controller_state.tenantid_to_overlays[tenantid].add(vpn_name)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -639,8 +641,10 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                     vpn_name, site1)
             # Destroy overlay data structure
             tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
-        # Delete the VPN
-        self.controller_state.remove_vpn(vpn_name)
+            # Update mapping tenant ID to overlays
+            self.controller_state.tenantid_to_overlays[tenantid].remove(vpn_name)
+            # Delete the VPN
+            self.controller_state.remove_vpn(vpn_name)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')

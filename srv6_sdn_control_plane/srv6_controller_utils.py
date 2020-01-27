@@ -93,7 +93,10 @@ class SDWANControllerState:
         self.tenantid_allocator = TenantIDAllocator()
 
         self.interfaces_in_overlay = dict()
-
+        # Mapping tenant ID to overlays
+        self.tenantid_to_overlays = dict()
+        # Mapping tenant ID to devices
+        self.tenantid_to_devices = dict()
         # Initiated tunnels
         #self.initiated_tunnels = dict()
 
@@ -105,10 +108,13 @@ class SDWANControllerState:
             except:
                 print('Corrupted VPN file')
         '''
-    
+
     # Get new tenant ID
     def get_new_tenantid(self, token):
-        return self.tenantid_allocator.get_new_tenantid(token)
+        tenantid = self.tenantid_allocator.get_new_tenantid(token)
+        self.tenantid_to_devices[tenantid] = set()
+        self.tenantid_to_overlays[tenantid] = set()
+        return tenantid
 
     # Get tenant ID
     def get_tenantid(self, token):
@@ -116,11 +122,22 @@ class SDWANControllerState:
 
     # Release tenant ID
     def release_tenantid(self, token):
-        return self.tenantid_allocator.release_tenantid(token)
-    
+        tenantid = self.tenantid_allocator.release_tenantid(token)
+        del self.tenantid_to_devices[tenantid]
+        del self.tenantid_to_overlays[tenantid]
+        return tenantid
+
     # Return the tenant ID
     def deviceid_to_tenantid(self, deviceid):
         return self.devices[deviceid]['tenantid']
+
+    # Return the devices belonging a tenant
+    def tenantid_to_devices(self, tenantid):
+        return self.tenantid_to_devices[tenantid]
+
+    # Return the overlays belonging a tenant
+    def tenantid_to_overlays(self, tenantid):
+        return self.tenantid_to_overlays[tenantid]
 
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
@@ -620,7 +637,7 @@ class SDWANControllerState:
             #last_tableid = int(vpn_dump_dict['last_allocated_tableid'])
             #self.tableid_allocator.last_allocated_tableid = last_tableid
         except IOError:
-            print('VPN file not found')
+            print('VPN file not found')            
 
     # Get router's management IP address
 
