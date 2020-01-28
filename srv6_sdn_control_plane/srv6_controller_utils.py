@@ -131,14 +131,6 @@ class SDWANControllerState:
     def deviceid_to_tenantid(self, deviceid):
         return self.devices[deviceid]['tenantid']
 
-    # Return the devices belonging a tenant
-    def tenantid_to_devices(self, tenantid):
-        return self.tenantid_to_devices[tenantid]
-
-    # Return the overlays belonging a tenant
-    def tenantid_to_overlays(self, tenantid):
-        return self.tenantid_to_overlays[tenantid]
-
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
         if self.vpns.get(vpn_name) is not None:
