@@ -866,6 +866,8 @@ class SRv6Controller(object):
                                     devices=self.controller_state.devices,
                                     controller_state=self.controller_state)
         server.serve()
+        # Store registration server
+        self.controller_state.registration_server = server
 
     # Run the SRv6 controller
     def run(self):

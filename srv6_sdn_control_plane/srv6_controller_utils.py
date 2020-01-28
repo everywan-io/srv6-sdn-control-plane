@@ -108,6 +108,9 @@ class SDWANControllerState:
             except:
                 print('Corrupted VPN file')
         '''
+        self.vpn_manager = None
+        self.inventory_service = None
+        self.registration_server = None
 
     # Get new tenant ID
     def get_new_tenantid(self, token):

@@ -129,34 +129,34 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         info = request.info
         # Generate token
         token = srv6_controller_utils.generate_token()
-        # Get a tenant ID for the token  
-        tenantid  = self.controller_state.get_new_tenantid(token)
-        # Set dictionary 
+        # Get a tenant ID for the token
+        tenantid = self.controller_state.get_new_tenantid(token)
+        # Set dictionary
         self.controller_state.tenant_info[tenantid] = dict()
         # Save tenant info
         self.controller_state.tenant_info[tenantid]['port'] = port
-        self.controller_state.tenant_info[tenantid]['info'] = info 
-        # Response 
-        return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token = token)
-    
+        self.controller_state.tenant_info[tenantid]['info'] = info
+        # Response
+        return inventory_service_pb2.TenantReply(status=STATUS_SUCCESS, token=token)
+
     def RemoveTenant(self, request, context):
         # Extract token
         token = request.token
-        # Get tenant ID 
+        # Get tenant ID
         tenantid = self.controller_state.get_tenantid(token)
-        # Check if the passed token has an associeted tenant ID 
+        # Check if the passed token has an associeted tenant ID
         if tenantid == -1:
-            return inventory_service_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)   
+            return inventory_service_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)
 
-        # Release tenantid 
+        # Release tenantid
         if tenantid in self.controller_state.tenant_info:
             self.controller_state.release_tenantid(token)
-            # Remove tenant info 
-            del self.controller_state.tenant_info[tenantid] 
-            # Response 
-        return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS)   
-        
-        # TODO remove tenant states   
+            # Remove tenant info
+            del self.controller_state.tenant_info[tenantid]
+            # Response
+        return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS)
+
+        # TODO remove tenant states
 
     def ConfigureDevice(self, request, context):
         logger.debug('ConfigureDevice request received: %s' % request)
@@ -642,7 +642,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             # Destroy overlay data structure
             tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
             # Update mapping tenant ID to overlays
-            self.controller_state.tenantid_to_overlays[tenantid].remove(vpn_name)
+            self.controller_state.tenantid_to_overlays[tenantid].remove(
+                vpn_name)
             # Delete the VPN
             self.controller_state.remove_vpn(vpn_name)
         # Save the VPNs dump to file
@@ -961,18 +962,21 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     #
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
+    service = SRv6VPNManager(
+        grpc_client_port, srv6_manager,
+        southbound_interface, controller_state, verbose
+    )
     srv6_vpn_pb2_grpc.add_SRv6VPNServicer_to_server(
-        SRv6VPNManager(
-            grpc_client_port, srv6_manager,
-            southbound_interface, controller_state, verbose
-        ), grpc_server
+        service, grpc_server
+    )
+    controller_state.vpn_manager = service
+    service = InventoryService(
+        grpc_client_port, srv6_manager,
+        topo_graph, vpn_dict, controller_state, devices, verbose
     )
     inventory_service_pb2_grpc.add_InventoryServiceServicer_to_server(
-        InventoryService(
-            grpc_client_port, srv6_manager,
-            topo_graph, vpn_dict, controller_state, devices, verbose
-        ), grpc_server
-    )
+        service, grpc_server)
+    controller_state.inventory_service = service
     # If secure mode is enabled, we need to create a secure endpoint
     if secure:
         # Read key and certificate
