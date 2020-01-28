@@ -130,9 +130,9 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         info = request.info
         # Generate token
         token = srv6_controller_utils.generate_token()
-        # Get a tenant ID for the token  
-        tenantid  = self.controller_state.get_new_tenantid(token)
-        # Set dictionary 
+        # Get a tenant ID for the token
+        tenantid = self.controller_state.get_new_tenantid(token)
+        # Set dictionary
         self.controller_state.tenant_info[tenantid] = dict()
         # Save tenant info
         self.controller_state.tenant_info[tenantid]['port'] = port
@@ -144,7 +144,7 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         logger.debug('Remove tenant request received: %s' % request)
         # Extract token 
         token = request.token
-        # Get tenant ID 
+        # Get tenant ID
         tenantid = self.controller_state.get_tenantid(token)
         
         # Check if the passed token has an associeted tenant ID 
@@ -987,18 +987,21 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     #
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
+    service = SRv6VPNManager(
+        grpc_client_port, srv6_manager,
+        southbound_interface, controller_state, verbose
+    )
     srv6_vpn_pb2_grpc.add_SRv6VPNServicer_to_server(
-        SRv6VPNManager(
-            grpc_client_port, srv6_manager,
-            southbound_interface, controller_state, verbose
-        ), grpc_server
+        service, grpc_server
+    )
+    controller_state.vpn_manager = service
+    service = InventoryService(
+        grpc_client_port, srv6_manager,
+        topo_graph, vpn_dict, controller_state, devices, verbose
     )
     inventory_service_pb2_grpc.add_InventoryServiceServicer_to_server(
-        InventoryService(
-            grpc_client_port, srv6_manager,
-            topo_graph, vpn_dict, controller_state, devices, verbose
-        ), grpc_server
-    )
+        service, grpc_server)
+    controller_state.inventory_service = service
     # If secure mode is enabled, we need to create a secure endpoint
     if secure:
         # Read key and certificate
