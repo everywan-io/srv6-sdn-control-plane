@@ -50,6 +50,7 @@ from srv6_sdn_control_plane.northbound.grpc import tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_proto import status_codes_pb2
 
+from pymerang.pymerang_server import PymerangController
 # Topology file
 DEFAULT_TOPOLOGY_FILE = '/tmp/topology.json'
 # VPN file
@@ -149,16 +150,28 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
         # Check if the passed token has an associeted tenant ID 
         if tenantid == -1:
             return inventory_service_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)   
+  
+        # Get all the overlays associated of the tenant ID
+        tenant_overlays = self.controller_state.tenantid_to_overlays.get(tenantid)
+        print(tenant_overlays)
+        # Remove all overlays 
+        if tenant_overlays != None: 
+            for vpn_name in tenant_overlays:
+                self._RemoveVPN(tenantid, vpn_name, tunnel_info=None)
 
+        # Get all the registered device of the tenant ID 
+        tenant_devices = self.controller_state.tenantid_to_devices.get(tenantid)
+        if tenant_devices != None:
+            for device_id in tenant_devices:
+                PymerangController.unregister_device(device_id)
+        
         # Release tenantid 
         if tenantid in self.controller_state.tenant_info:
             self.controller_state.release_tenantid(token)
             # Remove tenant info 
-            del self.controller_state.tenant_info[tenantid] 
-            # Response 
-        return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS)   
-        
-        # TODO remove tenant states   
+            del self.controller_state.tenant_info[tenantid]
+
+        return inventory_service_pb2.InventoryServiceReply(status=STATUS_SUCCESS) 
 
     def ConfigureDevice(self, request, context):
         logger.debug('ConfigureDevice request received: %s' % request)
@@ -549,8 +562,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
                 # Add the interfaces to the VPN
                 self.controller_state.add_interface_to_vpn(
                     vpn_name, site1)
-            # Update mapping tenant ID to overlays
-            self.controller_state.tenantid_to_overlays[tenantid].add(vpn_name)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -575,85 +586,94 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             vpn_name = '%s-%s' % (tenantid, vpn_name)
             # Extract tunnel info
             tunnel_info = intent.tunnel_info
-            # Parameters validation
-            #
-            # Let's check if the VPN exists
-            logger.debug('Checking the VPN:\n%s' % vpn_name)
-            if not self.controller_state.vpn_exists(vpn_name):
-                logger.warning('The VPN %s does not exist' % vpn_name)
-                # If the VPN already exists, return an error message
-                return srv6_vpn_pb2.SRv6VPNReply(status=STATUS_VPN_NOTFOUND)
-            logger.debug('Check passed')
-            # All checks passed
-            #
-            # Get the overlay type
-            vpn_type = self.controller_state.get_vpn_type(vpn_name)
-            # Get the tunnel mode
-            tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
-            # Get the interfaces belonging to the VPN
-            interfaces_in_vpn = self.controller_state.get_interfaces_in_vpn(
-                vpn_name).copy()
-            # Let's remove the VPN
-            # Remove the tunnel between all the pairs of interfaces
-            for site1 in interfaces_in_vpn:
-                for site2 in self.controller_state.get_interfaces_in_vpn(
-                        vpn_name):
-                    if site1.routerid != site2.routerid:
-                        tunnel_mode.remove_tunnel(
-                            vpn_name, vpn_type, site1,
-                            site2, tenantid, tunnel_info)
-                routerid = site1.routerid
-                interface_name = site1.interface_name
-                tunnel_name = tunnel_mode.name
-                # Remove the interface from the overlay
-                tunnel_mode.remove_slice_from_overlay(vpn_name,
-                                                      routerid,
-                                                      interface_name,
-                                                      tenantid,
-                                                      tunnel_info)
-                (self.controller_state
-                 .remove_interface_from_overlay(tunnel_name,
-                                                routerid,
-                                                vpn_name,
-                                                interface_name))
-                # Destroy overlay on the devices
-                if not (self.controller_state
-                        .is_overlay_initiated_on_device(tunnel_name,
-                                                        routerid,
-                                                        vpn_name)):
-                    tunnel_mode.destroy_overlay(vpn_name,
-                                                vpn_type,
-                                                tenantid,
-                                                routerid,
-                                                tunnel_info)
-                    (self.controller_state
-                     .destroy_overlay_on_device(tunnel_name,
-                                                routerid,
-                                                vpn_name))
-                # Destroy tunnel mode on the devices
-                if not (self.controller_state
-                        .is_tunnel_mode_initiated_on_device(tunnel_name,
-                                                            routerid)):
-                    tunnel_mode.destroy_tunnel_mode(
-                        routerid, tenantid, tunnel_info)
-                    # (self.controller_state
-                    # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
-                # Delete the interface from the VPN
-                self.controller_state.remove_interface_from_vpn(
-                    vpn_name, site1)
-            # Destroy overlay data structure
-            tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
-            # Update mapping tenant ID to overlays
-            self.controller_state.tenantid_to_overlays[tenantid].remove(vpn_name)
-            # Delete the VPN
-            self.controller_state.remove_vpn(vpn_name)
+            # Remove VPN
+            response = self._RemoveVPN(tenantid, vpn_name, tunnel_info)
+
+            if response != STATUS_SUCCESS:
+                return srv6_vpn_pb2.SRv6VPNReply(status=response)
+
+        # Delete the VPN
+        self.controller_state.remove_vpn(vpn_name)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
             self.controller_state.save_vpns_dump()
         logger.info('All the intents have been processed successfully\n\n')
-        # Create the response
+
         return srv6_vpn_pb2.SRv6VPNReply(status=STATUS_SUCCESS)
+
+    def _RemoveVPN(self, tenantid, vpn_name, tunnel_info):
+        # Parameters validation
+        #   
+        # Let's check if the VPN exists
+        logger.debug('Checking the VPN:\n%s' % vpn_name)
+        if not self.controller_state.vpn_exists(vpn_name):
+            logger.warning('The VPN %s does not exist' % vpn_name)
+            # If the VPN already exists, return an error message
+            return STATUS_VPN_NOTFOUND
+        logger.debug('Check passed')
+        # All checks passed
+        #
+        # Get the overlay type
+        vpn_type = self.controller_state.get_vpn_type(vpn_name)
+        # Get the tunnel mode
+        tunnel_mode = self.controller_state.vpns[vpn_name].tunnel_mode
+        # Get the interfaces belonging to the VPN
+        interfaces_in_vpn = self.controller_state.get_interfaces_in_vpn(
+            vpn_name).copy()
+        # Let's remove the VPN
+        # Remove the tunnel between all the pairs of interfaces
+        for site1 in interfaces_in_vpn:
+            for site2 in self.controller_state.get_interfaces_in_vpn(
+                    vpn_name):
+                if site1.routerid != site2.routerid:
+                    tunnel_mode.remove_tunnel(
+                        vpn_name, vpn_type, site1,
+                        site2, tenantid, tunnel_info)
+            routerid = site1.routerid
+            interface_name = site1.interface_name
+            tunnel_name = tunnel_mode.name
+            # Remove the interface from the overlay
+            tunnel_mode.remove_slice_from_overlay(vpn_name,
+                                                    routerid,
+                                                    interface_name,
+                                                    tenantid,
+                                                    tunnel_info)
+            (self.controller_state
+                .remove_interface_from_overlay(tunnel_name,
+                                            routerid,
+                                            vpn_name,
+                                            interface_name))
+            # Destroy overlay on the devices
+            if not (self.controller_state
+                    .is_overlay_initiated_on_device(tunnel_name,
+                                                    routerid,
+                                                    vpn_name)):
+                tunnel_mode.destroy_overlay(vpn_name,
+                                            vpn_type,
+                                            tenantid,
+                                            routerid,
+                                            tunnel_info)
+                (self.controller_state
+                    .destroy_overlay_on_device(tunnel_name,
+                                            routerid,
+                                            vpn_name))
+            # Destroy tunnel mode on the devices
+            if not (self.controller_state
+                    .is_tunnel_mode_initiated_on_device(tunnel_name,
+                                                        routerid)):
+                tunnel_mode.destroy_tunnel_mode(
+                    routerid, tenantid, tunnel_info)
+                # (self.controller_state
+                # .destroy_tunnel_mode_on_device(tunnel_name, routerid))
+            # Delete the interface from the VPN
+            self.controller_state.remove_interface_from_vpn(
+                vpn_name, site1)
+        # Destroy overlay data structure
+        tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
+        # Create the response
+        return STATUS_SUCCESS
+        
 
     """Assign an interface to a VPN"""
 

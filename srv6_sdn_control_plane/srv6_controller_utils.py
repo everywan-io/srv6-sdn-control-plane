@@ -80,7 +80,7 @@ class SDWANControllerState:
         self.vpn_file = vpn_file
         # VPNs dict
         self.vpns = vpn_dict
-        # Map tokne to tenant ID
+        # Map token to tenant ID
         self.tenant_info = dict()
         
         # Keep track of how many VPNs are installed in each router
