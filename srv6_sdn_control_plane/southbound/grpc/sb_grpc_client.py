@@ -97,15 +97,8 @@ class SRv6Manager:
             channel = grpc.secure_channel(ip_address,
                                           grpc_client_credentials)
         else:
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
             channel = grpc.insecure_channel(ip_address)
-=======
-            channel = grpc.insecure_channel(ip_address, port)
->>>>>>> Stashed changes
-=======
-            channel = grpc.insecure_channel(ip_address, port)
->>>>>>> Stashed changes
+
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(channel), channel)
 
