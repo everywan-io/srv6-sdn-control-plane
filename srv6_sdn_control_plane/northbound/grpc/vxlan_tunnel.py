@@ -240,7 +240,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name  
         vrf_name = 'vrf-%s' % (tableid) 
-        
+        # Remove slice from VRF
         response = self.srv6_manager.update_vrf_device(
                 mgmt_ip_site, self.grpc_client_port,
                 name=vrf_name,

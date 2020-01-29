@@ -673,10 +673,10 @@ if __name__ == '__main__':
     srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth4', '10.5.0.1/24')'''
                 
-    InventoryService = InventoryService()
-    response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
-    print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
-    response2 = InventoryService.remove_tenant('11.3.192.117', 54321, '4C38Ai7GKn9t1yNziDQ0s47v1g226CEfGxCiQg1xEcQBntm0PBWTDLFWhPAhIQctbX544Lc1TxCYyQSx71bhXWnHJU9m6HLdTSDezGQs4QtOqpSKJKQ5I7d3lLSmktHh')
-    print('Response remove tenat: %s' % response2)
+    #InventoryService = InventoryService()
+    #response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
+    #print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
+    #response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')
+    #print('Response remove tenat: %s' % response2)
 
   

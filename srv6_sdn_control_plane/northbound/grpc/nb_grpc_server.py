@@ -153,17 +153,19 @@ class InventoryService(inventory_service_pb2_grpc.InventoryServiceServicer):
   
         # Get all the overlays associated of the tenant ID
         tenant_overlays = self.controller_state.tenantid_to_overlays.get(tenantid)
-        print(tenant_overlays)
         # Remove all overlays 
         if tenant_overlays != None: 
-            for vpn_name in tenant_overlays:
-                self._RemoveVPN(tenantid, vpn_name, tunnel_info=None)
-
+            while tenant_overlays:
+                vpn_name = list(tenant_overlays)[0]
+                self.controller_state.vpn_manager._RemoveVPN(tenantid, vpn_name, tunnel_info=None)
+                
         # Get all the registered device of the tenant ID 
         tenant_devices = self.controller_state.tenantid_to_devices.get(tenantid)
+        # Unregister all devices 
         if tenant_devices != None:
-            for device_id in tenant_devices:
-                PymerangController.unregister_device(device_id)
+            while tenant_devices:
+                device_id = list(tenant_devices)[0]
+                self.controller_state.registration_server.unregister_device(device_id, tunnel_info=None)
         
         # Release tenantid 
         if tenantid in self.controller_state.tenant_info:
@@ -594,8 +596,6 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
             if response != STATUS_SUCCESS:
                 return srv6_vpn_pb2.SRv6VPNReply(status=response)
 
-            # Delete the VPN
-            self.controller_state.remove_vpn(vpn_name)
         # Save the VPNs dump to file
         if self.controller_state.vpn_file is not None:
             logger.info('Saving the VPN dump')
@@ -675,6 +675,8 @@ class SRv6VPNManager(srv6_vpn_pb2_grpc.SRv6VPNServicer):
         tunnel_mode.destroy_overlay_data(vpn_name, tenantid, tunnel_info)
         # Update mapping tenant ID to overlays
         self.controller_state.tenantid_to_overlays[tenantid].remove(vpn_name)
+        # Delete the VPN
+        self.controller_state.remove_vpn(vpn_name)
         # Create the response
         return STATUS_SUCCESS
         
