@@ -72,8 +72,8 @@ STATUS_CODES_TO_DESCR = {
 }
 
 STR_TO_VPN_TYPE = {
-    'IPv4VPN': srv6_vpn_pb2.IPv4VPN,
-    'IPv6VPN': srv6_vpn_pb2.IPv6VPN
+    'IPv4VPN': srv6_vpn_pb2.IPv4Overlay,
+    'IPv6VPN': srv6_vpn_pb2.IPv6Overlay
 }
 
 
@@ -305,25 +305,25 @@ class InventoryService:
         channel.close()
         return topology
 
-    def get_tunnel_information(self, server_ip, server_port):
+    def get_overlay_information(self, server_ip, server_port):
         # Create the request
         request = inventory_service_pb2.InventoryServiceRequest()
         # Get the reference of the stub
         inventory_service_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = inventory_service_stub.GetTunnelInformation(request)
+        response = inventory_service_stub.GetOverlayInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve tunnel information
             tunnels = list()
-            for tunnel in response.tunnel_information.tunnels:
+            for tunnel in response.overlay_information.overlays:
                 id = tunnel.id
                 name = tunnel.name
                 type = tunnel.type if tunnel.type is not None else None
                 tunnel_mode = tunnel.mode if tunnel.mode is not None else None
                 tenantid = tunnel.tenantid
                 tunnel_interfaces = list()
-                for interface in tunnel.interfaces:
+                for interface in tunnel.slices:
                     routerid = None
                     interface_name = None
                     if interface.routerid is not None:
@@ -381,24 +381,24 @@ class SRv6VPNManager:
                                           grpc_client_credentials)
         else:
             channel = grpc.insecure_channel(ip_address)
-        return srv6_vpn_pb2_grpc.SRv6VPNStub(channel), channel
+        return srv6_vpn_pb2_grpc.OverlayServiceStub(channel), channel
 
-    def get_vpns(self, server_ip, server_port):
+    def get_overlays(self, server_ip, server_port):
         # Create the request
         request = empty_req_pb2.EmptyRequest()
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = srv6_stub.GetVPNs(request)
+        response = srv6_stub.GetOverlays(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve VPNs information
             vpns = dict()
-            for vpn in response.vpns:
-                vpn_name = text_type(vpn.vpn_name)
+            for vpn in response.overlays:
+                vpn_name = text_type(vpn.overlay_name)
                 tableid = int(vpn.tableid)
                 interfaces = list()
-                for intf in vpn.interfaces:
+                for intf in vpn.slices:
                     interfaces.append(Interface(text_type(intf.routerid),
                                                 text_type(intf.interface_name)))
                 vpns[vpn_name] = {
@@ -411,13 +411,13 @@ class SRv6VPNManager:
         channel.close()
         return vpns
 
-    def create_vpn(self, server_ip, server_port,
+    def create_overlay(self, server_ip, server_port,
                    name, type, interfaces, tenantid, encap='SRv6'):
         # Create the request
-        request = srv6_vpn_pb2.SRv6VPNRequest()
+        request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.vpn_name = text_type(name)
-        intent.vpn_type = int(STR_TO_VPN_TYPE[type])
+        intent.overlay_name = text_type(name)
+        intent.overlay_type = int(STR_TO_VPN_TYPE[type])
         intent.tenantid = int(tenantid)
         #intent.encap = int(ENCAP.get(encap, None))
         intent.tunnel = encap
@@ -426,78 +426,78 @@ class SRv6VPNManager:
             print('Invalid encap type')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
-            interface = intent.interfaces.add()
+            interface = intent.slices.add()
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Create the VPN
-        response = srv6_stub.CreateVPN(request)
+        response = srv6_stub.CreateOverlay(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-    def remove_vpn(self, server_ip, server_port, vpn_name, tenantid):
+    def remove_overlay(self, server_ip, server_port, vpn_name, tenantid):
         # Create the request
-        request = srv6_vpn_pb2.SRv6VPNRequest()
+        request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.vpn_name = text_type(vpn_name)
+        intent.overlay_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Remove the VPN
-        response = srv6_stub.RemoveVPN(request)
+        response = srv6_stub.RemoveOverlay(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-    def assign_interface_to_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
+    def assign_slice_to_overlay(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
-        request = srv6_vpn_pb2.SRv6VPNRequest()
+        request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.vpn_name = text_type(vpn_name)
+        intent.overlay_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
         for intf in interfaces:
-            interface = intent.interfaces.add()
+            interface = intent.slices.add()
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Add the interface to the VPN
-        response = srv6_stub.AssignInterfaceToVPN(request)
+        response = srv6_stub.AssignSliceToOverlay(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-    def remove_interface_from_vpn(self, server_ip, server_port, vpn_name, tenantid, interfaces):
+    def remove_slice_from_overlay(self, server_ip, server_port, vpn_name, tenantid, interfaces):
         # Create the request
-        request = srv6_vpn_pb2.SRv6VPNRequest()
+        request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.vpn_name = text_type(vpn_name)
+        intent.overlay_name = text_type(vpn_name)
         intent.tenantid = int(tenantid)
         for intf in interfaces:
-            interface = intent.interfaces.add()
+            interface = intent.slices.add()
             interface.routerid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Remove the interface from the VPN
-        response = srv6_stub.RemoveInterfaceFromVPN(request)
+        response = srv6_stub.RemoveSliceFromOverlay(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-    def print_vpns(self, server_ip, server_port):
+    def print_overlays(self, server_ip, server_port):
         # Get VPNs
-        vpns = self.get_vpns(server_ip, server_port)
+        vpns = self.get_overlays(server_ip, server_port)
         # Print all VPNs
         if vpns is not None:
             print
