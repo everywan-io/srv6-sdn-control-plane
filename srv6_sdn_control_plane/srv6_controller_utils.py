@@ -134,6 +134,7 @@ class SDWANControllerState:
     def deviceid_to_tenantid(self, deviceid):
         return self.devices[deviceid]['tenantid']
 
+    '''
     # Return True if the VPN exists, False otherwise
     def vpn_exists(self, vpn_name):
         if self.vpns.get(vpn_name) is not None:
@@ -143,16 +144,8 @@ class SDWANControllerState:
             # The VPN does not exist
             return False
     '''
-    # Return True if the router exists, False otherwise
-    def router_exists(self, routerid):
-        if self.topology.has_node(routerid):
-            # Found router ID
-            return True
-        else:
-            # The router ID has not been found
-            return False
-    '''
 
+    '''
     # Return True if the router exists, False otherwise
     def router_exists(self, routerid):
         #routerid = int(IPv4Address(routerid))
@@ -162,24 +155,9 @@ class SDWANControllerState:
         else:
             # The router ID has not been found
             return False
-
-    '''
-    # Return True if the specified interface exists
-    def interface_exists(self, interface_name, routerid):
-        router = self.topology.node[routerid]
-        if router is None or router['interfaces'] is None:
-            return False
-        interface_names = []
-        for interface in router['interfaces'].values():
-            interface_names.append(interface['ifname'])
-        if interface_name in interface_names:
-            # The interface exists
-            return True
-        else:
-            # The interface does not exist
-            return False
     '''
 
+    '''
     # Return True if the specified interface exists
     def interface_exists(self, interface_name, routerid):
         #routerid = int(IPv4Address(routerid))
@@ -191,6 +169,7 @@ class SDWANControllerState:
         else:
             # The interface does not exist
             return False
+    '''
 
     # Return True if the VPN is installed on the specified router,
     # False otherwise
@@ -225,7 +204,8 @@ class SDWANControllerState:
                     return True
         # The interface is not assigned to the VPN
         return False
-
+    
+    '''
     # Get router's loopback IP address
     def get_loopbackip_ipv4(self, routerid):
         return self.devices[routerid]['interfaces']['lo']['ipv4_addrs'][0]
@@ -244,45 +224,10 @@ class SDWANControllerState:
         loopbackip = self.devices[routerid]['interfaces']['lo']['ipv6_addrs'][0]
         return IPv6Interface(loopbackip).network.__str__()
 
-    '''
-    # Get router's loopback IP address
-    def get_loopbackip(self, routerid):
-        return self.topology.node[routerid]['loopbackip']
-
-    # Get router's management IP address
-    def get_managementip(self, routerid):
-        return self.topology.node[routerid]['managementip']
-    '''
-
     # Get router's management IP address
     def get_router_mgmtip(self, routerid):
         #routerid = int(IPv4Address(routerid))
         return self.devices[routerid]['mgmtip']
-
-    '''
-    # Get router address
-    def get_router_address(self, routerid):
-        if self.use_mgmt_ip:
-            return self.get_managementip(routerid)
-        else:
-            return self.get_loopbackip(routerid)
-    '''
-
-    '''
-    # Get random router interface
-    def get_random_interface(self, routerid):
-        router_info = self.topology.node[routerid]
-        return random.choice(list(router_info['interfaces'].values()))['ifname']
-
-    # Get first router interface
-    def get_first_interface(self, routerid):
-        interfaces = list()
-        router_info = self.topology.node[routerid]
-        for interface in router_info['interfaces'].values():
-            interfaces.append(interface['ifname'])
-        interfaces.sort()
-        return interfaces[0]
-    '''
 
     def get_loopback_ip(self, routerid):
         #routerid = int(IPv4Address(routerid))
@@ -309,6 +254,7 @@ class SDWANControllerState:
                 return interface['name']
         # No non-loopback interfaces
         return None
+    '''
 
     # Add a router to a VPN and increase the number of VPNs installed on a
     # router
@@ -335,6 +281,7 @@ class SDWANControllerState:
             return True
         return False
 
+    '''
     # Remove a VPN
     def remove_vpn(self, vpn_name):
         # Remove the VPN from the VPNs dict
@@ -342,27 +289,13 @@ class SDWANControllerState:
             return False
         del self.vpns[vpn_name]
         return True
+    '''
 
     # Return VPN type
     def get_vpn_type(self, vpn_name):
         if vpn_name not in self.vpns:
             return None
         return self.vpns[vpn_name].vpn_type
-
-    # Return VPN type
-    # def get_vpn_tableid(self, vpn_name):
-    #    print(self.vpns)
-    #    if vpn_name not in self.vpns:
-    #        return None
-    #    return self.vpns[vpn_name].tableid
-
-    # Return SID
-    # def get_sid(self, routerid, tableid):
-    #    return self.sid_allocator.getSID(routerid, tableid)
-
-    # Return SID
-    # def get_sid_family(self, routerid):
-    #    return self.sid_allocator.getSIDFamily(routerid)
 
     # Return VPN interfaces
     def get_vpn_interfaces(self, vpn_name, routerid=None):
@@ -390,42 +323,23 @@ class SDWANControllerState:
                 interfaces.add(_interface.interface_name)
         return interfaces
 
-    # Add an interface to a VPN
-    # def add_interface_to_vpn(self, vpn_name, routerid, interface_name,
-    #                         interface_ip, vpn_prefix):
-    #    self.vpns[vpn_name].interfaces[routerid][interface_name] = Interface(
-    #        routerid, interface_name, interface_ip, vpn_prefix
-    #    )
-
-    # Return VPN prefix assigned to an interface
-    # def get_vpn_prefix(self, vpn_name, routerid, interface_name):
-    #    return self.vpns[vpn_name].interfaces[routerid][interface_name].vpn_prefix
-
-    # Return VPN prefix assigned to an interface
-    # def get_vpn_interface_ip(self, vpn_name, routerid, interface_name):
-    #    return self.vpns[vpn_name].interfaces[routerid][interface_name].interface_ip
-
+    '''
     # Remove an interface from a VPN
     def remove_interface_from_vpn(self, routerid, interface_name, vpn_name):
         return self.vpns[vpn_name].removeInterface(routerid, interface_name)
+    '''
 
     # Return the number of the interface in the VPN
     def get_number_of_interfaces(self, vpn_name, routerid):
         return self.vpns[vpn_name].numberOfInterfaces(routerid)
 
     '''
-    # Return the IP addresses associated to an interface
-    def get_interface_ips(self, routerid, interface_name):
-        for interface in self.topology.node[routerid]['interfaces'].values():
-            if interface['ifname'] == interface_name:
-                return interface['ipaddr']
-        return None
-    '''
-
     # Return true if the router is running
     def is_device_running(self, routerid):
         return self.devices[routerid]['status'] == DeviceStatus.RUNNING
+    '''
 
+    '''
     # Return the IP addresses associated to an interface
     def get_interface_ipv4(self, routerid, interface_name):
         return self.devices[routerid]['interfaces'][interface_name]['ipv4_addrs']
@@ -433,7 +347,9 @@ class SDWANControllerState:
     # Return the IP addresses associated to an interface
     def get_interface_ipv6(self, routerid, interface_name):
         return self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']
+    '''
 
+    '''
     # Return the external IP addresses associated to an interface
     def get_external_ipv4(self, routerid, interface_name):
         addrs = self.devices[routerid]['interfaces'][interface_name]['ext_ipv4_addrs']
@@ -447,7 +363,8 @@ class SDWANControllerState:
         if len(addrs) == 0:
             addrs = self.devices[routerid]['interfaces'][interface_name]['ipv6_addrs']
         return addrs
-
+    '''
+    '''
     def get_ipv6_subnets_on_interface(self, routerid, interface_name):
         return self.devices[routerid]['interfaces'][interface_name]['ipv6_subnets']
 
@@ -457,16 +374,18 @@ class SDWANControllerState:
     def get_subnets_on_interface(self, routerid, interface_name):
         return self.get_ipv6_subnets_on_interface(routerid, interface_name) + \
             self.get_ipv4_subnets_on_interface(routerid, interface_name)
-
+    '''
+    '''
     # Return the IP addresses associated to an interface
     def get_interface_ips(self, routerid, interface_name):
         return self.get_interface_ipv4(routerid, interface_name) + \
             self.get_interface_ipv6(routerid, interface_name)
-
+    '''
+    '''
     # Return the VPNs
     def get_vpns(self):
         return self.vpns.values()
-
+    '''
     def get_routers_in_vpn(self, vpn_name):
         routers = set()
         for routerid in self.vpns[vpn_name].interfaces:
@@ -481,9 +400,6 @@ class SDWANControllerState:
 
     def init_tunnel_mode_on_device(self, tunnel_mode, deviceid):
         self.interfaces_in_overlay[tunnel_mode][deviceid] = dict()
-
-    # def destroy_tunnel_mode_on_device(self, tunnel_mode, deviceid):
-    #    self.interfaces_in_overlay[tunnel_mode].pop(deviceid, None)
 
     def is_tunnel_mode_initiated_on_device(self, tunnel_mode, deviceid):
         return deviceid in self.interfaces_in_overlay[tunnel_mode]
@@ -502,7 +418,7 @@ class SDWANControllerState:
     def add_interface_to_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
         self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].add(
             interface)
-
+            
     def remove_interface_from_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
         self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].remove(
             interface)
@@ -512,6 +428,7 @@ class SDWANControllerState:
     def is_interface_in_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
         return interface in self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name]
 
+    '''
     # Add a VPN to the controller state
     # , tableid):
     def add_vpn(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode):
@@ -523,7 +440,9 @@ class SDWANControllerState:
             tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode)  # , tableid)
         # Success, return True
         return True
-
+    '''
+    
+    '''
     # Add an interface to a VPN
     def add_interface_to_vpn(self, vpn_name, interface):
         self.vpns[vpn_name].interfaces.add(interface)
@@ -532,10 +451,14 @@ class SDWANControllerState:
         for _interface in self.vpns[vpn_name].interfaces.copy():
             if interface.routerid == _interface.routerid and interface.interface_name == _interface.interface_name:
                 self.vpns[vpn_name].interfaces.remove(_interface)
+    '''
 
+    '''
     def remove_vpn(self, vpn_name):
         del self.vpns[vpn_name]
+    '''
 
+    '''
     # Create a dump of the VPNs
     def save_vpns_dump(self):
         # Build VPN dump dict
@@ -633,13 +556,7 @@ class SDWANControllerState:
             #self.tableid_allocator.last_allocated_tableid = last_tableid
         except IOError:
             print('VPN file not found')            
-
-    # Get router's management IP address
-
-    #def get_router_mgmtip(self, routerid):
-    #    routerid = int(IPv4Address(routerid))
-    #    return self.devices[routerid]['mgmtip']
-
+    '''
 
 # Generate a random token used to authenticate the tenant
 def generate_token():
@@ -891,7 +808,7 @@ class VPNType:
     IPv4VPN = 1
     IPv6VPN = 2
 
-
+'''
 class VPN:
     # tableid=-1):
     def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode):
@@ -944,6 +861,7 @@ class Interface:
         self.routerid = routerid
         # Interface name
         self.interface_name = interface_name
+'''
 
 
 # IPv6 utility functions

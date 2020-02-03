@@ -40,11 +40,6 @@ from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import empty_req_pb2
-from srv6_sdn_proto import inventory_service_pb2_grpc
-from srv6_sdn_proto import inventory_service_pb2
-from srv6_sdn_control_plane.srv6_controller_utils import VPN
-from srv6_sdn_control_plane.srv6_controller_utils import Interface
-from srv6_sdn_control_plane.srv6_controller_utils import VPNType
 
 # The IP address and port of the gRPC server started on the SDN controller
 #IP_ADDRESS = '2000::a'
@@ -85,7 +80,7 @@ STR_TO_VPN_TYPE = {
 # }
 
 
-class InventoryService:
+class NorthboundInterface:
 
     def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
         self.SECURE = secure
@@ -117,18 +112,18 @@ class InventoryService:
                                           grpc_client_credentials)
         else:
             channel = grpc.insecure_channel(ip_address)
-        return inventory_service_pb2_grpc.InventoryServiceStub(channel), channel
+        return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
     
     def configure_tenant(self, server_ip, server_port, port, info):
         # Create request 
-        request = inventory_service_pb2.Tenant()
+        request = srv6_vpn_pb2.Tenant()
         request.port = port
         request.info = info
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Configure the tenant 
-        response = inventory_service_stub.ConfigureTenant(request)
+        response = srv6_vpn_stub.ConfigureTenant(request)
         # Let's close the session
         channel.close()
         # Return
@@ -136,13 +131,13 @@ class InventoryService:
     
     def remove_tenant(self, server_ip, server_port, token):
         # Create request 
-        request = inventory_service_pb2.RemoveTenantRequest()
+        request = srv6_vpn_pb2.RemoveTenantRequest()
         request.token = token 
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Remove tenant 
-        response = inventory_service_stub.RemoveTenant(request)
+        response = srv6_vpn_stub.RemoveTenant(request)
         # Let's close the session
         channel.close()
         # Return
@@ -151,7 +146,7 @@ class InventoryService:
 
     def configure_device(self, server_ip, server_port, device_id, device_name='', device_description='', interfaces=[]):
         # Create the request
-        request = inventory_service_pb2.ConfigureDeviceRequest()
+        request = srv6_vpn_pb2.ConfigureDeviceRequest()
         device = request.configuration.devices.add()
         device.id = device_id
         device.name = device_name
@@ -183,23 +178,25 @@ class InventoryService:
             if 'type' in _interface:
                 interface.type = _interface['type']
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Configure the devices
-        response = inventory_service_stub.ConfigureDevice(request)
+        response = srv6_vpn_stub.ConfigureDevice(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-    def get_device_information(self, server_ip, server_port):
+    def get_devices(self, server_ip, server_port, devices=[], tenantid=-1):
         # Create the request
-        request = inventory_service_pb2.InventoryServiceRequest()
+        request = srv6_vpn_pb2.InventoryServiceRequest()
+        request.deviceids.extend(devices)
+        request.tenantid = tenantid
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = inventory_service_stub.GetDeviceInformation(request)
+        response = srv6_vpn_stub.GetDevices(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve devices information
             devices = list()
@@ -283,12 +280,12 @@ class InventoryService:
 
     def get_topology_information(self, server_ip, server_port):
         # Create the request
-        request = inventory_service_pb2.InventoryServiceRequest()
+        request = srv6_vpn_pb2.InventoryServiceRequest()
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = inventory_service_stub.GetTopologyInformation(request)
+        response = srv6_vpn_stub.GetTopologyInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve topology information
             topology = dict()
@@ -305,14 +302,14 @@ class InventoryService:
         channel.close()
         return topology
 
-    def get_overlay_information(self, server_ip, server_port):
+    def get_overlays(self, server_ip, server_port):
         # Create the request
-        request = inventory_service_pb2.InventoryServiceRequest()
+        request = srv6_vpn_pb2.OverlayServiceRequest()
         # Get the reference of the stub
-        inventory_service_stub, channel = self.get_grpc_session(
+        srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = inventory_service_stub.GetOverlayInformation(request)
+        response = srv6_vpn_stub.GetOverlayInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve tunnel information
             tunnels = list()
@@ -324,14 +321,14 @@ class InventoryService:
                 tenantid = tunnel.tenantid
                 tunnel_interfaces = list()
                 for interface in tunnel.slices:
-                    routerid = None
+                    deviceid = None
                     interface_name = None
-                    if interface.routerid is not None:
-                        routerid = text_type(interface.routerid)
+                    if interface.deviceid is not None:
+                        deviceid = text_type(interface.deviceid)
                     if interface.interface_name is not None:
                         interface_name = text_type(interface.interface_name)
                     tunnel_interfaces.append({
-                        'deviceid': routerid,
+                        'deviceid': deviceid,
                         'interface_name': interface_name
                     })
                 tunnels.append({
@@ -347,69 +344,6 @@ class InventoryService:
         # Let's close the session
         channel.close()
         return tunnels
-
-
-class SRv6VPNManager:
-
-    def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
-        self.SECURE = secure
-        if secure is True:
-            if certificate is None:
-                print('Error: "certificate" variable cannot be None '
-                      'in secure mode')
-                sys.exit(-2)
-            self.certificate = certificate
-
-    # Build a grpc stub
-    def get_grpc_session(self, ip_address, port, secure):
-        addr_family = srv6_controller_utils.getAddressFamily(ip_address)
-        if addr_family == AF_INET6:
-            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
-        elif addr_family == AF_INET:
-            ip_address = "ipv4:%s:%s" % (ip_address, port)
-        else:
-            print('Invalid address: %s' % ip_address)
-            return
-        # If secure we need to establish a channel with the secure endpoint
-        if secure:
-            # Open the certificate file
-            with open(self.certificate) as f:
-                certificate = f.read()
-            # Then create the SSL credentials and establish the channel
-            grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
-                                          grpc_client_credentials)
-        else:
-            channel = grpc.insecure_channel(ip_address)
-        return srv6_vpn_pb2_grpc.OverlayServiceStub(channel), channel
-
-    def get_overlays(self, server_ip, server_port):
-        # Create the request
-        request = empty_req_pb2.EmptyRequest()
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
-        # Get VPNs
-        response = srv6_stub.GetOverlays(request)
-        if response.status == status_codes_pb2.STATUS_SUCCESS:
-            # Parse response and retrieve VPNs information
-            vpns = dict()
-            for vpn in response.overlays:
-                vpn_name = text_type(vpn.overlay_name)
-                tableid = int(vpn.tableid)
-                interfaces = list()
-                for intf in vpn.slices:
-                    interfaces.append(Interface(text_type(intf.routerid),
-                                                text_type(intf.interface_name)))
-                vpns[vpn_name] = {
-                    "tableid": tableid,
-                    "interfaces": interfaces
-                }
-        else:
-            vpns = None
-        # Let's close the session
-        channel.close()
-        return vpns
 
     def create_overlay(self, server_ip, server_port,
                    name, type, interfaces, tenantid, encap='SRv6'):
@@ -427,7 +361,7 @@ class SRv6VPNManager:
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
             interface = intent.slices.add()
-            interface.routerid = text_type(intf[0])
+            interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
@@ -463,7 +397,7 @@ class SRv6VPNManager:
         intent.tenantid = int(tenantid)
         for intf in interfaces:
             interface = intent.slices.add()
-            interface.routerid = text_type(intf[0])
+            interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
@@ -483,7 +417,7 @@ class SRv6VPNManager:
         intent.tenantid = int(tenantid)
         for intf in interfaces:
             interface = intent.slices.add()
-            interface.routerid = text_type(intf[0])
+            interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
@@ -511,7 +445,7 @@ class SRv6VPNManager:
                 print("Table ID:", vpns[vpn]["tableid"])
                 print("Interfaces:")
                 for intf in vpns[vpn]["interfaces"]:
-                    print(intf.routerid, intf.interface_name)
+                    print(intf.deviceid, intf.interface_name)
                 print()
                 i += 1
         else:
