@@ -14,6 +14,9 @@ import os
 import random
 from socket import AF_INET
 from socket import AF_INET6
+import pymongo
+from pymongo import ReturnDocument
+import urllib.parse
 # ipaddress dependencies
 from ipaddress import IPv4Interface
 from ipaddress import IPv6Interface
@@ -22,6 +25,14 @@ from ipaddress import IPv4Network
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
+# SRv6 dependencies
+from srv6_generators import SIDAllocator
+
+# Global variables
+DEFAULT_MONGODB_HOST = 'localhost'
+DEFAULT_MONGODB_PORT = 27017
+DEFAULT_MONGODB_USERNAME = 'root'
+DEFAULT_MONGODB_PASSWORD = '12345678'
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -36,14 +47,26 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
 WAIT_TOPOLOGY_INTERVAL = 1
 
-# SRv6 dependencies
-from srv6_generators import SIDAllocator
-
 # Logger reference
 logger = logging.getLogger(__name__)
 
 RESERVED_VNI = [0, 1]
 RESERVED_VTEP_IP = [0, 65536]
+
+# Get a reference to the MongoDB client
+def get_mongodb_session(host=DEFAULT_MONGODB_HOST,
+                        port=DEFAULT_MONGODB_PORT,
+                        username=DEFAULT_MONGODB_USERNAME,
+                        password=DEFAULT_MONGODB_PASSWORD):
+    # Percent-escape username
+    username = urllib.parse.quote_plus(username)
+    # Percent-escape password
+    password = urllib.parse.quote_plus(password)
+    # Return the MogoDB client
+    return pymongo.MongoClient(host=host,
+                               port=port,
+                               username=username,
+                               password=password)
 
 class ControllerStateVXLAN:
     """This class maintains the state of the SRv6 controller and provides some
@@ -105,64 +128,76 @@ class ControllerStateVXLAN:
 # VNI Allocator
 class VNIAllocator:
     def __init__(self):
+        client = get_mongodb_session()
+        # Get the database
+        db = client.EveryWan
+        # Get the collections
         # Mapping overlay name to VNI 
-        self.overlay_to_vni = dict()
+        self.overlay_to_vni = db.overlay_to_vni
         # Set of reusable VNI
-        self.reusable_vni = dict()
+        self.reusable_vni = db.reusable_vni
         # Last used VNI 
-        self.last_allocated_vni = dict()
+        self.last_allocated_vni = db.last_allocated_vni
 
     # Allocate and return a new VNI for the overlay
     def get_new_vni(self, overlay_name, tenantid):
-        if tenantid not in self.overlay_to_vni:
+        if not self.overlay_to_vni.count_documents({'tenantid': tenantid}, limit=1):
             # Inizialize structure 
-            self.overlay_to_vni[tenantid] = dict()
-            self.reusable_vni[tenantid] = set()
-            self.last_allocated_vni[tenantid] = -1 
+            self.reusable_vni.insert_one({'tenantid': tenantid, 'vni': []})
+            self.last_allocated_vni.insert_one({'tenantid': tenantid, 'vni': -1})
+
         # Get new VNI
-        if self.overlay_to_vni[tenantid].get(overlay_name):
+        if self.overlay_to_vni.count_documents({'tenantid': tenantid, 'overlay_name':overlay_name}, limit=1):
             # The overlay for that tenant already has an associeted VNI  
             return -1 
         else:
             # Check if a reusable VNI is available
-            if self.reusable_vni[tenantid]:
-                vni = self.reusable_vni[tenantid].pop()
+            if not self.reusable_vni.find_one( { 'tenantid': tenantid, 'vni': { '$size': 0 } } ):
+                #Pop vni from the array 
+                vnis = self.reusable_vni.find_one({'tenantid': tenantid})['vni']
+                vni = vnis.pop()
+                self.reusable_vni.find_one_and_update({'tenantid': tenantid},{'$set': {'vni': vnis}})
             else:
                 # If not, get a new VNI
-                self.last_allocated_vni[tenantid] += 1
-                while self.last_allocated_vni[tenantid] in RESERVED_VNI:
+                self.last_allocated_vni.update({ 'tenantid': tenantid }, {'$inc': {'vni': +1}})
+                while self.last_allocated_vni.find_one({ 'tenantid': tenantid }, {'vni': 1})['vni'] in RESERVED_VNI:
                     # Skip reserved VNI
-                    self.last_allocated_vni[tenantid] += 1
-                vni = self.last_allocated_vni[tenantid]
+                    self.last_allocated_vni.update ({ 'tenantid': tenantid }, { '$inc': { 'vni': +1 }})
+                
+                vni = self.last_allocated_vni.find_one( { 'tenantid': tenantid }, { 'vni': 1 } )['vni']
             # Assign the VNI to the overlay name 
-            self.overlay_to_vni[tenantid][overlay_name] = vni
+            self.overlay_to_vni.insert_one({
+                'tenantid': tenantid,
+                'overlay_name': overlay_name,
+                'vni': vni   
+                } 
+            )
             # And return
             return vni
-
 
     # Return the VNI assigned to the VPN
     # If the VPN has no assigned VNI, return -1
     def get_vni(self, overlay_name, tenantid):
-        if tenantid not in self.overlay_to_vni:
+        if not self.overlay_to_vni.count_documents({'tenantid': tenantid, 'overlay_name': overlay_name}, limit=1):
             return -1
-        return self.overlay_to_vni[tenantid].get(overlay_name, -1)
+        else:
+            return self.overlay_to_vni.find_one({ 'tenantid': tenantid, 'overlay_name': overlay_name }, {'vni': 1})['vni']
 
     # Release VNI and mark it as reusable
     def release_vni(self, overlay_name, tenantid):
         # Check if the overlay has an associated VNI
-        if self.overlay_to_vni[tenantid].get((overlay_name)):
+        if self.overlay_to_vni.count_documents({'tenantid': tenantid, 'overlay_name': overlay_name}, limit=1):
             # The overlay has an associated VNI
-            vni = self.overlay_to_vni[tenantid][overlay_name]
+            vni = self.overlay_to_vni.find_one({ 'tenantid': tenantid, 'overlay_name': overlay_name }, {'vni': 1})['vni']
             # Unassign the VNI
-            del self.overlay_to_vni[tenantid][overlay_name]
+            self.overlay_to_vni.delete_one({ 'tenantid': tenantid, 'overlay_name': overlay_name })
             # Mark the VNI as reusable
-            self.reusable_vni[tenantid].add(vni)
+            self.reusable_vni.update_one({'tenantid': tenantid}, {'$push':{'vni': vni}})
             # If the tenant has no overlays,
             # destory data structures
-            if len(self.overlay_to_vni[tenantid]) == 0:
-                del self.overlay_to_vni[tenantid]
-                del self.reusable_vni[tenantid]
-                del self.last_allocated_vni[tenantid]
+            if self.overlay_to_vni.count_documents({'tenantid': tenantid}) == 0:
+                self.last_allocated_vni.delete_one({'tenantid': tenantid})
+                self.reusable_vni.delete_one({'tenantid': tenantid})
             # Return the VNI
             return vni
         else:
@@ -171,63 +206,80 @@ class VNIAllocator:
 
 class VTEPIPAllocator:
     def __init__(self):
+        client = get_mongodb_session()
+        # Get the database
+        db = client.EveryWan
+        # Get the collections
         # Mapping ID dev to VTEP ip 
-        self.dev_to_ip = dict()
+        self.dev_to_ip = db.dev_to_ip
         # Set of reusable IP address 
-        self.reusable_ip = dict()
+        self.reusable_ip = db.reusable_ip
         # Last used VNI 
-        self.last_allocated_ip = dict()
+        self.last_allocated_ip = db.last_allocated_ip
+        
         #ip address availale 
         self.ip = IPv4Network('198.18.0.0/16')
-    
+        self.network_mask = 16
+
     def get_new_vtep_ip(self, dev_id, tenantid):
-        if tenantid not in self.dev_to_ip:
+        # check if the device does not already have a VTEP IP adress
+        if not self.dev_to_ip.count_documents({'tenantid': tenantid}, limit=1):
             # Inizialize data sructures 
-            self.dev_to_ip[tenantid] = dict()
-            self.reusable_ip[tenantid] = set()
-            self.last_allocated_ip[tenantid] = -1
-        if self.dev_to_ip[tenantid].get(dev_id):
+            self.reusable_ip.insert_one({'tenantid': tenantid, 'vtep_ips': []})
+            self.last_allocated_ip.insert_one({'tenantid': tenantid, 'ip_index': -1})
+
+        if self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
             # The device of the considered tenant already has an associated VTEP IP
             return -1
         else:
             # Check if a reusable VTEP IP is available
-            if self.reusable_ip[tenantid]:
-                vtep_ip = self.reusable_ip[tenantid].pop()
+            if not self.reusable_ip.find_one({ 'tenantid': tenantid, 'vtep_ips': { '$size': 0 }}):
+                #Pop VTEP IP adress from the array 
+                vtep_ips = self.reusable_ip.find_one({'tenantid': tenantid})['vtep_ips']
+                vtep_ip = vtep_ips.pop()
+                self.reusable_ip.find_one_and_update({'tenantid': tenantid},{'$set': {'vtep_ips': vtep_ips}})
             else:
-                # If not, get a VTEP IP
-                self.last_allocated_ip[tenantid] += 1
-                while self.last_allocated_ip[tenantid] in RESERVED_VTEP_IP:
-                    # Skip reserved VTEP IP
-                    self.last_allocated_ip[tenantid] += 1
-                vtep_ip = "%s/%s" % (self.ip[self.last_allocated_ip[tenantid]], 16) 
+                # If not, get a VTEP IP address
+                self.last_allocated_ip.update({ 'tenantid': tenantid }, {'$inc':{'ip_index': +1}})
+                while self.last_allocated_ip.find_one({ 'tenantid': tenantid }, {'ip_index': 1})['ip_index'] in RESERVED_VTEP_IP:
+                    # Skip reserved VTEP IP address
+                    self.last_allocated_ip.update({ 'tenantid': tenantid }, {'$inc':{'ip_index': +1}})
+
+                ip_index = self.last_allocated_ip.find_one( { 'tenantid': tenantid }, { 'ip_index': 1 } )['ip_index']
+                vtep_ip = "%s/%s" % (self.ip[ip_index], self.network_mask) 
             # Assign the VTEP IP to the device 
-            self.dev_to_ip[tenantid][dev_id] = vtep_ip
+            self.dev_to_ip.insert_one({
+                'tenantid': tenantid,
+                'dev_id': dev_id,
+                'vtep_ip': vtep_ip   
+                } 
+            )
             # And return
             return vtep_ip
 
     # Return VTEP IP adress assigned to the device 
     # If device has no VTEP IP address return -1
     def get_vtep_ip(self, dev_id, tenantid):
-        if tenantid not in self.dev_to_ip:
+        if not self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
             return -1
-        return self.dev_to_ip[tenantid].get(dev_id, -1)
+        else:
+            return self.dev_to_ip.find_one({ 'tenantid': tenantid, 'dev_id': dev_id }, {'vtep_ip': 1})['vtep_ip']
 
     # Release VTEP IP and mark it as reusable
     def release_vtep_ip(self, dev_id, tenantid):
         # Check if the device has an associated VTEP IP 
-        if self.dev_to_ip[tenantid].get(dev_id):
+        if self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
             # The device has an associated VTEP IP
-            vtep_ip = self.dev_to_ip[tenantid][dev_id]
+            vtep_ip = self.dev_to_ip.find_one({ 'tenantid': tenantid, 'dev_id': dev_id }, {'vtep_ip': 1})['vtep_ip']
             # Unassign the VTEP IP
-            del self.dev_to_ip[tenantid][dev_id]
+            self.dev_to_ip.delete_one({ 'tenantid': tenantid, 'dev_id': dev_id })
             # Mark the VTEP IP as reusable
-            self.reusable_ip[tenantid].add(vtep_ip)
+            self.reusable_ip.update_one({'tenantid': tenantid}, {'$push':{'vtep_ips': vtep_ip}})
             # If the tenant has no VTEPs
             # destroy data structues
-            if len(self.dev_to_ip[tenantid]) == 0:
-                del self.dev_to_ip[tenantid]
-                del self.reusable_ip[tenantid]
-                del self.last_allocated_ip[tenantid]
+            if self.dev_to_ip.count_documents({'tenantid': tenantid}) == 0:
+                self.last_allocated_ip.delete_one({'tenantid': tenantid})
+                self.reusable_ip.delete_one({'tenantid': tenantid})
             # Return the VTEP IP 
             return vtep_ip
         else:
@@ -241,17 +293,36 @@ if __name__ == "__main__":
     #TableIDAllocator.get_new_tableid('ov3', 12)
     #print('%s' %TableIDAllocator.get_tableid('ov3', 12))
 
-    #VNIAllocator = VNIAllocator()
-    #VNIAllocator.get_new_vni('ov1', 10)
-    #VNIAllocator.get_new_vni('ov4', 11)
+    '''VNIAllocator = VNIAllocator()
+    VNIAllocator.get_new_vni('ov1', 10)
+    VNIAllocator.get_new_vni('ov2', 10)
+    VNIAllocator.release_vni('ov1', 10)
+    VNIAllocator.get_new_vni('ov3', 10)
+    
+    VNIAllocator.release_vni('ov2', 10)
+    VNIAllocator.get_new_vni('ov4', 10)
+ 
+    print('%s' % VNIAllocator.get_vni('ov3', 11))
+    print('%s' % VNIAllocator.get_vni('ov3', 12))'''
 
-    #print('%s' % VNIAllocator.get_vni('ov4', 11))
+
+    #print('%s' % VNIAllocator.get_new_vni('ov4', 11))
+    #print('%s' % VNIAllocator.get_new_vni('ov2', 11))
+    #print('%s' % VNIAllocator.get_new_vni('ov5', 10))
 
     '''VTEPIPAllocator = VTEPIPAllocator()
     VTEPIPAllocator.get_new_vtep_ip(1, 10)
-    VTEPIPAllocator.get_new_vtep_ip(2, 11)
+    VTEPIPAllocator.get_new_vtep_ip(2, 10)
     VTEPIPAllocator.release_vtep_ip(1, 10)
-    VTEPIPAllocator.get_new_vtep_ip(2, 11)
+    VTEPIPAllocator.get_new_vtep_ip(3, 10)
 
-    print('%s' % VTEPIPAllocator.get_new_vtep_ip(2, 11))'''
+    VTEPIPAllocator.get_new_vtep_ip(1, 11)
+    VTEPIPAllocator.get_new_vtep_ip(2, 11)
+    VTEPIPAllocator.release_vtep_ip(1, 11)
+    VTEPIPAllocator.get_new_vtep_ip(3, 11)
+
+    print('%s' % VTEPIPAllocator.get_vtep_ip(3, 11))
+    print('%s' % VTEPIPAllocator.get_vtep_ip(4, 11))'''
+
+    #print('%s' % VTEPIPAllocator.get_new_vtep_ip(2, 11))
     
