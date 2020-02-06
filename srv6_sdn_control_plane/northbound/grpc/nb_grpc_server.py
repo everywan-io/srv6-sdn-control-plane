@@ -192,7 +192,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         logger.debug('ConfigureDevice request received: %s' % request)
         # Get the devices
         devices = [device.id for device in request.configuration.devices]
-        devices = srv6_sdn_controller_state.get_devices(devices, return_dict=True)
+        devices = srv6_sdn_controller_state.get_devices(
+            devices, return_dict=True)
         # Extract the configurations from the request message
         new_devices = list()
         for device in request.configuration.devices:
@@ -208,6 +209,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             for interface in device.interfaces:
+                err = STATUS_SUCCESS
                 interfaces[interface.name]['name'] = interface.name
                 if interface.type != '':
                     interfaces[interface.name]['type'] = interface.type
@@ -238,7 +240,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 'Cannot remove the public addresses '
                                 'from the interface'
                             )
-                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            err = status_codes_pb2.STATUS_INTERNAL_ERROR
                         interfaces[interface.name]['ipv4_addrs'] = list()
                         # Add IP address to the interface
                         for ipv4_addr in interface.ipv4_addrs:
@@ -254,7 +256,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     'Cannot assign the private VPN IP address '
                                     'to the interface'
                                 )
-                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                                err = status_codes_pb2.STATUS_INTERNAL_ERROR
                             interfaces[interface.name]['ipv4_addrs'].append(
                                 ipv4_addr)
                     if len(interface.ipv6_addrs) > 0:
@@ -275,7 +277,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 'Cannot remove the public addresses '
                                 'from the interface'
                             )
-                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            err = status_codes_pb2.STATUS_INTERNAL_ERROR
                         interfaces[interface.name]['ipv6_addrs'] = list()
                         # Add IP address to the interface
                         for ipv6_addr in interface.ipv6_addrs:
@@ -292,7 +294,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     'Cannot assign the private VPN IP address '
                                     'to the interface'
                                 )
-                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                                err = status_codes_pb2.STATUS_INTERNAL_ERROR
                             interfaces[interface.name]['ipv6_addrs'].append(
                                 ipv6_addr)
                     for subnet in interface.ipv4_subnets:
@@ -300,15 +302,22 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             subnet)
                     for subnet in interface.ipv6_subnets:
                         interfaces[interface.name]['ipv6_subnets'].append(
-                            subnet)     
+                            subnet)
             # Push the new configuration
-            new_devices.append({
-                'deviceid': deviceid,
-                'name': device_name,
-                'description': device_description,
-                'interfaces': interfaces,
-                'status': srv6_controller_utils.DeviceStatus.RUNNING
-            })
+            if err == STATUS_SUCCESS:
+                logger.debug(
+                    'The device %s has been configured successfully' % deviceid
+                )
+                new_devices.append({
+                    'deviceid': deviceid,
+                    'name': device_name,
+                    'description': device_description,
+                    'interfaces': interfaces,
+                    'status': srv6_controller_utils.DeviceStatus.RUNNING
+                })
+            else:
+                logger.warning(
+                    'The device %s rejected the configuration' % deviceid)
         srv6_sdn_controller_state.configure_devices(new_devices)
         logger.info('The device configuration has been saved\n\n')
         # Create the response
@@ -329,7 +338,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     .InventoryServiceReply(status=STATUS_SUCCESS))
         # Iterate on devices and fill the response message
         for _device in srv6_sdn_controller_state.get_devices(deviceids=deviceids,
-                                                            tenantid=tenantid):
+                                                             tenantid=tenantid):
             device = response.device_information.devices.add()
             device.id = text_type(_device['deviceid'])
             _interfaces = _device.get('interfaces', [])
@@ -410,9 +419,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             slices = list()
             devices = set()
             for _slice in intent.slices:
-                deviceid = _slice[0]
+                deviceid = _slice.deviceid
+                interface_name = _slice.interface_name
                 # Add the slice to the slices set
-                slices.append(_slice)
+                slices.append((deviceid, interface_name))
                 # Add the device to the devices set
                 devices.add(deviceid)
             # Extract tunnel type
@@ -899,13 +909,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     # Get VPNs from the controller inventory
     def GetOverlays(self, request, context):
         logger.debug('GetOverlays request received')
+        # Extract the overlay IDs from the request
+        overlayids = list(request.overlayids)
+        overlayids = overlayids if len(overlayids) > 0 else None
         # Extract the tenant ID
         tenantid = int(request.tenantid)
         tenantid = tenantid if tenantid != -1 else None
         # Create the response
         response = srv6_vpn_pb2.OverlayServiceReply(status=STATUS_SUCCESS)
         # Build the overlays list
-        for _overlay in srv6_sdn_controller_state.get_overlays(tenantid):
+        for _overlay in srv6_sdn_controller_state.get_overlays(overlayids=overlayids,
+                                                               tenantid=tenantid):
             # Add a new overlay to the overlays list
             overlay = response.overlays.add()
             # Set overlay ID

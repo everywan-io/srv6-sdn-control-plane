@@ -302,18 +302,20 @@ class NorthboundInterface:
         channel.close()
         return topology
 
-    def get_overlays(self, server_ip, server_port):
+    def get_overlays(self, server_ip, server_port, overlays=[], tenantid=-1):
         # Create the request
-        request = srv6_vpn_pb2.OverlayServiceRequest()
+        request = srv6_vpn_pb2.InventoryServiceRequest()
+        request.overlayids.extend(overlays)
+        request.tenantid = tenantid
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
             server_ip, server_port, self.SECURE)
         # Get VPNs
-        response = srv6_vpn_stub.GetOverlayInformation(request)
+        response = srv6_vpn_stub.GetOverlays(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
             # Parse response and retrieve tunnel information
             tunnels = list()
-            for tunnel in response.overlay_information.overlays:
+            for tunnel in response.overlays:
                 id = tunnel.id
                 name = tunnel.name
                 type = tunnel.type if tunnel.type is not None else None
