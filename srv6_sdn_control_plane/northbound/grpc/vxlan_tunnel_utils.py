@@ -14,9 +14,7 @@ import os
 import random
 from socket import AF_INET
 from socket import AF_INET6
-import pymongo
-from pymongo import ReturnDocument
-import urllib.parse
+from srv6_sdn_controller_state import srv6_sdn_controller_state
 # ipaddress dependencies
 from ipaddress import IPv4Interface
 from ipaddress import IPv6Interface
@@ -27,12 +25,6 @@ import networkx as nx
 from networkx.readwrite import json_graph
 # SRv6 dependencies
 from srv6_generators import SIDAllocator
-
-# Global variables
-DEFAULT_MONGODB_HOST = 'localhost'
-DEFAULT_MONGODB_PORT = 27017
-DEFAULT_MONGODB_USERNAME = 'root'
-DEFAULT_MONGODB_PASSWORD = '12345678'
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -53,21 +45,6 @@ logger = logging.getLogger(__name__)
 RESERVED_VNI = [0, 1]
 RESERVED_VTEP_IP = [0, 65536]
 
-# Get a reference to the MongoDB client
-def get_mongodb_session(host=DEFAULT_MONGODB_HOST,
-                        port=DEFAULT_MONGODB_PORT,
-                        username=DEFAULT_MONGODB_USERNAME,
-                        password=DEFAULT_MONGODB_PASSWORD):
-    # Percent-escape username
-    username = urllib.parse.quote_plus(username)
-    # Percent-escape password
-    password = urllib.parse.quote_plus(password)
-    # Return the MogoDB client
-    return pymongo.MongoClient(host=host,
-                               port=port,
-                               username=username,
-                               password=password)
-
 class ControllerStateVXLAN:
     """This class maintains the state of the SRv6 controller and provides some
        methods to handle it
@@ -84,8 +61,7 @@ class ControllerStateVXLAN:
         self.controller_state = controller_state
         # Overlay types
         self.overlay_type = dict()
-        # Slice in overlay per site  
-        self.slice_in_overlay = dict()
+
        
     # Get a new table ID
     def get_new_tableid(self, overlay_name, tenantid):
@@ -128,7 +104,7 @@ class ControllerStateVXLAN:
 # VNI Allocator
 class VNIAllocator:
     def __init__(self):
-        client = get_mongodb_session()
+        client = srv6_sdn_controller_state.get_mongodb_session()
         # Get the database
         db = client.EveryWan
         # Get the collections
@@ -206,10 +182,10 @@ class VNIAllocator:
 
 class VTEPIPAllocator:
     def __init__(self):
-        client = get_mongodb_session()
+        # Get the collections
+        client = srv6_sdn_controller_state.get_mongodb_session()
         # Get the database
         db = client.EveryWan
-        # Get the collections
         # Mapping ID dev to VTEP ip 
         self.dev_to_ip = db.dev_to_ip
         # Set of reusable IP address 

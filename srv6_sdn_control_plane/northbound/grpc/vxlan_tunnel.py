@@ -21,11 +21,11 @@ from ipaddress import IPv6Network, IPv4Network, IPv4Address
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import vxlan_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
+from srv6_sdn_controller_state import srv6_sdn_controller_state
+
 #from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 #from srv6_sdn_proto import gre_interface_pb2
-
-# Global variables definition
 
 # Status codes
 STATUS_SUCCESS = status_codes_pb2.STATUS_SUCCESS
@@ -37,6 +37,7 @@ DEFAULT_GRPC_CLIENT_PORT = 12345
 DEFAULT_VERBOSE = False
 # Logger reference
 logger = logging.getLogger(__name__)
+
 
 class VXLANTunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
@@ -52,10 +53,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Create SRv6 Manager
         self.srv6_manager = sb_grpc_client.SRv6Manager()
         # Initialize controller state
-        self.controller_state = controller_state
-        # Initialize controller state
         self.controller_state_vxlan = vxlan_tunnel_utils.ControllerStateVXLAN(controller_state)
-        
+        # Get connection to MongoDB
+        client = srv6_sdn_controller_state.get_mongodb_session()
+        # Get the database
+        db = client.EveryWan
+        # Get collection
+        self.slices_in_overlay = db.slices_in_overlay
 
     def add_slice_to_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
@@ -102,14 +106,41 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         
         wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
         wan_ip_remote_site = self.controller_state.get_external_ipv4(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
-         
-        if (id_local_site, id_remote_site) not in self.controller_state_vxlan.slice_in_overlay:
-            self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)] = dict()
 
-        if (id_remote_site, id_local_site) not in self.controller_state_vxlan.slice_in_overlay:
-            self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)] = dict()
+        # DB key creation, one per tunnel direction  
+        key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
+        key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
+
+        slices_in_overlay_local = self.slices_in_overlay.find_one({'tunnel_key': key_local_to_remote})
+        slices_in_overlay_remote = self.slices_in_overlay.find_one({'tunnel_key': key_remote_to_local})
         
-        if vni not in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
+        # Create VNI key 
+        vni_key = 'vni_%s' % (vni)
+        # Dictionary for VNIs
+        vnis = dict()
+
+        #vnis['vni_11'] =  {'vni':12, 'interfaces': ['eth1','eth2']}
+        #tunnels = {'tunnel_key': '12345', 'vni': vni }
+
+        #if (id_local_site, id_remote_site) not in self.controller_state_vxlan.slice_in_overlay:
+        #    self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)] = dict()
+        
+        if slices_in_overlay_local == None:
+            slices_in_overlay_local = {
+                'tunnel_key': key_local_to_remote, 
+                'vnis': {}
+            }     
+
+        #if (id_remote_site, id_local_site) not in self.controller_state_vxlan.slice_in_overlay:
+        #    self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)] = dict()
+        if slices_in_overlay_remote == None:
+            slices_in_overlay_remote = {
+                'tunnel_key': key_remote_to_local, 
+                'vnis': {}
+            }
+        
+        #if vni not in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
+        if vni_key not in slices_in_overlay_local['vnis']:
             # add FDB entry in local site 
             response = self.srv6_manager.addfdbentries(
                     mgmt_ip_local_site, self.grpc_client_port,
@@ -122,9 +153,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site))
                 return STATUS_INTERNAL_ERROR
 
-            self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni] = set()
+            #self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni] = set()
+            vnis[vni_key] = {
+                'vni':vni, 
+                'interfaces': []
+            }
+            slices_in_overlay_local = {'tunnel_key': key_local_to_remote, 'vnis': vnis}
 
-        if vni not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:    
+        #if vni not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:    
+        if vni_key not in slices_in_overlay_remote['vnis']:
             # add FDB entry in remote site 
             response = self.srv6_manager.addfdbentries(
                     mgmt_ip_remote_site, self.grpc_client_port,
@@ -137,9 +174,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                % (wan_ip_local_site, vtep_name, mgmt_ip_remote_site))
                 return STATUS_INTERNAL_ERROR
 
-            self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni] = set()
+            #self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni] = set()
+            vnis[vni_key] = {
+                'vni':vni, 
+                'interfaces': []
+            }
+            slices_in_overlay_remote = {'tunnel_key': key_remote_to_local, 'vnis': vnis}
 
-        if lan_sub_remote_site not in self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni]:
+        #if lan_sub_remote_site not in self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni]:
+        if lan_sub_remote_site not in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
             # set route in local site  
             response = self.srv6_manager.create_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
@@ -152,9 +195,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                % (wan_ip_remote_site, mgmt_ip_local_site))
                 return STATUS_INTERNAL_ERROR
             
-            self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni].add(lan_sub_remote_site)
+            #self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni].add(lan_sub_remote_site)
+            slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').append(lan_sub_remote_site)
 
-        if lan_sub_local_site not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni]:
+        #if lan_sub_local_site not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni]:
+        if lan_sub_local_site not in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'):
             # set route in remote site 
             response = self.srv6_manager.create_iproute(
                     mgmt_ip_remote_site, self.grpc_client_port,
@@ -166,7 +211,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot set route for %s in %s '
                                % (lan_sub_local_site, mgmt_ip_remote_site))
                 return STATUS_INTERNAL_ERROR          
-            self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni].add(lan_sub_local_site)
+            #self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni].add(lan_sub_local_site)
+            slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').append(lan_sub_local_site)
+        
+        self.slices_in_overlay.update({'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
+        self.slices_in_overlay.update({'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)
 
     def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
@@ -278,8 +327,21 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
 
-        if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
-            if lan_sub_local_site in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]:
+        # DB key creation, one per tunnel direction  
+        key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
+        key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
+
+        slices_in_overlay_local = self.slices_in_overlay.find_one({'tunnel_key': key_local_to_remote})
+        slices_in_overlay_remote = self.slices_in_overlay.find_one({'tunnel_key': key_remote_to_local})
+        
+        # Create VNI key 
+        vni_key = 'vni_%s' % (vni)
+
+        #if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
+        if vni_key in slices_in_overlay_remote['vnis']:
+            
+            #if lan_sub_local_site in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]:
+            if lan_sub_local_site in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'):
                 # remove route in remote site         
                 response = self.srv6_manager.remove_iproute(
                         mgmt_ip_remote_site, self.grpc_client_port, 
@@ -292,12 +354,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 % (lan_sub_local_site, mgmt_ip_remote_site))
                     return STATUS_INTERNAL_ERROR
 
-                self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni].remove(lan_sub_local_site) 
-                
+                #self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni].remove(lan_sub_local_site) 
+                slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').remove(lan_sub_local_site)
+
             # The slice removed is the last slice in the considered overlay in the local site 
-            if len(self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]) == 0:
-            
-                if lan_sub_remote_site in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]:
+            #if len(self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]) == 0:
+            if len(slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces')) == 0:
+
+                #if lan_sub_remote_site in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]:
+                if lan_sub_remote_site in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
                     # remove route in local site 
                     response = self.srv6_manager.remove_iproute(
                             mgmt_ip_local_site, self.grpc_client_port,
@@ -310,9 +375,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     % (lan_sub_remote_site, mgmt_ip_local_site))
                         return STATUS_INTERNAL_ERROR
 
-                    self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni].remove(lan_sub_remote_site)
+                    #self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni].remove(lan_sub_remote_site)
+                    slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').remove(lan_sub_remote_site)
+
             
-                if vni in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
+                #if vni in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
+                if vni_key in slices_in_overlay_local['vnis']:
                     # remove FDB entry in local site 
                     response = self.srv6_manager.delfdbentries(
                             mgmt_ip_local_site, self.grpc_client_port,
@@ -325,9 +393,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     % (wan_ip_remote_site, mgmt_ip_local_site))
                         return STATUS_INTERNAL_ERROR
 
-                    del self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]
-
-                if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
+                    #del self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]
+                    del slices_in_overlay_local['vnis'][vni_key]
+ 
+                #if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
+                if vni_key in slices_in_overlay_remote['vnis']:
                 # remove FDB entry in remote site 
                     response = self.srv6_manager.delfdbentries(
                             mgmt_ip_remote_site, self.grpc_client_port,
@@ -340,7 +410,19 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     % (wan_ip_local_site, mgmt_ip_remote_site))
                         return STATUS_INTERNAL_ERROR
 
-                    del self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]
+                    #del self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]
+                    del slices_in_overlay_remote['vnis'][vni_key]
+
+        # If there are no more overlay on the devices destroy data structure, else update it  
+        if slices_in_overlay_local['vnis'] == {}:
+            slices_in_overlay_local.remove({'tunnel_key': key_local_to_remote})
+        else:
+            self.slices_in_overlay.update({'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
+       
+        if slices_in_overlay_remote['vnis'] == {}:
+            slices_in_overlay_remote.remove({'tunnel_key': key_remote_to_local})
+        else:
+            self.slices_in_overlay.update({'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)    
 
     def destroy_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
