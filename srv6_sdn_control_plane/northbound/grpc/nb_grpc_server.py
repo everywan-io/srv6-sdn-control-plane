@@ -338,8 +338,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     .InventoryServiceReply(status=STATUS_SUCCESS))
         # Iterate on devices and fill the response message
         for _device in srv6_sdn_controller_state.get_devices(deviceids=deviceids,
-                                                             tenantid=tenantid,
-                                                             return_dict=True):
+                                                             tenantid=tenantid):
             device = response.device_information.devices.add()
             device.id = text_type(_device['deviceid'])
             _interfaces = _device.get('interfaces', [])
@@ -418,14 +417,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             overlay_fullname = '%s-%s' % (tenantid, overlay_name)
             # Extract the interfaces
             slices = list()
-            devices = set()
+            _devices = set()
             for _slice in intent.slices:
                 deviceid = _slice.deviceid
                 interface_name = _slice.interface_name
                 # Add the slice to the slices set
                 slices.append((deviceid, interface_name))
                 # Add the device to the devices set
-                devices.add(deviceid)
+                _devices.add(deviceid)
             # Extract tunnel type
             tunnel_name = intent.tunnel
             tunnel_mode = self.tunnel_modes[tunnel_name]
@@ -456,7 +455,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return (srv6_vpn_pb2
                         .OverlayServiceReply(status=STATUS_VPN_NAME_UNAVAILABLE))
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(devices, return_dict=True)
+            devices = srv6_sdn_controller_state.get_devices(_devices, return_dict=True)
             # Validate the slices included in the intent
             for _slice in slices:
                 logger.debug('Validating the slice: %s-%s' % _slice)
@@ -490,7 +489,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     return (srv6_vpn_pb2
                             .OverlayServiceReply(status=STATUS_INTF_NOTFOUND))
             # All the devices must belong to the same tenant
-            for device in devices.values():
+            for device in _devices.values():
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '
@@ -514,12 +513,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                 # Check if we have already configured the overlay on the device
-                if deviceid in devices:
+                if deviceid in _devices:
                     # Init overlay on the devices
                     tunnel_mode.init_overlay(
                         overlay_fullname, overlay_type, tenantid, deviceid, tunnel_info)
                     # Remove device from the to-be-configured devices set
-                    devices.remove(deviceid)
+                    _devices.remove(deviceid)
                 # Add the interface to the overlay
                 (tunnel_mode
                  .add_slice_to_overlay(overlay_fullname, deviceid,
@@ -657,7 +656,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Get the slices belonging to the overlay
             slices = overlay['slices']
             # Get the devices on which the overlay has been configured
-            devices = [_slice[0] for _slice in slices]
+            _devices = [_slice[0] for _slice in slices]
             # Extract the interfaces
             incoming_slices = list()
             incoming_devices = set()
@@ -668,12 +667,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 incoming_slices.append(_slice)
                 # Add the device to the incoming devices set
                 # if the overlay has not been initiated on it
-                if deviceid not in devices:
+                if deviceid not in _devices:
                     incoming_devices.add(deviceid)
             # Parameters validation
             #
             # Let's check if the overlay exists
             logger.debug('Checking the VPN: %s' % overlay_name)
+            # Get the devices
+            devices = srv6_sdn_controller_state.get_devices(_devices, return_dict=True)
             # Iterate on the interfaces and extract the
             # interfaces to be assigned
             # to the overlay and validate them
@@ -726,7 +727,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 '''
 
             # All the devices must belong to the same tenant
-            for device in devices:
+            for device in _devices:
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '
