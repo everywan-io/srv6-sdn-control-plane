@@ -338,7 +338,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     .InventoryServiceReply(status=STATUS_SUCCESS))
         # Iterate on devices and fill the response message
         for _device in srv6_sdn_controller_state.get_devices(deviceids=deviceids,
-                                                             tenantid=tenantid):
+                                                             tenantid=tenantid,
+                                                             return_dict=True):
             device = response.device_information.devices.add()
             device.id = text_type(_device['deviceid'])
             _interfaces = _device.get('interfaces', [])
