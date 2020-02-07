@@ -146,13 +146,15 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def configure_device(self, device_id, device_name='', device_description='', interfaces=[]):
+    def configure_device(self, device_id, tenantid, device_name='',
+                         device_description='', interfaces=[]):
         # Create the request
         request = srv6_vpn_pb2.ConfigureDeviceRequest()
         device = request.configuration.devices.add()
         device.id = device_id
         device.name = device_name
         device.description = device_description
+        device.tenantid = tenantid
         for _interface in interfaces:
             interface = device.interfaces.add()
             interface.name = _interface['name']
