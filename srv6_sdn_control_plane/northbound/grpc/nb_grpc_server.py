@@ -455,10 +455,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return (srv6_vpn_pb2
                         .OverlayServiceReply(status=STATUS_VPN_NAME_UNAVAILABLE))
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(devices, return_dict=True)
+            devices = srv6_sdn_controller_state.get_devices(devices)
+            print(devices)
             # Validate the slices included in the intent
             for _slice in slices:
-                logger.debug('Validating the slice: %s, %s' % _slice)
+                logger.debug('Validating the slice: %s-%s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -677,7 +678,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # interfaces to be assigned
             # to the overlay and validate them
             for _slice in incoming_slices:
-                logger.debug('Validating the slice: %s' % _slice)
+                logger.debug('Validating the slice: %s-%s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -821,7 +822,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Iterate on the interfaces
             # and extract the interfaces to be removed from the VPN
             for _slice in incoming_slices:
-                logger.debug('Validating the slice: %s' % _slice)
+                logger.debug('Validating the slice: %s-%s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID

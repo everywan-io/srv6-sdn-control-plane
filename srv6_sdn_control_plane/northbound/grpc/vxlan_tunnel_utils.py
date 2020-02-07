@@ -15,6 +15,8 @@ import random
 from socket import AF_INET
 from socket import AF_INET6
 from srv6_sdn_controller_state import srv6_sdn_controller_state
+
+from srv6_sdn_control_plane import srv6_controller_utils
 # ipaddress dependencies
 from ipaddress import IPv4Interface
 from ipaddress import IPv6Interface
@@ -52,7 +54,7 @@ class ControllerStateVXLAN:
 
     def __init__(self, controller_state):
         # Create Table IDs allocator
-        self.tableid_allocator = controller_state.tableid_allocator
+        self.tableid_allocator = srv6_controller_utils.SDWANControllerState('','','','')
         # Create VNI allocator
         self.vni_allocator = VNIAllocator()
         # Create VTEP IP allocator 
@@ -65,15 +67,15 @@ class ControllerStateVXLAN:
        
     # Get a new table ID
     def get_new_tableid(self, overlay_name, tenantid):
-        return self.tableid_allocator.get_new_tableid(overlay_name, tenantid)
+        return self.tableid_allocator.tableid_allocator.get_new_tableid(overlay_name, tenantid)
 
     # Get table ID
     def get_tableid(self, overlay_name, tenantid):
-        return self.tableid_allocator.get_tableid(overlay_name, tenantid)
+        return self.tableid_allocator.tableid_allocator.get_tableid(overlay_name, tenantid)
 
     # Release table ID
     def release_tableid(self, overlay_name, tenantid):
-        return self.tableid_allocator.release_tableid(overlay_name, tenantid)
+        return self.tableid_allocator.tableid_allocator.release_tableid(overlay_name, tenantid)
 
     # Get a new VNI
     def get_new_vni(self, overlay_name, tenantid):
