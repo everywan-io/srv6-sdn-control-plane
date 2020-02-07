@@ -23,6 +23,7 @@ from srv6_sdn_control_plane.northbound.grpc import vxlan_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
+from srv6_sdn_control_plane import srv6_controller_utils
 #from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 #from srv6_sdn_proto import gre_interface_pb2
@@ -63,6 +64,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Get collection
         self.slices_in_overlay = db.slices_in_overlay
 
+        self.SDWANControllerState = controller_state
     def add_slice_to_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # retrive table ID 
@@ -102,9 +104,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # retrive VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
         # retrive WAN IP address for loal site and remote site 
-        wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)
+        wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)[0]
         #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
-        wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)
+        wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
         #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
         
         wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
@@ -230,13 +232,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # Get vxlan port set by user 
-        vxlan_port_site = self.controller_state.tenant_info[tenantid].get('port')
+        vxlan_port_site = self.SDWANControllerState.tenant_info[tenantid].get('port')
         # retrive table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface 
-        wan_intf_site = self.controller_state.get_wan_interfaces(routerid)
+        wan_intf_site = self.controller_state.get_wan_interfaces(routerid)[0]
         # retrive VNI for the overlay 
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid) 
         # retrive VTEP name 
@@ -321,9 +323,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(id_remote_site)
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(id_local_site)
         # retrive wan IP local and remote site 
-        wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)
+        wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)[0]
         #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
-        wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)
+        wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
         #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
 
         wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]

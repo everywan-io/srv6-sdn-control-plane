@@ -456,8 +456,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return (srv6_vpn_pb2
                         .OverlayServiceReply(status=STATUS_VPN_NAME_UNAVAILABLE))
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(devices)
-            print(devices)
+            devices = srv6_sdn_controller_state.get_devices(devices, return_dict=True)
             # Validate the slices included in the intent
             for _slice in slices:
                 logger.debug('Validating the slice: %s-%s' % _slice)
