@@ -455,10 +455,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return (srv6_vpn_pb2
                         .OverlayServiceReply(status=STATUS_VPN_NAME_UNAVAILABLE))
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(devices)
+            devices = srv6_sdn_controller_state.get_devices(devices, return_dict=True)
             # Validate the slices included in the intent
             for _slice in slices:
-                logger.debug('Validating the slice: %s' % _slice)
+                logger.debug('Validating the slice: %s, %s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -509,7 +509,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 deviceid = site1[0]
                 interface_name = site1[1]
                 # Init tunnel mode on the devices
-                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_mode, deviceid) == 0:
+                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
                     tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                 # Check if we have already configured the overlay on the device
@@ -741,13 +741,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 deviceid = site1.routerid
                 interface_name = site1.interface_name
                 # Init tunnel mode on the devices
-                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_mode, deviceid) == 0:
+                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
                     tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                 # Check if we have already configured the overlay on the device
                 if deviceid in incoming_devices:
                     # Init tunnel mode on the devices
-                    if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_mode, deviceid) == 0:
+                    if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
                         tunnel_mode.init_tunnel_mode(
                             deviceid, tenantid, tunnel_info)
                     # Init overlay on the devices
