@@ -206,6 +206,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             device_name = device.name
             # Extract the device description from the configuration
             device_description = device.description
+            # Extract the tenant ID
+            tenantid = device.tenantid
+            # Check if the device belongs to the tenant
+            if tenantid != devices[deviceid]['tenantid']:
+                logger.warning('Skipping device %s: the device does not belong'
+                               ' to the tenant %s' % tenantid)
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             for interface in device.interfaces:
@@ -489,7 +495,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     return (srv6_vpn_pb2
                             .OverlayServiceReply(status=STATUS_INTF_NOTFOUND))
             # All the devices must belong to the same tenant
-            for device in _devices.values():
+            for device in devices.values():
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '
