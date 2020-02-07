@@ -489,7 +489,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     return (srv6_vpn_pb2
                             .OverlayServiceReply(status=STATUS_INTF_NOTFOUND))
             # All the devices must belong to the same tenant
-            for device in _devices.values():
+            for device in devices.values():
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '

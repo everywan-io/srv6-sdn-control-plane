@@ -85,14 +85,14 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return STATUS_INTERNAL_ERROR
               
     def create_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
-        id_remote_site = remote_site.routerid
-        id_local_site = local_site.routerid
+        id_remote_site = remote_site[0]
+        id_local_site = local_site[0]
         # retrive management IP address for local and remote site 
-        mgmt_ip_local_site = self.controller_state.get_router_mgmtip(local_site.routerid)
-        mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(remote_site.routerid)
+        mgmt_ip_local_site = self.controller_state.get_router_mgmtip(local_site[0])
+        mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(remote_site[0])
         # retrive subnet for local and remote site 
-        lan_sub_remote_site = self.controller_state.get_subnets_on_interface(id_remote_site, remote_site.interface_name)[0]
-        lan_sub_local_site = self.controller_state.get_subnets_on_interface(id_local_site, local_site.interface_name)[0]
+        lan_sub_remote_site = self.controller_state.get_ip_subnets(id_remote_site, remote_site[1])[0]
+        lan_sub_local_site = self.controller_state.get_ip_subnets(id_local_site, local_site[1])[0]
        
         # retriv table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
@@ -109,8 +109,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
         #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
         
-        wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = self.controller_state.get_external_ipv4(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
+        wan_ip_local_site = self.controller_state.get_ext_ipv4_addresses(id_local_site, wan_intf_local_site)[0].split("/")[0]
+        wan_ip_remote_site = self.controller_state.get_ext_ipv4_addresses(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
 
         # DB key creation, one per tunnel direction  
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
@@ -315,8 +315,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return STATUS_INTERNAL_ERROR
         
     def remove_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
-        id_local_site = local_site.routerid
-        id_remote_site = remote_site.routerid
+        id_local_site = local_site[0]
+        id_remote_site = remote_site[0]
         # retrive VNI
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # retrive management IP local and remote site 
@@ -328,12 +328,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
         #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
 
-        wan_ip_local_site = self.controller_state.get_external_ipv4(id_local_site, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = self.controller_state.get_external_ipv4(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
+        wan_ip_local_site = self.controller_state.get_ext_ipv4_addresses(id_local_site, wan_intf_local_site)[0].split("/")[0]
+        wan_ip_remote_site = self.controller_state.get_ext_ipv4_addresses(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
               
         # retrive subnet local and remote site  
-        lan_sub_local_site = self.controller_state.get_subnets_on_interface(id_local_site, local_site.interface_name)[0]
-        lan_sub_remote_site = self.controller_state.get_subnets_on_interface(id_remote_site, remote_site.interface_name)[0]
+        lan_sub_local_site = self.controller_state.get_ip_subnets(id_local_site, local_site[1])[0]
+        lan_sub_remote_site = self.controller_state.get_ip_subnets(id_remote_site, remote_site[1])[0]
         # retrive table ID
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # retrive VTEP name 
