@@ -82,7 +82,10 @@ STR_TO_VPN_TYPE = {
 
 class NorthboundInterface:
 
-    def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
+    def __init__(self, server_ip, server_port,
+                 secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
+        self.server_ip = server_ip
+        self.server_port = server_port
         self.SECURE = secure
         if secure is True:
             if certificate is None:
@@ -113,38 +116,37 @@ class NorthboundInterface:
         else:
             channel = grpc.insecure_channel(ip_address)
         return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
-    
-    def configure_tenant(self, server_ip, server_port, port, info):
-        # Create request 
+
+    def configure_tenant(self, port, info):
+        # Create request
         request = srv6_vpn_pb2.Tenant()
         request.port = port
         request.info = info
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
-        # Configure the tenant 
+            self.server_ip, self.server_port, self.SECURE)
+        # Configure the tenant
         response = srv6_vpn_stub.ConfigureTenant(request)
         # Let's close the session
         channel.close()
         # Return
-        return response.status, response.token, response.tenantid 
-    
-    def remove_tenant(self, server_ip, server_port, token):
-        # Create request 
+        return response.status, response.token, response.tenantid
+
+    def remove_tenant(self, token):
+        # Create request
         request = srv6_vpn_pb2.RemoveTenantRequest()
-        request.token = token 
+        request.token = token
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
-        # Remove tenant 
+            self.server_ip, self.server_port, self.SECURE)
+        # Remove tenant
         response = srv6_vpn_stub.RemoveTenant(request)
         # Let's close the session
         channel.close()
         # Return
         return response.status
 
-
-    def configure_device(self, server_ip, server_port, device_id, device_name='', device_description='', interfaces=[]):
+    def configure_device(self, device_id, device_name='', device_description='', interfaces=[]):
         # Create the request
         request = srv6_vpn_pb2.ConfigureDeviceRequest()
         device = request.configuration.devices.add()
@@ -179,7 +181,7 @@ class NorthboundInterface:
                 interface.type = _interface['type']
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Configure the devices
         response = srv6_vpn_stub.ConfigureDevice(request)
         # Let's close the session
@@ -187,14 +189,14 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def get_devices(self, server_ip, server_port, devices=[], tenantid=-1):
+    def get_devices(self, devices=[], tenantid=-1):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.deviceids.extend(devices)
         request.tenantid = tenantid
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetDevices(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -283,7 +285,7 @@ class NorthboundInterface:
         request = srv6_vpn_pb2.InventoryServiceRequest()
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetTopologyInformation(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -302,14 +304,14 @@ class NorthboundInterface:
         channel.close()
         return topology
 
-    def get_overlays(self, server_ip, server_port, overlays=[], tenantid=-1):
+    def get_overlays(self, overlays=[], tenantid=-1):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.overlayids.extend(overlays)
         request.tenantid = tenantid
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetOverlays(request)
         if response.status == status_codes_pb2.STATUS_SUCCESS:
@@ -347,8 +349,7 @@ class NorthboundInterface:
         channel.close()
         return tunnels
 
-    def create_overlay(self, server_ip, server_port,
-                   name, type, interfaces, tenantid, encap='SRv6'):
+    def create_overlay(self, name, type, interfaces, tenantid, encap='SRv6'):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -367,7 +368,7 @@ class NorthboundInterface:
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Create the VPN
         response = srv6_stub.CreateOverlay(request)
         # Let's close the session
@@ -375,7 +376,7 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def remove_overlay(self, server_ip, server_port, vpn_name, tenantid):
+    def remove_overlay(self, vpn_name, tenantid):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -383,7 +384,7 @@ class NorthboundInterface:
         intent.tenantid = int(tenantid)
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Remove the VPN
         response = srv6_stub.RemoveOverlay(request)
         # Let's close the session
@@ -391,7 +392,7 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def assign_slice_to_overlay(self, server_ip, server_port, vpn_name, tenantid, interfaces):
+    def assign_slice_to_overlay(self, vpn_name, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -403,7 +404,7 @@ class NorthboundInterface:
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Add the interface to the VPN
         response = srv6_stub.AssignSliceToOverlay(request)
         # Let's close the session
@@ -411,7 +412,7 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def remove_slice_from_overlay(self, server_ip, server_port, vpn_name, tenantid, interfaces):
+    def remove_slice_from_overlay(self, vpn_name, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -423,7 +424,7 @@ class NorthboundInterface:
             interface.interface_name = text_type(intf[1])
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
-            server_ip, server_port, self.SECURE)
+            self.server_ip, self.server_port, self.SECURE)
         # Remove the interface from the VPN
         response = srv6_stub.RemoveSliceFromOverlay(request)
         # Let's close the session
@@ -431,9 +432,9 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def print_overlays(self, server_ip, server_port):
+    def print_overlays(self):
         # Get VPNs
-        vpns = self.get_overlays(server_ip, server_port)
+        vpns = self.get_overlays(self.server_ip, self.server_port)
         # Print all VPNs
         if vpns is not None:
             print
@@ -608,11 +609,9 @@ if __name__ == '__main__':
                                           'sur1-eth3', '10.2.0.1/24')
     srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth4', '10.5.0.1/24')'''
-                
+
     #InventoryService = InventoryService()
     #response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
     #print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
     #response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')
     #print('Response remove tenat: %s' % response2)
-
-  
