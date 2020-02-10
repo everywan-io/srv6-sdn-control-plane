@@ -36,20 +36,17 @@ import sys
 from socket import AF_UNSPEC
 from socket import AF_INET
 from socket import AF_INET6
-import itertools
 # ipaddress dependencies
 from ipaddress import IPv6Interface
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_control_plane import srv6_controller_utils
-from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.northbound.grpc import tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
-from pymerang.pymerang_server import PymerangController
 # Topology file
 DEFAULT_TOPOLOGY_FILE = '/tmp/topology.json'
 # VPN file
@@ -143,7 +140,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         self.controller_state.tenant_info[tenantid]['port'] = port
         self.controller_state.tenant_info[tenantid]['info'] = info
         # Response
-        return srv6_vpn_pb2.TenantReply(status=STATUS_SUCCESS, token=token, tenantid=tenantid)
+        return srv6_vpn_pb2.TenantReply(
+            status=STATUS_SUCCESS, token=token, tenantid=tenantid)
 
     """ Remove a tenant """
 
@@ -156,13 +154,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 
         # Check if the passed token has an associeted tenant ID
         if tenantid == '':
-            return srv6_vpn_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)
+            return srv6_vpn_pb2.InventoryServiceReply(
+                status=STATUS_INVALID_ACTION)
 
         # Get all the overlays associated of the tenant ID
         tenant_overlays = self.controller_state.tenantid_to_overlays.get(
             tenantid)
         # Remove all overlays
-        if tenant_overlays != None:
+        if tenant_overlays is not None:
             while tenant_overlays:
                 vpn_name = list(tenant_overlays)[0]
                 self.controller_state.vpn_manager._RemoveOverlay(
@@ -172,7 +171,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         tenant_devices = self.controller_state.tenantid_to_devices.get(
             tenantid)
         # Unregister all devices
-        if tenant_devices != None:
+        if tenant_devices is not None:
             while tenant_devices:
                 device_id = list(tenant_devices)[0]
                 self.controller_state.registration_server.unregister_device(
@@ -211,7 +210,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Check if the device belongs to the tenant
             if tenantid != devices[deviceid]['tenantid']:
                 logger.warning('Skipping device %s: the device does not belong'
-                               ' to the tenant %s' % tenantid)
+                               ' to the tenant %s' % (deviceid, tenantid))
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             err = STATUS_SUCCESS
@@ -343,8 +342,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response = (srv6_vpn_pb2
                     .InventoryServiceReply(status=STATUS_SUCCESS))
         # Iterate on devices and fill the response message
-        for _device in srv6_sdn_controller_state.get_devices(deviceids=deviceids,
-                                                             tenantid=tenantid):
+        for _device in srv6_sdn_controller_state.get_devices(
+                deviceids=deviceids, tenantid=tenantid):
             device = response.device_information.devices.add()
             device.id = text_type(_device['deviceid'])
             _interfaces = _device.get('interfaces', [])
@@ -441,8 +440,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             if not srv6_controller_utils.validate_tenantid(tenantid):
                 logger.warning('Invalid tenant ID: %s' % tenantid)
                 # If tenant ID is invalid, return an error message
-                return (srv6_vpn_pb2
-                        .OverlayServiceReply(status=STATUS_VPN_INVALID_TENANTID))
+                return (srv6_vpn_pb2.OverlayServiceReply(
+                    status=STATUS_VPN_INVALID_TENANTID))
             # Validate the overlay type
             logger.debug('Validating the overlay type:\n%s' % overlay_type)
             if not srv6_controller_utils.validate_vpn_type(overlay_type):
@@ -452,14 +451,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         .OverlayServiceReply(status=STATUS_VPN_INVALID_TYPE))
             # Let's check if the overlay does not exist
             logger.debug('Validating the overlay name: %s' % overlay_name)
-            if srv6_sdn_controller_state.overlay_exists(overlay_name, tenantid):
-                logger.warning('Overlay name %s is already in use for tenant %s' % (
-                    overlay_name, tenantid))
+            if srv6_sdn_controller_state.overlay_exists(overlay_name,
+                                                        tenantid):
+                logger.warning('Overlay name %s is already in use for '
+                               'tenant %s' % (overlay_name, tenantid))
                 # If the overlay already exists, return an error message
-                return (srv6_vpn_pb2
-                        .OverlayServiceReply(status=STATUS_VPN_NAME_UNAVAILABLE))
+                return (srv6_vpn_pb2.OverlayServiceReply(
+                    status=STATUS_VPN_NAME_UNAVAILABLE))
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(_devices, return_dict=True)
+            devices = srv6_sdn_controller_state.get_devices(
+                _devices, return_dict=True)
             # Validate the slices included in the intent
             for _slice in slices:
                 logger.debug('Validating the slice: %s-%s' % _slice)
@@ -475,16 +476,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         'Device not found %s' % deviceid
                     )
                     # If the device does not exist, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTFOUND))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                        status=STATUS_ROUTER_NOTFOUND))
                 # Check if the device is running
-                if not devices[deviceid]['status'] == srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
+                if not devices[deviceid]['status'] == \
+                        srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
                     logger.warning(
                         'The device %s is not running' % deviceid
                     )
                     # If the device is not running, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTRUNNING))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                        status=STATUS_ROUTER_NOTRUNNING))
                 # Let's check if the interface exists
                 if interface_name not in devices[deviceid]['interfaces']:
                     logger.warning('The interface does not exist')
@@ -513,14 +515,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 deviceid = site1[0]
                 interface_name = site1[1]
                 # Init tunnel mode on the devices
-                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
+                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(
+                        tunnel_name, deviceid) == 0:
                     tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                 # Check if we have already configured the overlay on the device
                 if deviceid in _devices:
                     # Init overlay on the devices
-                    tunnel_mode.init_overlay(
-                        overlay_name, overlay_type, tenantid, deviceid, tunnel_info)
+                    tunnel_mode.init_overlay(overlay_name, overlay_type,
+                                             tenantid, deviceid, tunnel_info)
                     # Remove device from the to-be-configured devices set
                     _devices.remove(deviceid)
                 # Add the interface to the overlay
@@ -530,8 +533,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Create the tunnel between all the pairs of interfaces
                 for site2 in configured_slices:
                     if site1[0] != site2[0]:
-                        tunnel_mode.create_tunnel(overlay_name, overlay_type, site1,
-                                                  site2, tenantid, tunnel_info)
+                        tunnel_mode.create_tunnel(overlay_name, overlay_type,
+                                                  site1, site2, tenantid,
+                                                  tunnel_info)
                 # Add the slice to the configured set
                 configured_slices.add(site1)
             # Save the overlay to the state
@@ -615,7 +619,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                             tunnel_info)
                 devices.add(deviceid)
             # Destroy tunnel mode on the devices
-            if srv6_sdn_controller_state.dec_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
+            if srv6_sdn_controller_state.dec_tunnel_mode_refcount(
+                    tunnel_name, deviceid) == 0:
                 tunnel_mode.destroy_tunnel_mode(
                     deviceid, tenantid, tunnel_info)
         # Destroy overlay data structure
@@ -674,7 +679,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's check if the overlay exists
             logger.debug('Checking the VPN: %s' % overlay_name)
             # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(_devices, return_dict=True)
+            devices = srv6_sdn_controller_state.get_devices(
+                _devices, return_dict=True)
             # Iterate on the interfaces and extract the
             # interfaces to be assigned
             # to the overlay and validate them
@@ -692,16 +698,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         'Device not found %s' % deviceid
                     )
                     # If the device does not exist, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTFOUND))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                        status=STATUS_ROUTER_NOTFOUND))
                 # Check if the device is running
-                if not devices[deviceid]['status'] == srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
+                if not devices[deviceid]['status'] == \
+                        srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
                     logger.warning(
                         'The device %s is not running' % deviceid
                     )
                     # If the device is not running, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTRUNNING))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                                status=STATUS_ROUTER_NOTRUNNING))
                 # Let's check if the interface exists
                 if interface_name not in devices[deviceid]['interfaces']:
                     logger.warning('The interface does not exist')
@@ -743,28 +750,32 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 deviceid = site1.routerid
                 interface_name = site1.interface_name
                 # Init tunnel mode on the devices
-                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
+                if srv6_sdn_controller_state.inc_tunnel_mode_refcount(
+                        tunnel_name, deviceid) == 0:
                     tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                 # Check if we have already configured the overlay on the device
                 if deviceid in incoming_devices:
                     # Init tunnel mode on the devices
-                    if srv6_sdn_controller_state.inc_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
+                    if srv6_sdn_controller_state.inc_tunnel_mode_refcount(
+                            tunnel_name, deviceid) == 0:
                         tunnel_mode.init_tunnel_mode(
                             deviceid, tenantid, tunnel_info)
                     # Init overlay on the devices
-                    tunnel_mode.init_overlay(
-                        overlay_name, overlay_type, tenantid, deviceid, tunnel_info)
+                    tunnel_mode.init_overlay(overlay_name, overlay_type,
+                                             tenantid, deviceid, tunnel_info)
                     # Remove device from the to-be-configured devices set
                     incoming_devices.remove(deviceid)
                 # Add the interface to the overlay
-                tunnel_mode.add_slice_to_overlay(
-                    overlay_name, deviceid, interface_name, tenantid, tunnel_info)
+                tunnel_mode.add_slice_to_overlay(overlay_name, deviceid,
+                                                 interface_name, tenantid,
+                                                 tunnel_info)
                 # Create the tunnel between all the pairs of interfaces
                 for site2 in configured_slices:
                     if site1[0] != site2[0]:
-                        tunnel_mode.create_tunnel(overlay_name, overlay_type, site1,
-                                                  site2, tenantid, tunnel_info)
+                        tunnel_mode.create_tunnel(overlay_name, overlay_type,
+                                                  site1, site2, tenantid,
+                                                  tunnel_info)
                 # Add the slice to the configured set
                 configured_slices.add(site1)
             # Save the overlay to the state
@@ -814,8 +825,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 incoming_slices.append(_slice)
                 # Add the device to the incoming devices set
                 # if the overlay has not been initiated on it
-                if deviceid not in devices:
+                if deviceid not in incoming_devices:
                     incoming_devices.add(deviceid)
+            # Get the devices
+            devices = srv6_sdn_controller_state.get_devices(
+                incoming_devices, return_dict=True)
             # Parameters validation
             #
             # Iterate on the interfaces
@@ -834,16 +848,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         'Device not found %s' % deviceid
                     )
                     # If the device does not exist, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTFOUND))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                        status=STATUS_ROUTER_NOTFOUND))
                 # Check if the device is running
-                if not devices[deviceid]['status'] == srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
+                if not devices[deviceid]['status'] == \
+                        srv6_sdn_controller_state.utils.DeviceStatus.RUNNING:
                     logger.warning(
                         'The device %s is not running' % deviceid
                     )
                     # If the device is not running, return an error message
-                    return (srv6_vpn_pb2
-                            .OverlayServiceReply(status=STATUS_ROUTER_NOTRUNNING))
+                    return (srv6_vpn_pb2.OverlayServiceReply(
+                        status=STATUS_ROUTER_NOTRUNNING))
                 # Let's check if the interface exists
                 if interface_name not in devices[deviceid]['interfaces']:
                     logger.warning('The interface does not exist')
@@ -853,11 +868,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             .OverlayServiceReply(status=STATUS_INTF_NOTFOUND))
                 # Let's check if the interface is assigned to the given overlay
                 if _slice not in overlay['slices']:
-                    # The interface is not assigned to the overlay, return an error
-                    # message
+                    # The interface is not assigned to the overlay,
+                    # return an error message
                     logger.warning(
                         'The interface is not assigned to the overlay %s, '
-                        '(name %s, tenantid %s)' % (overlayid, overlay_name, tenantid))
+                        '(name %s, tenantid %s)'
+                        % (overlayid, overlay_name, tenantid))
                     return srv6_vpn_pb2.OverlayServiceReply(
                         status=STATUS_INTF_NOTASSIGNED)
             # All the devices must belong to the same tenant
@@ -884,7 +900,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             site2, tenantid, tunnel_info)
                 # Remove the interface from the overlay
                 tunnel_mode.remove_slice_from_overlay(
-                    overlay_name, deviceid, interface_name, tenantid, tunnel_info)
+                    overlay_name, deviceid,
+                    interface_name, tenantid, tunnel_info)
                 # Check if the overlay and the tunnel mode
                 # has already been deleted on the device
                 if deviceid not in devices:
@@ -896,7 +913,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                                 tunnel_info)
                     devices.add(deviceid)
                 # Destroy tunnel mode on the devices
-                if srv6_sdn_controller_state.dec_tunnel_mode_refcount(tunnel_name, deviceid) == 0:
+                if srv6_sdn_controller_state.dec_tunnel_mode_refcount(
+                        tunnel_name, deviceid) == 0:
                     tunnel_mode.destroy_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
             # Save the overlay to the state
@@ -918,8 +936,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Create the response
         response = srv6_vpn_pb2.OverlayServiceReply(status=STATUS_SUCCESS)
         # Build the overlays list
-        for _overlay in srv6_sdn_controller_state.get_overlays(overlayids=overlayids,
-                                                               tenantid=tenantid):
+        for _overlay in srv6_sdn_controller_state.get_overlays(
+                overlayids=overlayids, tenantid=tenantid):
             # Add a new overlay to the overlays list
             overlay = response.overlays.add()
             # Set overlay ID
