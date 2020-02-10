@@ -214,8 +214,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                ' to the tenant %s' % tenantid)
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
+            err = STATUS_SUCCESS
             for interface in device.interfaces:
-                err = STATUS_SUCCESS
                 interfaces[interface.name]['name'] = interface.name
                 if interface.type != '':
                     interfaces[interface.name]['type'] = interface.type
