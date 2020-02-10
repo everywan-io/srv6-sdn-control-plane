@@ -191,7 +191,7 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def get_devices(self, devices=[], tenantid=-1):
+    def get_devices(self, devices=[], tenantid=''):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.deviceids.extend(devices)
@@ -306,7 +306,7 @@ class NorthboundInterface:
         channel.close()
         return topology
 
-    def get_overlays(self, overlays=[], tenantid=-1):
+    def get_overlays(self, overlays=[], tenantid=''):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.overlayids.extend(overlays)
@@ -357,7 +357,7 @@ class NorthboundInterface:
         intent = request.intents.add()
         intent.overlay_name = text_type(name)
         intent.overlay_type = int(STR_TO_VPN_TYPE[type])
-        intent.tenantid = int(tenantid)
+        intent.tenantid = tenantid
         #intent.encap = int(ENCAP.get(encap, None))
         intent.tunnel = encap
         # if intent.encap is None:
@@ -383,7 +383,7 @@ class NorthboundInterface:
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
         intent.overlay_name = text_type(vpn_name)
-        intent.tenantid = int(tenantid)
+        intent.tenantid = tenantid
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
             self.server_ip, self.server_port, self.SECURE)
@@ -399,7 +399,7 @@ class NorthboundInterface:
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
         intent.overlay_name = text_type(vpn_name)
-        intent.tenantid = int(tenantid)
+        intent.tenantid = tenantid
         for intf in interfaces:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
@@ -419,7 +419,7 @@ class NorthboundInterface:
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
         intent.overlay_name = text_type(vpn_name)
-        intent.tenantid = int(tenantid)
+        intent.tenantid = tenantid
         for intf in interfaces:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
