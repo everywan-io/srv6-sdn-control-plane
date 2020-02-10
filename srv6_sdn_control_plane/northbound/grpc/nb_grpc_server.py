@@ -155,7 +155,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         tenantid = self.controller_state.get_tenantid(token)
 
         # Check if the passed token has an associeted tenant ID
-        if tenantid == -1:
+        if tenantid == '':
             return srv6_vpn_pb2.InventoryServiceReply(status=STATUS_INVALID_ACTION)
 
         # Get all the overlays associated of the tenant ID
@@ -214,8 +214,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                ' to the tenant %s' % tenantid)
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
+            err = STATUS_SUCCESS
             for interface in device.interfaces:
-                err = STATUS_SUCCESS
                 interfaces[interface.name]['name'] = interface.name
                 if interface.type != '':
                     interfaces[interface.name]['type'] = interface.type
@@ -337,8 +337,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         deviceids = list(request.deviceids)
         deviceids = deviceids if len(deviceids) > 0 else None
         # Extract the tenant ID from the request
-        tenantid = int(request.tenantid)
-        tenantid = tenantid if tenantid != -1 else None
+        tenantid = request.tenantid
+        tenantid = tenantid if tenantid != '' else None
         # Create the response
         response = (srv6_vpn_pb2
                     .InventoryServiceReply(status=STATUS_SUCCESS))
@@ -414,13 +414,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Parameters extraction
             #
             # Extract the overlay tenant ID from the intent
-            tenantid = int(intent.tenantid)
+            tenantid = intent.tenantid
             # Extract the overlay type from the intent
             overlay_type = int(intent.overlay_type)
             # Extract the overlay name from the intent
             overlay_name = intent.overlay_name
-            # Get the overlay full name (i.e. tenantid-overlay_name)
-            overlay_fullname = '%s-%s' % (tenantid, overlay_name)
             # Extract the interfaces
             slices = list()
             _devices = set()
@@ -508,7 +506,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's create the overlay
             # Create overlay data structure
             tunnel_mode.init_overlay_data(
-                overlay_fullname, tenantid, tunnel_info)
+                overlay_name, tenantid, tunnel_info)
             # Iterate on slices and add to the overlay
             configured_slices = set()
             for site1 in slices:
@@ -522,17 +520,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 if deviceid in _devices:
                     # Init overlay on the devices
                     tunnel_mode.init_overlay(
-                        overlay_fullname, overlay_type, tenantid, deviceid, tunnel_info)
+                        overlay_name, overlay_type, tenantid, deviceid, tunnel_info)
                     # Remove device from the to-be-configured devices set
                     _devices.remove(deviceid)
                 # Add the interface to the overlay
                 (tunnel_mode
-                 .add_slice_to_overlay(overlay_fullname, deviceid,
+                 .add_slice_to_overlay(overlay_name, deviceid,
                                        interface_name, tenantid, tunnel_info))
                 # Create the tunnel between all the pairs of interfaces
                 for site2 in configured_slices:
                     if site1[0] != site2[0]:
-                        tunnel_mode.create_tunnel(overlay_fullname, overlay_type, site1,
+                        tunnel_mode.create_tunnel(overlay_name, overlay_type, site1,
                                                   site2, tenantid, tunnel_info)
                 # Add the slice to the configured set
                 configured_slices.add(site1)
@@ -577,8 +575,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         tenantid = overlay['tenantid']
         # Get the overlay name
         overlay_name = overlay['name']
-        # Get the overlay full name (i.e. tenantid-overlay_name)
-        overlay_fullname = '%s-%s' % (tenantid, overlay_name)
         # Get the overlay type
         overlay_type = overlay['type']
         # Get the tunnel mode
@@ -598,12 +594,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             for site2 in configured_slices:
                 if site1[0] != site2[0]:
                     tunnel_mode.remove_tunnel(
-                        overlay_fullname, overlay_type, site1,
+                        overlay_name, overlay_type, site1,
                         site2, tenantid, tunnel_info)
             # Mark the site1 as unconfigured
             configured_slices.remove(site1)
             # Remove the interface from the overlay
-            tunnel_mode.remove_slice_from_overlay(overlay_fullname,
+            tunnel_mode.remove_slice_from_overlay(overlay_name,
                                                   deviceid,
                                                   interface_name,
                                                   tenantid,
@@ -612,7 +608,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # has already been deleted on the device
             if deviceid not in devices:
                 # Destroy overlay on the devices
-                tunnel_mode.destroy_overlay(overlay_fullname,
+                tunnel_mode.destroy_overlay(overlay_name,
                                             overlay_type,
                                             tenantid,
                                             deviceid,
@@ -624,7 +620,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     deviceid, tenantid, tunnel_info)
         # Destroy overlay data structure
         tunnel_mode.destroy_overlay_data(
-            overlay_fullname, tenantid, tunnel_info)
+            overlay_name, tenantid, tunnel_info)
         # Delete the overlay
         srv6_sdn_controller_state.remove_overlay(overlayid)
         # Create the response
@@ -652,8 +648,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = overlay['tenantid']
             # Get the overlay name
             overlay_name = overlay['name']
-            # Get the overlay full name (i.e. tenantid-overlay_name)
-            overlay_fullname = '%s-%s' % (tenantid, overlay_name)
             # Get the overlay type
             overlay_type = overlay['type']
             # Get the tunnel mode
@@ -760,16 +754,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             deviceid, tenantid, tunnel_info)
                     # Init overlay on the devices
                     tunnel_mode.init_overlay(
-                        overlay_fullname, overlay_type, tenantid, deviceid, tunnel_info)
+                        overlay_name, overlay_type, tenantid, deviceid, tunnel_info)
                     # Remove device from the to-be-configured devices set
                     incoming_devices.remove(deviceid)
                 # Add the interface to the overlay
                 tunnel_mode.add_slice_to_overlay(
-                    overlay_fullname, deviceid, interface_name, tenantid, tunnel_info)
+                    overlay_name, deviceid, interface_name, tenantid, tunnel_info)
                 # Create the tunnel between all the pairs of interfaces
                 for site2 in configured_slices:
                     if site1[0] != site2[0]:
-                        tunnel_mode.create_tunnel(overlay_fullname, overlay_type, site1,
+                        tunnel_mode.create_tunnel(overlay_name, overlay_type, site1,
                                                   site2, tenantid, tunnel_info)
                 # Add the slice to the configured set
                 configured_slices.add(site1)
@@ -803,8 +797,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = overlay['tenantid']
             # Get the overlay name
             overlay_name = overlay['name']
-            # Get the overlay full name (i.e. tenantid-overlay_name)
-            overlay_fullname = '%s-%s' % (tenantid, overlay_name)
             # Get the overlay type
             overlay_type = overlay['type']
             # Get the tunnel mode
@@ -888,16 +880,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 for site2 in configured_slices:
                     if site1[0] != site2[0]:
                         tunnel_mode.remove_tunnel(
-                            overlay_fullname, overlay_type, site1,
+                            overlay_name, overlay_type, site1,
                             site2, tenantid, tunnel_info)
                 # Remove the interface from the overlay
                 tunnel_mode.remove_slice_from_overlay(
-                    overlay_fullname, deviceid, interface_name, tenantid, tunnel_info)
+                    overlay_name, deviceid, interface_name, tenantid, tunnel_info)
                 # Check if the overlay and the tunnel mode
                 # has already been deleted on the device
                 if deviceid not in devices:
                     # Destroy overlay on the devices
-                    tunnel_mode.destroy_overlay(overlay_fullname,
+                    tunnel_mode.destroy_overlay(overlay_name,
                                                 overlay_type,
                                                 tenantid,
                                                 deviceid,
@@ -921,8 +913,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         overlayids = list(request.overlayids)
         overlayids = overlayids if len(overlayids) > 0 else None
         # Extract the tenant ID
-        tenantid = int(request.tenantid)
-        tenantid = tenantid if tenantid != -1 else None
+        tenantid = request.tenantid
+        tenantid = tenantid if tenantid != '' else None
         # Create the response
         response = srv6_vpn_pb2.OverlayServiceReply(status=STATUS_SUCCESS)
         # Build the overlays list
