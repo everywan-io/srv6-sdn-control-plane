@@ -568,7 +568,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logger.debug('Checking the overlay: %s' % overlayid)
-        overlay = srv6_sdn_controller_state.get_overlay(overlayid)
+        overlay = srv6_sdn_controller_state.get_overlays([overlayid])
         if overlay is None:
             logger.warning('The overlay %s does not exist' % overlayid)
             # If the overlay does not exist, return an error message
@@ -643,7 +643,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract tunnel info
             tunnel_info = intent.tunnel_info
             # Get the overlay
-            overlay = srv6_sdn_controller_state.get_overlay(overlayid)
+            overlay = srv6_sdn_controller_state.get_overlays([overlayid])
             if overlay is None:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
@@ -794,7 +794,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tunnel_info = intent.tunnel_info
             # Let's check if the overlay exists
             logger.debug('Checking the overlay: %s' % overlayid)
-            overlay = srv6_sdn_controller_state.get_overlay(overlayid)
+            overlay = srv6_sdn_controller_state.get_overlays([overlayid])
             if overlay is None:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
@@ -931,7 +931,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Add a new overlay to the overlays list
             overlay = response.overlays.add()
             # Set overlay ID
-            overlay.overlayid = _overlay['_id']
+            overlay.overlayid = str(_overlay['_id'])
             # Set overlay name
             overlay.overlay_name = _overlay['name']
             # Set overlaty type
