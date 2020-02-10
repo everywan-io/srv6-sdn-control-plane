@@ -59,6 +59,7 @@ random.seed(time.time())
 
 class InterfaceType:
     UNKNOWN = 'unknown'
+    DISABLED = 'disabled'
     WAN = 'wan'
     LAN = 'lan'
 
