@@ -378,11 +378,11 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def remove_overlay(self, vpn_name, tenantid):
+    def remove_overlay(self, overlayid, tenantid):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.overlay_name = text_type(vpn_name)
+        intent.overlayid = text_type(overlayid)
         intent.tenantid = tenantid
         # Get the reference of the stub
         srv6_stub, channel = self.get_grpc_session(
@@ -394,11 +394,11 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def assign_slice_to_overlay(self, vpn_name, tenantid, interfaces):
+    def assign_slice_to_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.overlay_name = text_type(vpn_name)
+        intent.overlayid = text_type(overlayid)
         intent.tenantid = tenantid
         for intf in interfaces:
             interface = intent.slices.add()
@@ -414,11 +414,11 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def remove_slice_from_overlay(self, vpn_name, tenantid, interfaces):
+    def remove_slice_from_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
-        intent.overlay_name = text_type(vpn_name)
+        intent.overlayid = text_type(overlayid)
         intent.tenantid = tenantid
         for intf in interfaces:
             interface = intent.slices.add()
