@@ -434,9 +434,9 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def print_overlays(self, overlays = [], tenantid = -1):
+    def print_overlays(self, overlays = [], tenantid = ""):
         # Get VPNs
-        vpns = self.get_overlays(overlays = [], tenantid = -1)
+        vpns = self.get_overlays(overlays = [], tenantid = "")
         # Print all VPNs
         if vpns is not None:
             print

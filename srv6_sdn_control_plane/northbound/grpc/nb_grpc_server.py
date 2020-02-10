@@ -571,10 +571,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Let's check if the overlay exists
         logger.debug('Checking the overlay: %s' % overlayid)
         overlay = srv6_sdn_controller_state.get_overlays([overlayid])
-        if overlay is None:
+        if len(overlay) == 0:
             logger.warning('The overlay %s does not exist' % overlayid)
             # If the overlay does not exist, return an error message
             return STATUS_VPN_NOTFOUND
+        
+        overlay = overlay[0]
         # Get the tenant ID
         tenantid = overlay['tenantid']
         # Get the overlay name

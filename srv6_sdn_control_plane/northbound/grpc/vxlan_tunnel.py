@@ -161,12 +161,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 return STATUS_INTERNAL_ERROR
 
             #self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni] = set()
-            vnis[vni_key] = {
-                'vni':vni, 
-                'interfaces': []
-            }
-
-            slices_in_overlay_local = {'tunnel_key': key_local_to_remote, 'vnis': vnis}
+            slices_in_overlay_local['vnis'][vni_key] = {'vni':vni, 'interfaces': [] }
 
         #if vni not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:    
         # If the remote device is not yet part of this overlay 
@@ -184,11 +179,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 return STATUS_INTERNAL_ERROR
 
             #self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni] = set()
-            vnis[vni_key] = {
-                'vni':vni, 
-                'interfaces': []
-            }
-            slices_in_overlay_remote = {'tunnel_key': key_remote_to_local, 'vnis': vnis}
+            slices_in_overlay_remote['vnis'][vni_key] = {'vni':vni, 'interfaces': [] } 
 
         #if lan_sub_remote_site not in self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni]:
         # Local device does not have the route for the remote subnet 
