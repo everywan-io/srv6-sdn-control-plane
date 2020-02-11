@@ -96,6 +96,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
        
         # retriv table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
+
         # retrive VTEP IP remote site and local site 
         vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(id_remote_site, tenantid)
         vtep_ip_local_site = self.controller_state_vxlan.get_vtep_ip(id_local_site, tenantid)
@@ -339,7 +340,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         
         # Create VNI key 
         vni_key = 'vni_%s' % (vni)
-
+        print('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°° vni_key: %s slice_local: %s slice_remote: %s ' % (vni_key, slices_in_overlay_local, slices_in_overlay_remote))
+        print('-+--+-+-+-+-+ local id: %s' % id_local_site)
+        print('-+--+-+-+-+-+ local id: %s' % id_remote_site)
         #if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
         # Check if the remote device partecipate in the overlay 
         if vni_key in slices_in_overlay_remote['vnis']:
@@ -423,12 +426,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
         # If there are no more overlay on the devices destroy data structure, else update it  
         if slices_in_overlay_local['vnis'] == {}:
-            slices_in_overlay_local.remove({'tunnel_key': key_local_to_remote})
+            self.slices_in_overlay.remove({'tunnel_key': key_local_to_remote})
         else:
             self.slices_in_overlay.update({'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
        
         if slices_in_overlay_remote['vnis'] == {}:
-            slices_in_overlay_remote.remove({'tunnel_key': key_remote_to_local})
+            self.slices_in_overlay.remove({'tunnel_key': key_remote_to_local})
         else:
             self.slices_in_overlay.update({'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)    
 

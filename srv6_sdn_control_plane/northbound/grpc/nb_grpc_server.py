@@ -646,7 +646,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logger.debug('Checking the overlay: %s' % overlayid)
-        overlay = srv6_sdn_controller_state.get_overlays([overlayid])
+        overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
         if len(overlay) == 0:
             logger.warning('The overlay %s does not exist' % overlayid)
             # If the overlay does not exist, return an error message
@@ -730,11 +730,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract tenant ID
             tenantid = intent.tenantid
             # Get the overlay
-            overlay = srv6_sdn_controller_state.get_overlays([overlayid])
-            if overlay is None:
+            overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
+            if len(overlay) == 0:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
                 return STATUS_VPN_NOTFOUND
+            # Take the first overlay 
+            overlay = overlay[0]
             # Check tenant ID
             if tenantid != overlay['tenantid']:
                 logger.warning('The overlay %s does not belong to the '
@@ -756,10 +758,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             incoming_slices = list()
             incoming_devices = set()
             for _slice in intent.slices:
-                deviceid = _slice[0]
-                interface_name = _slice[1]
+                deviceid = _slice.deviceid
+                interface_name = _slice.interface_name
                 # Add the slice to the incoming slices set
-                incoming_slices.append(_slice)
+                incoming_slices.append((deviceid, interface_name))
                 # Add the device to the incoming devices set
                 # if the overlay has not been initiated on it
                 if deviceid not in _devices:
@@ -770,7 +772,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logger.debug('Checking the VPN: %s' % overlay_name)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                _devices, return_dict=True)
+                incoming_devices, return_dict=True)
             # Iterate on the interfaces and extract the
             # interfaces to be assigned
             # to the overlay and validate them
@@ -824,7 +826,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 '''
 
             # All the devices must belong to the same tenant
-            for device in _devices:
+            for device in devices.values():
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '
@@ -837,8 +839,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's assign the interface to the overlay
             configured_slices = slices
             for site1 in incoming_slices:
-                deviceid = site1.routerid
-                interface_name = site1.interface_name
+                deviceid = site1[0]
+                interface_name = site1[1]
                 # Init tunnel mode on the devices
                 if srv6_sdn_controller_state.inc_tunnel_mode_refcount(
                         tunnel_name, deviceid) == 0:
@@ -867,7 +869,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                                   site1, site2, tenantid,
                                                   tunnel_info)
                 # Add the slice to the configured set
-                configured_slices.add(site1)
+                configured_slices.append(site1)
             # Save the overlay to the state
             srv6_sdn_controller_state.add_many_slices_to_overlay(
                 overlayid, incoming_slices)
@@ -891,11 +893,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = intent.tenantid
             # Let's check if the overlay exists
             logger.debug('Checking the overlay: %s' % overlayid)
-            overlay = srv6_sdn_controller_state.get_overlays([overlayid])
-            if overlay is None:
+            overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
+            if len(overlay) == 0:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
                 return STATUS_VPN_NOTFOUND
+            # Take the first overlay
+            overlay=overlay[0]
             # Check tenant ID
             if tenantid != overlay['tenantid']:
                 logger.warning('The overlay %s does not belong to the '
@@ -915,10 +919,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             incoming_slices = list()
             incoming_devices = set()
             for _slice in intent.slices:
-                deviceid = _slice[0]
-                interface_name = _slice[1]
+                deviceid = _slice.deviceid
+                interface_name = _slice.interface_name
                 # Add the slice to the incoming slices set
-                incoming_slices.append(_slice)
+                incoming_slices.append([deviceid, interface_name])
                 # Add the device to the incoming devices set
                 # if the overlay has not been initiated on it
                 if deviceid not in incoming_devices:
@@ -931,7 +935,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Iterate on the interfaces
             # and extract the interfaces to be removed from the VPN
             for _slice in incoming_slices:
-                logger.debug('Validating the slice: %s-%s' % _slice)
+                logger.debug('Validating the slice: %s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -973,7 +977,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     return srv6_vpn_pb2.OverlayServiceReply(
                         status=STATUS_INTF_NOTASSIGNED)
             # All the devices must belong to the same tenant
-            for device in devices:
+            for device in devices.values():
                 if device['tenantid'] != tenantid:
                     logger.warning('Error while processing the intent: '
                                    'All the devices must belong to the '
@@ -984,8 +988,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # All checks passed
             #
             # Let's remove the interface from the VPN
+            _devices = set()
             configured_slices = slices.copy()
-            for site1 in slices:
+            for site1 in incoming_slices:
                 deviceid = site1[0]
                 interface_name = site1[1]
                 # Remove the tunnel between all the pairs of interfaces
@@ -994,27 +999,29 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         tunnel_mode.remove_tunnel(
                             overlay_name, overlay_type, site1,
                             site2, tenantid, tunnel_info)
+                # Mark the site1 as unconfigured
+                configured_slices.remove(site1)
                 # Remove the interface from the overlay
                 tunnel_mode.remove_slice_from_overlay(
                     overlay_name, deviceid,
                     interface_name, tenantid, tunnel_info)
                 # Check if the overlay and the tunnel mode
                 # has already been deleted on the device
-                if deviceid not in devices:
+                if deviceid not in _devices:
                     # Destroy overlay on the devices
                     tunnel_mode.destroy_overlay(overlay_name,
                                                 overlay_type,
                                                 tenantid,
                                                 deviceid,
                                                 tunnel_info)
-                    devices.add(deviceid)
+                    _devices.add(deviceid)
                 # Destroy tunnel mode on the devices
                 if srv6_sdn_controller_state.dec_tunnel_mode_refcount(
                         tunnel_name, deviceid) == 0:
                     tunnel_mode.destroy_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
             # Save the overlay to the state
-            srv6_sdn_controller_state.remove_many_slices_to_overlay(
+            srv6_sdn_controller_state.remove_many_slices_from_overlay(
                 overlayid, incoming_slices)
         logger.info('All the intents have been processed successfully\n\n')
         # Create the response
