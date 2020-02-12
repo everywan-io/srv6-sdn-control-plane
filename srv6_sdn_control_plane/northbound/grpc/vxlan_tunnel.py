@@ -122,9 +122,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         
         # Create VNI key 
         vni_key = 'vni_%s' % (vni)
-        # Dictionary for VNIs
-        vnis = dict()
-
+        
         #vnis['vni_11'] =  {'vni':12, 'interfaces': ['eth1','eth2']}
         #tunnels = {'tunnel_key': '12345', 'vni': vni }
 
@@ -418,8 +416,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     #del self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]
                     del slices_in_overlay_local['vnis'][vni_key]
 
-        print('++++ slice_in_ovrelay_local : %s\n' %slices_in_overlay_local)
-        print('++++ slice_in_ovrelay_remote : %s\n' %slices_in_overlay_remote)
         # If there are no more overlay on the devices destroy data structure, else update it  
         if slices_in_overlay_local['vnis'] == {} and slices_in_overlay_remote['vnis'] == {}:
             self.slices_in_overlay.remove({'tunnel_key': key_local_to_remote})
@@ -440,9 +436,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vtep_name = 'vxlan-%s' %  (vni)
         # Retrive VTEP IP address
         vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
-
-        print('\n entrato in destroy overlay#################### \n')
-
         #remove VTEP IP address 
         response = self.srv6_manager.remove_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
