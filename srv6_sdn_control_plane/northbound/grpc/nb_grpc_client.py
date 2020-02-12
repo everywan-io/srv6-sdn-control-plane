@@ -322,8 +322,8 @@ class NorthboundInterface:
             for tunnel in response.overlays:
                 id = tunnel.overlayid
                 name = tunnel.overlay_name
-                type = tunnel.overlay_type if tunnel.overlay_type is not None else None
-                tunnel_mode = tunnel.tunnel_mode if tunnel.tunnel_mode is not None else None
+                type = tunnel.overlay_type
+                tunnel_mode = tunnel.tunnel_mode
                 tenantid = tunnel.tenantid
                 tunnel_interfaces = list()
                 for interface in tunnel.slices:
@@ -434,9 +434,9 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def print_overlays(self, overlays = [], tenantid = ""):
+    def print_overlays(self, overlays=[], tenantid=""):
         # Get VPNs
-        vpns = self.get_overlays(overlays = [], tenantid = "")
+        vpns = self.get_overlays(overlays=[], tenantid="")
         # Print all VPNs
         if vpns is not None:
             print
