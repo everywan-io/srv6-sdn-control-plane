@@ -356,7 +356,7 @@ class NorthboundInterface:
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
         intent.overlay_name = text_type(name)
-        intent.overlay_type = int(STR_TO_VPN_TYPE[type])
+        intent.overlay_type = type
         intent.tenantid = tenantid
         #intent.encap = int(ENCAP.get(encap, None))
         intent.tunnel = encap

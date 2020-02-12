@@ -225,7 +225,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         status=STATUS_BAD_REQUEST)
                 # Check interface type
                 if interface.type not in [
-                        srv6_controller_utils.InterfaceType.DISABLED,
                         srv6_controller_utils.InterfaceType.WAN,
                         srv6_controller_utils.InterfaceType.LAN]:
                     logger.warning(
@@ -489,7 +488,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract the overlay tenant ID from the intent
             tenantid = intent.tenantid
             # Extract the overlay type from the intent
-            overlay_type = int(intent.overlay_type)
+            overlay_type = intent.overlay_type
             # Extract the overlay name from the intent
             overlay_name = intent.overlay_name
             # Extract the interfaces
