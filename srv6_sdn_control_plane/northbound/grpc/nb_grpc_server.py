@@ -537,7 +537,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 _devices, return_dict=True)
             # Validate the slices included in the intent
             for _slice in slices:
-                logger.debug('Validating the slice: %s-%s' % _slice)
+                logger.debug('Validating the slice: %s, %s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -646,12 +646,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logger.debug('Checking the overlay: %s' % overlayid)
-        overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
+        overlay = srv6_sdn_controller_state.get_overlays(overlayids=[overlayid])
         if len(overlay) == 0:
             logger.warning('The overlay %s does not exist' % overlayid)
             # If the overlay does not exist, return an error message
             return STATUS_VPN_NOTFOUND
-        
         overlay = overlay[0]
         # Get the tenant ID
         tenantid = overlay['tenantid']
@@ -660,7 +659,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logger.warning('The overlay %s does not belong to the tenant %s'
                            % (overlayid, tenantid))
             # If the overlay does not exist, return an error message
-            return STATUS_VPN_INVALID_TENANTID   
+            return STATUS_VPN_INVALID_TENANTID
         # Get the overlay name
         overlay_name = overlay['name']
         # Get the overlay type
@@ -730,7 +729,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract tenant ID
             tenantid = intent.tenantid
             # Get the overlay
-            overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
+            overlay = srv6_sdn_controller_state.get_overlays(overlayids=[overlayid])
             if len(overlay) == 0:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
@@ -777,7 +776,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # interfaces to be assigned
             # to the overlay and validate them
             for _slice in incoming_slices:
-                logger.debug('Validating the slice: %s-%s' % _slice)
+                logger.debug('Validating the slice: %s, %s' % _slice)
                 # A slice is a tuple (deviceid, interface_name)
                 #
                 # Extract the device ID
@@ -888,7 +887,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = intent.tenantid
             # Let's check if the overlay exists
             logger.debug('Checking the overlay: %s' % overlayid)
-            overlay = srv6_sdn_controller_state.get_overlays(overlayids = [overlayid])
+            overlay = srv6_sdn_controller_state.get_overlays(overlayids=[overlayid])
             if len(overlay) == 0:
                 logger.warning('The overlay %s does not exist' % overlayid)
                 # If the overlay does not exist, return an error message
