@@ -624,15 +624,15 @@ class TenantIDAllocator:
             # If tenant ID is valid
             if validate_tenantid(tenantid) == True:
                 # Assigne tenant ID to the token
-                self.token_to_tenantid[token] = tenantid
-                return tenantid
+                self.token_to_tenantid[token] = str(tenantid)
+                return str(tenantid)
             # Return -1 if tenant IDs are finished
             else:
                 return -1
 
     # Return tenant ID, if no tenant ID assigned to the token return -1
     def get_tenantid(self, token):
-        return self.token_to_tenantid.get(token, -1)
+        return str(self.token_to_tenantid.get(token, -1))
 
     # Release tenant ID and mark it as reusable
     def release_tenantid(self, token):
@@ -644,7 +644,7 @@ class TenantIDAllocator:
             # Mark the tenant ID as reusable
             self.reusable_tenantids.add(tenantid)
 
-            return tenantid
+            return str(tenantid)
         else:
             # The token has not an associated tenant ID
             return -1
@@ -755,7 +755,7 @@ def validate_table_id(tableid):
 
 
 def validate_tenantid(tenantid):
-    return tenantid >= 0 and tenantid <= 2**32-1
+    return int(tenantid) >= 0 and int(tenantid) <= 2**32-1
 
 
 def validate_vpn_type(vpn_type):

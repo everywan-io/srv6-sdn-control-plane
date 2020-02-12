@@ -320,10 +320,10 @@ class NorthboundInterface:
             # Parse response and retrieve tunnel information
             tunnels = list()
             for tunnel in response.overlays:
-                id = tunnel.id
-                name = tunnel.name
-                type = tunnel.type if tunnel.type is not None else None
-                tunnel_mode = tunnel.mode if tunnel.mode is not None else None
+                id = tunnel.overlayid
+                name = tunnel.overlay_name
+                type = tunnel.overlay_type
+                tunnel_mode = tunnel.tunnel_mode
                 tenantid = tunnel.tenantid
                 tunnel_interfaces = list()
                 for interface in tunnel.slices:
@@ -434,9 +434,9 @@ class NorthboundInterface:
         # Return
         return response.status
 
-    def print_overlays(self):
+    def print_overlays(self, overlays=[], tenantid=""):
         # Get VPNs
-        vpns = self.get_overlays(self.server_ip, self.server_port)
+        vpns = self.get_overlays(overlays=[], tenantid="")
         # Print all VPNs
         if vpns is not None:
             print
@@ -446,11 +446,11 @@ class NorthboundInterface:
                 print()
             for vpn in vpns:
                 print("****** VPN %s ******" % i)
-                print("Name:", vpn)
-                print("Table ID:", vpns[vpn]["tableid"])
+                print("Name:", vpn['name'])
+                print("Tenant ID:", vpn["tenantid"])
                 print("Interfaces:")
-                for intf in vpns[vpn]["interfaces"]:
-                    print(intf.deviceid, intf.interface_name)
+                for intf in vpn["interfaces"]:
+                    print(intf['deviceid'], intf['interface_name'])
                 print()
                 i += 1
         else:
