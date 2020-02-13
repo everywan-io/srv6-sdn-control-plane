@@ -66,10 +66,10 @@ STATUS_CODES_TO_DESCR = {
     status_codes_pb2.STATUS_INTERNAL_ERROR: 'Internal error'
 }
 
-STR_TO_VPN_TYPE = {
-    'IPv4VPN': srv6_vpn_pb2.IPv4Overlay,
-    'IPv6VPN': srv6_vpn_pb2.IPv6Overlay
-}
+#STR_TO_VPN_TYPE = {
+#    'IPv4VPN': srv6_vpn_pb2.IPv4Overlay,
+#    'IPv6VPN': srv6_vpn_pb2.IPv6Overlay
+#}
 
 
 # ENCAP = {
