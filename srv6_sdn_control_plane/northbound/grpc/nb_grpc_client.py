@@ -39,37 +39,14 @@ from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
-from srv6_sdn_proto import empty_req_pb2
 
 # The IP address and port of the gRPC server started on the SDN controller
-#IP_ADDRESS = '2000::a'
-#IP_PORT = 12345
+DEFAULT_GRPC_SERVER_IP = '11.3.192.117'
+DEFAULT_GRPC_SERVER_PORT = 54321
 # Define wheter to use SSL or not
 DEFAULT_SECURE = False
 # SSL cerificate for server validation
 DEFAULT_CERTIFICATE = 'cert_client.pem'
-
-
-STATUS_CODES_TO_DESCR = {
-    status_codes_pb2.STATUS_SUCCESS: 'OK',
-    status_codes_pb2.STATUS_TOPO_NOTFOUND: 'Cannot import the topology',
-    status_codes_pb2.STATUS_VPN_INVALID_TENANTID: 'Invalid tenant ID',
-    status_codes_pb2.STATUS_VPN_INVALID_TYPE: 'Invalid VPN type',
-    status_codes_pb2.STATUS_VPN_NAME_UNAVAILABLE: 'VPN name is already in use',
-    status_codes_pb2.STATUS_ROUTER_NOTFOUND: 'The topology does not contain the router',
-    status_codes_pb2.STATUS_VPN_INVALID_IP: 'Invalid IP adderess',
-    status_codes_pb2.STATUS_VPN_INVALID_PREFIX: 'Invalid VPN prefix',
-    status_codes_pb2.STATUS_VPN_NOTFOUND: 'The VPN does not exist',
-    status_codes_pb2.STATUS_INTF_NOTFOUND: 'The interface does not exist',
-    status_codes_pb2.STATUS_INTF_ALREADY_ASSIGNED: 'The interface is already assigned to a VPN',
-    status_codes_pb2.STATUS_INTF_NOTASSIGNED: 'The interface is not assigned to the VPN',
-    status_codes_pb2.STATUS_INTERNAL_ERROR: 'Internal error'
-}
-
-#STR_TO_VPN_TYPE = {
-#    'IPv4VPN': srv6_vpn_pb2.IPv4Overlay,
-#    'IPv6VPN': srv6_vpn_pb2.IPv6Overlay
-#}
 
 
 # ENCAP = {
@@ -82,7 +59,8 @@ STATUS_CODES_TO_DESCR = {
 
 class NorthboundInterface:
 
-    def __init__(self, server_ip, server_port,
+    def __init__(self, server_ip=DEFAULT_GRPC_SERVER_IP,
+                 server_port=DEFAULT_GRPC_SERVER_PORT,
                  secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
         self.server_ip = server_ip
         self.server_port = server_port
@@ -130,7 +108,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status, response.token, response.tenantid
+        return response.status.code, response.status.reason, response.token, response.tenantid
 
     def remove_tenant(self, token):
         # Create request
@@ -144,7 +122,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
     def configure_device(self, device_id, tenantid, device_name='',
                          device_description='', interfaces=[]):
@@ -189,7 +167,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
     def get_devices(self, devices=[], tenantid=''):
         # Create the request
@@ -201,7 +179,7 @@ class NorthboundInterface:
             self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetDevices(request)
-        if response.status == status_codes_pb2.STATUS_SUCCESS:
+        if response.status.code == status_codes_pb2.STATUS_OK:
             # Parse response and retrieve devices information
             devices = list()
             for device in response.device_information.devices:
@@ -280,9 +258,10 @@ class NorthboundInterface:
             devices = None
         # Let's close the session
         channel.close()
-        return devices
+        # Return
+        return response.status.code, response.status.reason, devices
 
-    def get_topology_information(self, server_ip, server_port):
+    def get_topology_information(self):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         # Get the reference of the stub
@@ -290,7 +269,7 @@ class NorthboundInterface:
             self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetTopologyInformation(request)
-        if response.status == status_codes_pb2.STATUS_SUCCESS:
+        if response.status == status_codes_pb2.STATUS_OK:
             # Parse response and retrieve topology information
             topology = dict()
             topology['routers'] = list()
@@ -304,19 +283,20 @@ class NorthboundInterface:
             topology = None
         # Let's close the session
         channel.close()
-        return topology
+        # Return
+        return response.status.code, response.status.reason, topology
 
-    def get_overlays(self, overlays=[], tenantid=''):
+    def get_overlays(self, overlayids=[], tenantid=''):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
-        request.overlayids.extend(overlays)
+        request.overlayids.extend(overlayids)
         request.tenantid = tenantid
         # Get the reference of the stub
         srv6_vpn_stub, channel = self.get_grpc_session(
             self.server_ip, self.server_port, self.SECURE)
         # Get VPNs
         response = srv6_vpn_stub.GetOverlays(request)
-        if response.status == status_codes_pb2.STATUS_SUCCESS:
+        if response.status == status_codes_pb2.STATUS_OK:
             # Parse response and retrieve tunnel information
             tunnels = list()
             for tunnel in response.overlays:
@@ -349,20 +329,19 @@ class NorthboundInterface:
             tunnels = None
         # Let's close the session
         channel.close()
-        return tunnels
+        # Return
+        return response.status.code, response.status.reason, tunnels
 
-    def create_overlay(self, name, type, interfaces, tenantid, encap='SRv6'):
+    def create_overlay(self, name, type, interfaces, tenantid, tunnel_mode='SRv6'):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
         intent.overlay_name = text_type(name)
         intent.overlay_type = type
         intent.tenantid = tenantid
-        #intent.encap = int(ENCAP.get(encap, None))
-        intent.tunnel = encap
-        # if intent.encap is None:
+        intent.tunnel_mode = tunnel_mode
         if intent.tunnel is None:
-            print('Invalid encap type')
+            print('Invalid tunnel mode')
             return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
             interface = intent.slices.add()
@@ -376,7 +355,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
     def remove_overlay(self, overlayid, tenantid):
         # Create the request
@@ -392,7 +371,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
     def assign_slice_to_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
@@ -412,7 +391,7 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
     def remove_slice_from_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
@@ -432,19 +411,20 @@ class NorthboundInterface:
         # Let's close the session
         channel.close()
         # Return
-        return response.status
+        return response.status.code, response.status.reason
 
-    def print_overlays(self, overlays=[], tenantid=""):
+    def print_overlays(self, overlayids=[], tenantid=""):
         # Get VPNs
-        vpns = self.get_overlays(overlays=[], tenantid="")
+        status_code, reason, overlays = self.get_overlays(
+            overlayids=[], tenantid="")
         # Print all VPNs
-        if vpns is not None:
+        if status_code == srv6_vpn_pb2.STATUS_OK:
             print
             i = 1
-            if len(vpns) == 0:
+            if len(overlays) == 0:
                 print("No VPN in the network")
                 print()
-            for vpn in vpns:
+            for vpn in overlays:
                 print("****** VPN %s ******" % i)
                 print("Name:", vpn['name'])
                 print("Tenant ID:", vpn["tenantid"])
@@ -454,7 +434,7 @@ class NorthboundInterface:
                 print()
                 i += 1
         else:
-            print('Error while retrieving the VPNs list')
+            print('Error while retrieving the overlays list')
 
 
 if __name__ == '__main__':
@@ -612,8 +592,10 @@ if __name__ == '__main__':
     srv6_controller_utils.add_ipv4_address_quagga('fdff:0:0:200::1',
                                           'sur1-eth4', '10.5.0.1/24')'''
 
-    #InventoryService = InventoryService()
-    #response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
-    #print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
-    #response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')
-    #print('Response remove tenat: %s' % response2)
+    '''
+    InventoryService = InventoryService()
+    response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
+    print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
+    response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')
+    print('Response remove tenat: %s' % response2)
+    '''
