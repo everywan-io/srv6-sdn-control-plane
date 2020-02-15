@@ -804,9 +804,9 @@ def getAddressFamily(ip):
         return None
 
 
-class VPNType:
-    IPv4VPN = 1
-    IPv6VPN = 2
+class OverlayType:
+    IPv6Overlay = 'IPv6Overlay'
+    IPv4Overlay = 'IPv4Overlay'
 
 '''
 class VPN:

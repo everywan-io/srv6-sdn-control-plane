@@ -32,6 +32,7 @@ from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane import srv6_controller_utils
+from srv6_controller_utils import OverlayType
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 
@@ -121,10 +122,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             r_slice.routerid, tableid
         )
         # Get the subnets
-        if overlay_type == srv6_controller_utils.VPNType.IPv6VPN:
+        if overlay_type == OverlayType.IPv6Overlay:
             subnets = self.controller_state.get_ipv6_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
-        elif overlay_type == srv6_controller_utils.VPNType.IPv4VPN:
+        elif overlay_type == OverlayType.IPv4Overlay:
             subnets = self.controller_state.get_ipv4_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
         else:
@@ -171,10 +172,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot retrieve VPN table ID')
             return STATUS_INTERNAL_ERROR
         # Get the subnets
-        if overlay_type == srv6_controller_utils.VPNType.IPv6VPN:
+        if overlay_type == OverlayType.IPv6Overlay:
             subnets = self.controller_state.get_ipv6_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
-        elif overlay_type == srv6_controller_utils.VPNType.IPv4VPN:
+        elif overlay_type == OverlayType.IPv4Overlay:
             subnets = self.controller_state.get_ipv4_subnets_on_interface(
                 r_slice.routerid, r_slice.interface_name)
         else:
