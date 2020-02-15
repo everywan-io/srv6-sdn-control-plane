@@ -44,6 +44,7 @@ from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import gre_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane import srv6_controller_utils
+from srv6_controller_utils import OverlayType
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import gre_interface_pb2
@@ -101,10 +102,10 @@ class GRETunnel(tunnel_mode.TunnelMode):
         if gre_key == -1:
             gre_key = self.controller_state_gre.get_new_gre_key(overlay_name, tenantid, local_router, remote_router)
 
-        if overlay_type == srv6_vpn_pb2.IPv4VPN:
+        if overlay_type == OverlayType.IPv4Overlay:
             type = gre_interface_pb2.GRE
             family = AF_INET
-        elif overlay_type == srv6_vpn_pb2.IPv6VPN:
+        elif overlay_type == OverlayType.IPv6Overlay:
             type = gre_interface_pb2.IP6GRE
             family = AF_INET6
         else:
