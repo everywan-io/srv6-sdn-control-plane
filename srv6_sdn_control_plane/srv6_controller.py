@@ -141,23 +141,26 @@ class SRv6Controller(object):
         self.devices = dict()
         # Topology information extraction
         self.topo_extraction = topo_extraction
+        # Print configuration
         if self.VERBOSE:
             print()
             print('Configuration')
-            print(('*** Nodes: %s' % self.nodes))
-            print(('*** ospf6d password: %s' % self.ospf6d_pwd))
+            print('*** Nodes: %s' % self.nodes)
+            # print('*** ospf6d password: %s' % self.ospf6d_pwd)
             if self.topo_extraction:
-                print(('*** Topology Information Extraction: enabled'))
-                print(('*** Topology Information Extraction period: %s' % self.period))
-                print(('*** Topology file: %s' % self.topology_file))
-                print(('*** topology_graph: %s' % self.topology_graph))
+                print('*** Topology Information Extraction: enabled')
+                print('*** Topology Information Extraction period: %s' %
+                      self.period)
+                print('*** Topology file: %s' % self.topology_file)
+                print('*** topology_graph: %s' % self.topology_graph)
             else:
-                print(('*** Topology Information Extraction: disabled'))
-            print(('*** Selected southbound interface: %s' % self.sb_interface))
-            print(('*** Selected northbound interface: %s' % self.nb_interface))
+                print('*** Topology Information Extraction: disabled')
+            print('*** Selected southbound interface: %s' % self.sb_interface)
+            print('*** Selected northbound interface: %s' % self.nb_interface)
             print()
         # Controller state
-        self.controller_state = utils.SDWANControllerState(self.topology_file, self.devices, self.vpn_dict, self.vpn_file)
+        self.controller_state = utils.SDWANControllerState(
+            self.topology_file, self.devices, self.vpn_dict, self.vpn_file)
 
     # Get the interface of the router facing on a net
     def get_interface_facing_on_net(self, routerid, net):
@@ -436,7 +439,8 @@ class SRv6Controller(object):
             # The topology has not changed
             return False
         # Discover the interfaces
-        interfaces = interface_discovery(router, self.grpc_client_port, verbose=True)
+        interfaces = interface_discovery(
+            router, self.grpc_client_port, verbose=True)
         # Update topology information
         self.topoInfo['interfaces'][routerid] = interfaces
         # Return True if the operation completed successfully
@@ -463,10 +467,10 @@ class SRv6Controller(object):
         topo_changed = False
         # The interface does not exist, let's create a new one
         if self.create_router_interface(routerid=routerid,
-                                      ifindex=ifindex,
-                                      ifname=ifname,
-                                      macaddr=macaddr,
-                                      state='DOWN'):
+                                        ifindex=ifindex,
+                                        ifname=ifname,
+                                        macaddr=macaddr,
+                                        state='DOWN'):
             topo_changed = True
         # Return True if the topology has changed, False otherwise
         return topo_changed
@@ -532,7 +536,7 @@ class SRv6Controller(object):
             for event in self.eventsListener.listen(router, self.grpc_client_port):
                 if self.VERBOSE:
                     print('*** Received a new network event from router %s:\n%s'
-                           % (routerid, event))
+                          % (routerid, event))
                 if event['type'] == 'CONNECTION_ESTABLISHED':
                     # 'Connection established' message
                     # Run interface discovery to get missing information
@@ -584,7 +588,8 @@ class SRv6Controller(object):
                     # Extract interface index
                     ifindex = interface['index']
                     # Handle interface down event
-                    topo_changed = self.handle_interface_del_event(routerid, ifindex)
+                    topo_changed = self.handle_interface_del_event(
+                        routerid, ifindex)
                 elif event['type'] == 'NEW_ADDR':
                     # New address event
                     interface = event['interface']
@@ -639,7 +644,6 @@ class SRv6Controller(object):
                 # and update the mapping
                 self.listenerThreads[routerid] = thread
                 thread.start()
-
 
     ''' Topology Information Extraction '''
 
@@ -708,14 +712,15 @@ class SRv6Controller(object):
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
-                managementip = self.controller_state.get_router_mgmtip(routerid)
+                managementip = self.controller_state.get_router_mgmtip(
+                    routerid)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
                 # Add the node to the graph
                 self.G.add_node(routerid, routerid=routerid, fillcolor='red',
-                        style='filled', shape='ellipse',
-                        loopbacknet=loopbacknet, loopbackip=loopbackip,
-                        managementip=managementip, interfaces=interfaces, type='router')
+                                style='filled', shape='ellipse',
+                                loopbacknet=loopbacknet, loopbackip=loopbackip,
+                                managementip=managementip, interfaces=interfaces, type='router')
             # Build edges list
             for net, routerids in list(self.topoInfo['nets'].items()):
                 if len(routerids) == 2:
@@ -732,7 +737,8 @@ class SRv6Controller(object):
                         # Skip
                         continue
                     lhs_ifname = lhs_intf.get('ifname')
-                    lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
+                    lhs_ip = utils.findIPv6AddrInNet(
+                        lhs_intf.get('ipaddr'), net)
                     # Get interface name and IP address
                     # corresponding to the right router
                     rhs_intf = self.get_interface_facing_on_net(edge[1], net)
@@ -741,12 +747,13 @@ class SRv6Controller(object):
                         # Skip
                         continue
                     rhs_ifname = rhs_intf.get('ifname')
-                    rhs_ip = utils.findIPv6AddrInNet(rhs_intf.get('ipaddr'), net)
+                    rhs_ip = utils.findIPv6AddrInNet(
+                        rhs_intf.get('ipaddr'), net)
                     # Add edge to the graph
                     # This is a transit network, set the net as label
                     self.G.add_edge(*edge, label=net, fontsize=9, net=net,
-                            source_ip=rhs_ip, source_intf=rhs_ifname,
-                            target_ip=lhs_ip, target_intf=lhs_ifname)
+                                    source_ip=rhs_ip, source_intf=rhs_ifname,
+                                    target_ip=lhs_ip, target_intf=lhs_ifname)
                 elif len(routerids) == 1:
                     # Stub networks
                     # Link between a router and a stub network
@@ -758,15 +765,16 @@ class SRv6Controller(object):
                         # Skip
                         continue
                     lhs_ifname = lhs_intf.get('ifname')
-                    lhs_ip = utils.findIPv6AddrInNet(lhs_intf.get('ipaddr'), net)
+                    lhs_ip = utils.findIPv6AddrInNet(
+                        lhs_intf.get('ipaddr'), net)
                     # Add a node representing the net to the graph
                     self.G.add_node(net, fillcolor='cyan', style='filled',
-                            shape='box', type='stub_network')
+                                    shape='box', type='stub_network')
                     # Add edge to the graph
                     # This is a stub network, no label on the edge
                     self.G.add_edge(*edge, label='', fontsize=9, net=net,
-                            source_ip=None, source_intf=None,
-                            target_ip=lhs_ip, target_intf=lhs_intf)
+                                    source_ip=None, source_intf=None,
+                                    target_ip=lhs_ip, target_intf=lhs_intf)
         # Set the topology changed flag
         self.topology_changed_flag.set()
 
@@ -838,8 +846,8 @@ class SRv6Controller(object):
         while not stop:
             # Extract the topology from the routers
             routers, stub_nets, transit_nets = \
-                        connect_and_extract_topology(self.nodes, OSPF_DB_PATH,
-                                                     self.ospf6d_pwd, True)
+                connect_and_extract_topology(self.nodes, OSPF_DB_PATH,
+                                             self.ospf6d_pwd, True)
             nets = utils.merge_two_dicts(stub_nets, transit_nets)
             # Update the topology information
             if self.update_topology_info(routers, nets):
@@ -868,9 +876,9 @@ class SRv6Controller(object):
         # Store registration server
         self.controller_state.registration_server = server
         server.serve()
-        
 
     # Run the SRv6 controller
+
     def run(self):
         if self.VERBOSE:
             print('*** Starting the SRv6 Controller')
@@ -895,8 +903,8 @@ class SRv6Controller(object):
                         'vpn_file': self.vpn_file,
                         'controller_state': self.controller_state,
                         'verbose': self.VERBOSE
-                    }
-                )
+                        }
+                        )
             )
             thread.daemon = True
             thread.start()
@@ -959,12 +967,12 @@ def parseArguments():
     # Southbound interface
     parser.add_argument('--sb-interface', action='store',
                         dest='sb_interface', default=DEFAULT_SB_INTERFACE,
-                        help='Select a southbound interface ' \
+                        help='Select a southbound interface '
                         'from this list: %s' % SUPPORTED_SB_INTERFACES)
     # Northbound interface
     parser.add_argument('--nb-interface', action='store',
                         dest='nb_interface', default=DEFAULT_NB_INTERFACE,
-                        help='Select a northbound interface ' \
+                        help='Select a northbound interface '
                         'from this list: %s' % SUPPORTED_NB_INTERFACES)
     # IP address of the northbound gRPC server
     parser.add_argument('--grpc-server-ip', dest='grpc_server_ip',
@@ -1069,10 +1077,10 @@ def _main():
     # Check interfaces file, dataplane and gRPC client paths
     if sb_interface not in SUPPORTED_SB_INTERFACES:
         utils.print_and_die('Error: %s interface not yet supported or invalid\n'
-                      'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
+                            'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
     if nb_interface not in SUPPORTED_NB_INTERFACES:
         utils.print_and_die('Error: %s interface not yet supported or invalid\n'
-                      'Supported northbound interfaces: %s' % (nb_interface, SUPPORTED_NB_INTERFACES))
+                            'Supported northbound interfaces: %s' % (nb_interface, SUPPORTED_NB_INTERFACES))
     # Create a new SRv6 controller
     srv6_controller = SRv6Controller(
         nodes=nodes,
