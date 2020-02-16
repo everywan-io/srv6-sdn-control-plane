@@ -349,7 +349,7 @@ class NorthboundInterface:
                 # Parse response and retrieve tunnel information
                 tunnels = list()
                 for tunnel in response.overlays:
-                    id = tunnel.overlayid
+                    overlayid = tunnel.overlayid
                     name = tunnel.overlay_name
                     type = tunnel.overlay_type
                     tunnel_mode = tunnel.tunnel_mode
@@ -367,7 +367,7 @@ class NorthboundInterface:
                             'interface_name': interface_name
                         })
                     tunnels.append({
-                        'id': id,
+                        'id': overlayid,
                         'name': name,
                         'type': type,
                         'interfaces': tunnel_interfaces,
@@ -485,22 +485,23 @@ class NorthboundInterface:
         return response
 
     def print_overlays(self, overlayids=[], tenantid=""):
-        # Get VPNs
+        # Get overlays
         status_code, reason, overlays = self.get_overlays(
             overlayids=[], tenantid="")
-        # Print all VPNs
+        # Print all overlays
         if status_code == NbStatusCode.STATUS_OK:
             print
             i = 1
             if len(overlays) == 0:
-                print("No VPN in the network")
+                print("No overlay in the network")
                 print()
-            for vpn in overlays:
-                print("****** VPN %s ******" % i)
-                print("Name:", vpn['name'])
-                print("Tenant ID:", vpn["tenantid"])
+            for overlay in overlays:
+                print("****** Overlay %s ******" % i)
+                print("Overlay ID:", overlay['id'])
+                print("Name:", overlay['name'])
+                print("Tenant ID:", overlay["tenantid"])
                 print("Interfaces:")
-                for intf in vpn["interfaces"]:
+                for intf in overlay["interfaces"]:
                     print(intf['deviceid'], intf['interface_name'])
                 print()
                 i += 1
