@@ -119,6 +119,25 @@ class SRv6Manager:
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(channel), channel)
 
+    # Shutdown device
+    def shutdown_device(self, server_ip, server_port):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Shutdown the device
+            response = srv6_stub.ShutdownDevice(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
     # CRUD SRv6 Explicit Path
 
     def create_srv6_explicit_path(self, server_ip, server_port, destination,
