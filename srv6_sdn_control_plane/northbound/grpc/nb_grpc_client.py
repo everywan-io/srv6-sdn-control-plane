@@ -508,6 +508,26 @@ class NorthboundInterface:
         else:
             logging.error('Error while retrieving the overlays list')
 
+    def unregister_device(self, deviceid, tenantid):
+        # Create the request
+        request = srv6_vpn_pb2.UnregisterDeviceRequest()
+        request.tenantid = tenantid
+        request.deviceid = deviceid
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Unregister the device
+            response = srv6_stub.UnregisterDevice(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+        
 
 if __name__ == '__main__':
     '''# Test IPv6-VPN APIs

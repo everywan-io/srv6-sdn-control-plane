@@ -155,7 +155,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 status=Status(code=STATUS_BAD_REQUEST, reason=err))
         # Configure the tenant
         vxlan_port = vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
-        srv6_sdn_controller_state.configure_tenant(tenantid, tenant_info, vxlan_port)
+        srv6_sdn_controller_state.configure_tenant(
+            tenantid, tenant_info, vxlan_port)
         # Response
         return TenantReply(status=Status(code=STATUS_OK, reason='OK'))
 
@@ -178,7 +179,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Remove the tenant
         #
         # Get all the overlays associated to the tenant ID
-        overlays = srv6_sdn_controller_state.get_overlays(tenantid)
+        overlays = srv6_sdn_controller_state.get_overlays(tenantid=tenantid)
         if overlays is None:
             err = 'Error getting overlays'
             logging.error(err)
@@ -190,7 +191,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             self._RemoveOverlay(
                 overlayid, tenantid, tunnel_info=None)
         # Get all the devices of the tenant ID
-        devices = srv6_sdn_controller_state.get_devices(tenantid)
+        devices = srv6_sdn_controller_state.get_devices(tenantid=tenantid)
         if devices is None:
             err = 'Error getting devices'
             logging.error(err)
@@ -199,8 +200,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         for device in devices:
             # Unregister all devices
             deviceid = device['deviceid']
-            self.controller_state.registration_server.unregister_device(   # TODO fix
-                deviceid, tunnel_info=None)
+            logging.debug('Unregistering device %s' % deviceid)
+            self._unregister_device(deviceid, tenantid)
         # TODO remove tenant from keystone
         #
         # Success
@@ -214,7 +215,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Get the devices
         devices = [device.id for device in request.configuration.devices]
         devices = srv6_sdn_controller_state.get_devices(
-            devices, return_dict=True)
+            deviceids=devices, return_dict=True)
         if devices is None:
             logging.error('Error getting devices')
             return OverlayServiceReply(
@@ -568,6 +569,75 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response.status.reason = 'OK'
         return response
 
+    def _unregister_device(self, deviceid, tenantid):
+        # Parameters validation
+        #
+        # Validate the tenant ID
+        logging.debug('Validating the tenant ID: %s' % tenantid)
+        tenant_exists = srv6_sdn_controller_state.tenant_exists(tenantid)
+        if tenant_exists is None:
+            err = 'Error while connecting to the controller state'
+            logging.error(err)
+            return TenantReply(
+                status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err))
+        elif tenant_exists is False:
+            # If tenant ID is invalid, return an error message
+            err = 'Tenant not found: %s' % tenantid
+            logging.warning(err)
+            return STATUS_BAD_REQUEST, err
+        # Validate the device ID
+        logging.debug('Validating the device ID: %s' % tenantid)
+        devices = srv6_sdn_controller_state.get_devices(
+            deviceids=[deviceid])
+        if devices is None:
+            err = 'Error getting devices'
+            logging.error(err)
+            return STATUS_INTERNAL_SERVER_ERROR, err
+        elif len(devices) == 0:
+            # If device ID is invalid, return an error message
+            err = 'Device not found: %s' % deviceid
+            logging.warning(err)
+            return STATUS_BAD_REQUEST, err
+        device = devices[0]
+        if device['tenantid'] != tenantid:
+            err = ('Cannot unregister the device. '
+                    'The device %s does not belong to the tenant %s'
+                    % (deviceid, tenantid))
+            logging.warning(err)
+            return STATUS_BAD_REQUEST, err
+        res = self.srv6_manager.shutdown_device(
+            device['mgmtip'], self.grpc_client_port)
+        if res != SbStatusCode.STATUS_SUCCESS:
+            err = ('Cannot unregister the device. '
+                    'Error while shutting down the device')
+            logging.error(err)
+            return STATUS_INTERNAL_SERVER_ERROR, err
+        success = srv6_sdn_controller_state.unregister_device(deviceid)
+        if success is None or success is False:
+            err = ('Cannot unregister the device. '
+                    'Error while updating the controller state')
+            logging.error(err)
+            return STATUS_INTERNAL_SERVER_ERROR, err
+        # Success
+        logging.info('Device unregistered successfully\n\n')
+        return STATUS_OK, 'OK'
+
+    """ Unregister a device """
+
+    def UnregisterDevice(self, request, context):
+        logging.info('UnregisterDevice request received:\n%s', request)
+        # Parameters extraction
+        #
+        # Extract the tenant ID
+        tenantid = request.tenantid
+        # Extract the device ID
+        deviceid = request.deviceid
+        # Unregister the device
+        code, reason = self._unregister_device(deviceid, tenantid)
+        # Create the response
+        return OverlayServiceReply(
+            status=Status(code=code, reason=reason))
+
     """Create a VPN from an intent received through the northbound interface"""
 
     def CreateOverlay(self, request, context):
@@ -606,6 +676,22 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 err = 'Invalid tenant ID: %s' % tenantid
                 logging.warning(err)
                 return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Check if the tenant is configured
+            is_config = (srv6_sdn_controller_state
+                         .is_tenant_configured(tenantid))
+            if is_config is None:
+                err = 'Error while checking tenant configuration'
+                logging.error(err)
+                return TenantReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            elif is_config is False:
+                err = ('Cannot create overlay for a tenant unconfigured'
+                       'Tenant not found or error during the '
+                       'connection to the db')
+                logging.warning(err)
+                return TenantReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Validate the overlay type
             logging.debug('Validating the overlay type: %s' % overlay_type)
@@ -652,7 +738,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                   reason=err))
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                _devices, return_dict=True)
+                deviceids=_devices, return_dict=True)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
@@ -821,6 +907,22 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Check if the tenant is configured
+            is_config = (srv6_sdn_controller_state
+                         .is_tenant_configured(tenantid))
+            if is_config is None:
+                err = 'Error while checking tenant configuration'
+                logging.error(err)
+                return TenantReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            elif is_config is False:
+                err = ('Cannot remove overlay for a tenant unconfigured'
+                       'Tenant not found or error during the '
+                       'connection to the db')
+                logging.warning(err)
+                return TenantReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Remove VPN
             code, reason = self._RemoveOverlay(
                 overlayid, tenantid, tunnel_info)
@@ -837,7 +939,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logging.debug('Checking the overlay: %s' % overlayid)
-        overlays = srv6_sdn_controller_state.get_overlays([overlayid])
+        overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
+                                                          overlayid])
         if overlays is None:
             err = 'Error getting the overlay'
             logging.error(err)
@@ -975,8 +1078,25 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Check if the tenant is configured
+            is_config = (srv6_sdn_controller_state
+                         .is_tenant_configured(tenantid))
+            if is_config is None:
+                err = 'Error while checking tenant configuration'
+                logging.error(err)
+                return TenantReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            elif is_config is False:
+                err = ('Cannot update overlay for a tenant unconfigured. '
+                       'Tenant not found or error during the '
+                       'connection to the db')
+                logging.warning(err)
+                return TenantReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Get the overlay
-            overlays = srv6_sdn_controller_state.get_overlays([overlayid])
+            overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
+                                                              overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1028,7 +1148,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.debug('Checking the overlay: %s' % overlay_name)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                list(incoming_devices) + _devices, return_dict=True)
+                deviceids=list(incoming_devices) + _devices, return_dict=True)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
@@ -1205,9 +1325,26 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Check if the tenant is configured
+            is_config = (srv6_sdn_controller_state
+                         .is_tenant_configured(tenantid))
+            if is_config is None:
+                err = 'Error while checking tenant configuration'
+                logging.error(err)
+                return TenantReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            elif is_config is False:
+                err = ('Cannot update overlay for a tenant unconfigured'
+                       'Tenant not found or error during the '
+                       'connection to the db')
+                logging.warning(err)
+                return TenantReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Let's check if the overlay exists
             logging.debug('Checking the overlay: %s' % overlayid)
-            overlays = srv6_sdn_controller_state.get_overlays([overlayid])
+            overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
+                                                              overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1253,7 +1390,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     incoming_devices.add(deviceid)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                incoming_devices, return_dict=True)
+                deviceds=incoming_devices, return_dict=True)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
