@@ -29,6 +29,7 @@ from six import text_type
 import grpc
 import sys
 from socket import AF_INET, AF_INET6
+import logging
 
 from srv6_sdn_control_plane import srv6_controller_utils
 
@@ -38,7 +39,7 @@ from srv6_sdn_control_plane import srv6_controller_utils
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
-from srv6_sdn_proto import status_codes_pb2
+from srv6_sdn_proto.status_codes_pb2 import NbStatusCode
 
 # The IP address and port of the gRPC server started on the SDN controller
 DEFAULT_GRPC_SERVER_IP = '11.3.192.117'
@@ -57,6 +58,25 @@ DEFAULT_CERTIFICATE = 'cert_client.pem'
 # }
 
 
+# Parser for gRPC errors
+def parse_grpc_error(e):
+    status_code = e.code()
+    details = e.details()
+    logging.error('gRPC client reported an error: %s, %s'
+                    % (status_code, details))
+    if grpc.StatusCode.UNAVAILABLE == status_code:
+        code = NbStatusCode.STATUS_SERVICE_UNAVAILABLE
+        reason = details
+    elif grpc.StatusCode.UNAUTHENTICATED == status_code:
+        code = NbStatusCode.STATUS_UNAUTHORIZED
+        reason = details
+    else:
+        code = NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        reason = details
+    # Return an error message
+    return code, reason
+
+
 class NorthboundInterface:
 
     def __init__(self, server_ip=DEFAULT_GRPC_SERVER_IP,
@@ -67,7 +87,7 @@ class NorthboundInterface:
         self.SECURE = secure
         if secure is True:
             if certificate is None:
-                print('Error: "certificate" variable cannot be None '
+                logging.error('Error: "certificate" variable cannot be None '
                       'in secure mode')
                 sys.exit(-2)
             self.certificate = certificate
@@ -80,7 +100,7 @@ class NorthboundInterface:
         elif addr_family == AF_INET:
             ip_address = "ipv4:%s:%s" % (ip_address, port)
         else:
-            print('Invalid address: %s' % ip_address)
+            logging.error('Invalid address: %s' % ip_address)
             return
         # If secure we need to establish a channel with the secure endpoint
         if secure:
@@ -95,34 +115,45 @@ class NorthboundInterface:
             channel = grpc.insecure_channel(ip_address)
         return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
 
-    def configure_tenant(self, port, info):
+    def configure_tenant(self, tenantid, tenant_info='', vxlan_port=-1):
         # Create request
         request = srv6_vpn_pb2.Tenant()
-        request.port = port
-        request.info = info
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Configure the tenant
-        response = srv6_vpn_stub.ConfigureTenant(request)
+        request.tenantid = tenantid
+        request.tenant_info = tenant_info
+        request.config.vxlan_port = vxlan_port
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Configure the tenant
+            response = srv6_vpn_stub.ConfigureTenant(request)
+            # Create the response
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason, response.token, response.tenantid
+        # Return the response
+        return response
 
-    def remove_tenant(self, token):
+    def remove_tenant(self, tenantid):
         # Create request
         request = srv6_vpn_pb2.RemoveTenantRequest()
-        request.token = token
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Remove tenant
-        response = srv6_vpn_stub.RemoveTenant(request)
+        request.tenantid = tenantid
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Remove tenant
+            response = srv6_vpn_stub.RemoveTenant(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def configure_device(self, device_id, tenantid, device_name='',
                          device_description='', interfaces=[]):
@@ -145,7 +176,7 @@ class NorthboundInterface:
                     elif family == AF_INET6:
                         interface.ipv6_addrs.append(ip_addr)
                     else:
-                        print('Provided an invalid address: %s' % addr)
+                        logging.error('Provided an invalid address: %s' % addr)
                         return None
             if 'subnets' in _interface:
                 for subnet in _interface['subnets']:
@@ -155,184 +186,207 @@ class NorthboundInterface:
                     elif family == AF_INET6:
                         interface.ipv6_subnets.append(subnet)
                     else:
-                        print('Provided an invalid subnet: %s' % subnet)
+                        logging.error('Provided an invalid subnet: %s' % subnet)
                         return None
             if 'type' in _interface:
                 interface.type = _interface['type']
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Configure the devices
-        response = srv6_vpn_stub.ConfigureDevice(request)
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Configure the devices
+            response = srv6_vpn_stub.ConfigureDevice(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def get_devices(self, devices=[], tenantid=''):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.deviceids.extend(devices)
         request.tenantid = tenantid
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Get VPNs
-        response = srv6_vpn_stub.GetDevices(request)
-        if response.status.code == status_codes_pb2.STATUS_OK:
-            # Parse response and retrieve devices information
-            devices = list()
-            for device in response.device_information.devices:
-                device_id = None
-                loopbackip = None
-                loopbacknet = None
-                managementip = None
-                interfaces = None
-                mgmtip = None
-                if device.id is not None:
-                    device_id = text_type(device.id)
-                if device.mgmtip is not None:
-                    mgmtip = text_type(device.mgmtip)
-                if device.name is not None:
-                    device_name = text_type(device.name)
-                if device.description is not None:
-                    device_description = text_type(device.description)
-                if device.status is not None:
-                    device_status = text_type(device.status)
-                '''
-                if device.loopbackip is not None:
-                    loopbackip = text_type(device.loopbackip)
-                if device.loopbacknet is not None:
-                    loopbacknet = text_type(device.loopbacknet)
-                if device.managementip is not None:
-                    managementip = text_type(device.managementip)
-                if device.interfaces is not None:
-                    interfaces = list()
-                    for intf in device.interfaces:
-                        ipaddrs = list()
-                        for ipaddr in intf.ipaddrs:
-                            ipaddrs.append(ipaddr)
-                        interfaces.append({
-                            'ifindex': text_type(intf.index),
-                            'ifname': text_type(intf.name),
-                            'macaddr': text_type(intf.macaddr),
-                            'ipaddrs': intf.ipaddrs,
-                            'state': text_type(intf.state),
-                        })
-                '''
-                interfaces = dict()
-                if device.interfaces is not None:
-                    for intf in device.interfaces:
-                        ifname = intf.name
-                        type = intf.type
-                        mac_addr = intf.mac_addr
-                        ipv4_addrs = list()
-                        ipv4_addrs = intf.ipv4_addrs
-                        ipv6_addrs = intf.ipv6_addrs
-                        ext_ipv4_addrs = intf.ext_ipv4_addrs
-                        ext_ipv6_addrs = intf.ext_ipv6_addrs
-                        ipv4_subnets = intf.ipv4_subnets
-                        ipv6_subnets = intf.ipv6_subnets
-                        interfaces[ifname] = {
-                            'mac_addr': mac_addr,
-                            'ipv4_addrs': ipv4_addrs,
-                            'ipv6_addrs': ipv6_addrs,
-                            'ext_ipv4_addrs': ext_ipv4_addrs,
-                            'ext_ipv6_addrs': ext_ipv6_addrs,
-                            'ipv4_subnets': ipv4_subnets,
-                            'ipv6_subnets': ipv6_subnets,
-                            'type': type
-                        }
-                devices.append({
-                    'device_id': device_id,
-                    'loopbackip': loopbackip,
-                    'loopbacknet': loopbacknet,
-                    'managementip': managementip,
-                    'interfaces': interfaces,
-                    'mgmtip': mgmtip,
-                    'name': device_name,
-                    'description': device_description,
-                    'status': device_status
-                })
-        else:
-            devices = None
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Get devices
+            response = srv6_vpn_stub.GetDevices(request)
+            if response.status.code == NbStatusCode.STATUS_OK:
+                # Parse response and retrieve devices information
+                devices = list()
+                for device in response.device_information.devices:
+                    device_id = None
+                    loopbackip = None
+                    loopbacknet = None
+                    managementip = None
+                    interfaces = None
+                    mgmtip = None
+                    if device.id is not None:
+                        device_id = text_type(device.id)
+                    if device.mgmtip is not None:
+                        mgmtip = text_type(device.mgmtip)
+                    if device.name is not None:
+                        device_name = text_type(device.name)
+                    if device.description is not None:
+                        device_description = text_type(device.description)
+                    if device.status is not None:
+                        device_status = text_type(device.status)
+                    '''
+                    if device.loopbackip is not None:
+                        loopbackip = text_type(device.loopbackip)
+                    if device.loopbacknet is not None:
+                        loopbacknet = text_type(device.loopbacknet)
+                    if device.managementip is not None:
+                        managementip = text_type(device.managementip)
+                    if device.interfaces is not None:
+                        interfaces = list()
+                        for intf in device.interfaces:
+                            ipaddrs = list()
+                            for ipaddr in intf.ipaddrs:
+                                ipaddrs.append(ipaddr)
+                            interfaces.append({
+                                'ifindex': text_type(intf.index),
+                                'ifname': text_type(intf.name),
+                                'macaddr': text_type(intf.macaddr),
+                                'ipaddrs': intf.ipaddrs,
+                                'state': text_type(intf.state),
+                            })
+                    '''
+                    interfaces = dict()
+                    if device.interfaces is not None:
+                        for intf in device.interfaces:
+                            ifname = intf.name
+                            type = intf.type
+                            mac_addr = intf.mac_addr
+                            ipv4_addrs = list()
+                            ipv4_addrs = intf.ipv4_addrs
+                            ipv6_addrs = intf.ipv6_addrs
+                            ext_ipv4_addrs = intf.ext_ipv4_addrs
+                            ext_ipv6_addrs = intf.ext_ipv6_addrs
+                            ipv4_subnets = intf.ipv4_subnets
+                            ipv6_subnets = intf.ipv6_subnets
+                            interfaces[ifname] = {
+                                'mac_addr': mac_addr,
+                                'ipv4_addrs': ipv4_addrs,
+                                'ipv6_addrs': ipv6_addrs,
+                                'ext_ipv4_addrs': ext_ipv4_addrs,
+                                'ext_ipv6_addrs': ext_ipv6_addrs,
+                                'ipv4_subnets': ipv4_subnets,
+                                'ipv6_subnets': ipv6_subnets,
+                                'type': type
+                            }
+                    devices.append({
+                        'device_id': device_id,
+                        'loopbackip': loopbackip,
+                        'loopbacknet': loopbacknet,
+                        'managementip': managementip,
+                        'interfaces': interfaces,
+                        'mgmtip': mgmtip,
+                        'name': device_name,
+                        'description': device_description,
+                        'status': device_status
+                    })
+            else:
+                devices = None
+            # Return
+            response = response.status.code, response.status.reason, devices
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+            response = response[0], response[1], None
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason, devices
+        # Return the response
+        return response
 
     def get_topology_information(self):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Get VPNs
-        response = srv6_vpn_stub.GetTopologyInformation(request)
-        if response.status == status_codes_pb2.STATUS_OK:
-            # Parse response and retrieve topology information
-            topology = dict()
-            topology['routers'] = list()
-            topology['links'] = list()
-            for router in response.topology_information.routers:
-                topology['routers'].append(text_type(router))
-            for link in response.topology_information.links:
-                topology['links'].append(
-                    (text_type(link.l_router), text_type(link.r_router)))
-        else:
-            topology = None
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Get topology
+            response = srv6_vpn_stub.GetTopologyInformation(request)
+            if response.status.code == NbStatusCode.STATUS_OK:
+                # Parse response and retrieve topology information
+                topology = dict()
+                topology['routers'] = list()
+                topology['links'] = list()
+                for router in response.topology_information.routers:
+                    topology['routers'].append(text_type(router))
+                for link in response.topology_information.links:
+                    topology['links'].append(
+                        (text_type(link.l_router), text_type(link.r_router)))
+            else:
+                topology = None
+            # Create the response
+            response = response.status.code, response.status.reason, topology
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+            response = response[0], response[1], None
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason, topology
+        # Return the response
+        return response
 
     def get_overlays(self, overlayids=[], tenantid=''):
         # Create the request
         request = srv6_vpn_pb2.InventoryServiceRequest()
         request.overlayids.extend(overlayids)
         request.tenantid = tenantid
-        # Get the reference of the stub
-        srv6_vpn_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Get VPNs
-        response = srv6_vpn_stub.GetOverlays(request)
-        if response.status == status_codes_pb2.STATUS_OK:
-            # Parse response and retrieve tunnel information
-            tunnels = list()
-            for tunnel in response.overlays:
-                id = tunnel.overlayid
-                name = tunnel.overlay_name
-                type = tunnel.overlay_type
-                tunnel_mode = tunnel.tunnel_mode
-                tenantid = tunnel.tenantid
-                tunnel_interfaces = list()
-                for interface in tunnel.slices:
-                    deviceid = None
-                    interface_name = None
-                    if interface.deviceid is not None:
-                        deviceid = text_type(interface.deviceid)
-                    if interface.interface_name is not None:
-                        interface_name = text_type(interface.interface_name)
-                    tunnel_interfaces.append({
-                        'deviceid': deviceid,
-                        'interface_name': interface_name
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Get overlays
+            response = srv6_vpn_stub.GetOverlays(request)
+            if response.status.code == NbStatusCode.STATUS_OK:
+                # Parse response and retrieve tunnel information
+                tunnels = list()
+                for tunnel in response.overlays:
+                    id = tunnel.overlayid
+                    name = tunnel.overlay_name
+                    type = tunnel.overlay_type
+                    tunnel_mode = tunnel.tunnel_mode
+                    tenantid = tunnel.tenantid
+                    tunnel_interfaces = list()
+                    for interface in tunnel.slices:
+                        deviceid = None
+                        interface_name = None
+                        if interface.deviceid is not None:
+                            deviceid = text_type(interface.deviceid)
+                        if interface.interface_name is not None:
+                            interface_name = text_type(interface.interface_name)
+                        tunnel_interfaces.append({
+                            'deviceid': deviceid,
+                            'interface_name': interface_name
+                        })
+                    tunnels.append({
+                        'id': id,
+                        'name': name,
+                        'type': type,
+                        'interfaces': tunnel_interfaces,
+                        'mode': tunnel_mode,
+                        'tenantid': tenantid
                     })
-                tunnels.append({
-                    'id': id,
-                    'name': name,
-                    'type': type,
-                    'interfaces': tunnel_interfaces,
-                    'mode': tunnel_mode,
-                    'tenantid': tenantid
-                })
-        else:
-            tunnels = None
+            else:
+                tunnels = None
+            # Create the response
+            response = response.status.code, response.status.reason, tunnels
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+            response = response[0], response[1], None
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason, tunnels
+        # Return the response
+        return response
 
-    def create_overlay(self, name, type, interfaces, tenantid, tunnel_mode='SRv6'):
+    def create_overlay(self, name, type, interfaces, tenantid, tunnel_mode):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -340,22 +394,24 @@ class NorthboundInterface:
         intent.overlay_type = type
         intent.tenantid = tenantid
         intent.tunnel_mode = tunnel_mode
-        if intent.tunnel is None:
-            print('Invalid tunnel mode')
-            return status_codes_pb2.STATUS_INTERNAL_ERROR
         for intf in interfaces:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Create the VPN
-        response = srv6_stub.CreateOverlay(request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Create the VPN
+            response = srv6_stub.CreateOverlay(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def remove_overlay(self, overlayid, tenantid):
         # Create the request
@@ -363,15 +419,20 @@ class NorthboundInterface:
         intent = request.intents.add()
         intent.overlayid = text_type(overlayid)
         intent.tenantid = tenantid
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Remove the VPN
-        response = srv6_stub.RemoveOverlay(request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Remove the VPN
+            response = srv6_stub.RemoveOverlay(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def assign_slice_to_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
@@ -383,15 +444,20 @@ class NorthboundInterface:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Add the interface to the VPN
-        response = srv6_stub.AssignSliceToOverlay(request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Add the interface to the VPN
+            response = srv6_stub.AssignSliceToOverlay(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def remove_slice_from_overlay(self, overlayid, tenantid, interfaces):
         # Create the request
@@ -403,22 +469,27 @@ class NorthboundInterface:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
             interface.interface_name = text_type(intf[1])
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(
-            self.server_ip, self.server_port, self.SECURE)
-        # Remove the interface from the VPN
-        response = srv6_stub.RemoveSliceFromOverlay(request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Remove the interface from the VPN
+            response = srv6_stub.RemoveSliceFromOverlay(request)
+            # Return
+            response = response.status.code, response.status.reason
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Return
-        return response.status.code, response.status.reason
+        # Return the response
+        return response
 
     def print_overlays(self, overlayids=[], tenantid=""):
         # Get VPNs
         status_code, reason, overlays = self.get_overlays(
             overlayids=[], tenantid="")
         # Print all VPNs
-        if status_code == srv6_vpn_pb2.STATUS_OK:
+        if status_code == NbStatusCode.STATUS_OK:
             print
             i = 1
             if len(overlays) == 0:
@@ -434,7 +505,7 @@ class NorthboundInterface:
                 print()
                 i += 1
         else:
-            print('Error while retrieving the overlays list')
+            logging.error('Error while retrieving the overlays list')
 
 
 if __name__ == '__main__':

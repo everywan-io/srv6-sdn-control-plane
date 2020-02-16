@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 
-
 # General imports
 from __future__ import absolute_import, division, print_function
 from srv6_generators import SIDAllocator
@@ -30,14 +29,12 @@ from ipaddress import IPv6Network
 from ipaddress import IPv4Address
 
 
-
-
 ZEBRA_PORT = 2601
 SSH_PORT = 22
 
 MIN_TABLE_ID = 2
-# Linux kernel supports up to 255 different tables
-MAX_TABLE_ID = 255
+# Linux kernel supports up to 255 different tables (or 2**32?)
+MAX_TABLE_ID = 2**32 - 1  # = 255
 # Table where we store our seg6local routes
 LOCAL_SID_TABLE = 1
 # Reserved table IDs
@@ -69,6 +66,12 @@ class DeviceStatus:
     RUNNING = 'Running'
 
 
+supported_interface_types = [
+    InterfaceType.WAN,
+    InterfaceType.LAN
+]
+
+
 class SDWANControllerState:
 
     def __init__(self, topology, devices, vpn_dict, vpn_file):
@@ -82,7 +85,7 @@ class SDWANControllerState:
         self.vpns = vpn_dict
         # Map token to tenant ID
         self.tenant_info = dict()
-        
+
         # Keep track of how many VPNs are installed in each router
         #self.num_vpn_installed_on_router = dict()
         # Number of tunneled interfaces
@@ -204,7 +207,7 @@ class SDWANControllerState:
                     return True
         # The interface is not assigned to the VPN
         return False
-    
+
     '''
     # Get router's loopback IP address
     def get_loopbackip_ipv4(self, routerid):
@@ -386,6 +389,7 @@ class SDWANControllerState:
     def get_vpns(self):
         return self.vpns.values()
     '''
+
     def get_routers_in_vpn(self, vpn_name):
         routers = set()
         for routerid in self.vpns[vpn_name].interfaces:
@@ -418,7 +422,7 @@ class SDWANControllerState:
     def add_interface_to_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
         self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].add(
             interface)
-            
+
     def remove_interface_from_overlay(self, tunnel_mode, deviceid, overlay_name, interface):
         self.interfaces_in_overlay[tunnel_mode][deviceid][overlay_name].remove(
             interface)
@@ -441,7 +445,7 @@ class SDWANControllerState:
         # Success, return True
         return True
     '''
-    
+
     '''
     # Add an interface to a VPN
     def add_interface_to_vpn(self, vpn_name, interface):
@@ -559,6 +563,8 @@ class SDWANControllerState:
     '''
 
 # Generate a random token used to authenticate the tenant
+
+
 def generate_token():
     # Example of token: J4Ie2QKOHz3IVSQs8yA1ahAKfl1ySrtVxGVuT6NkuElGfC8cm55rFhyzkc79pjSLOsr7zKOu7rkMgNMyEHlze4iXVNoX1AtifuieNrrW4rrCroScpGdQqHMETJU46okS
     seq = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
@@ -602,7 +608,7 @@ class TenantIDAllocator:
         self.last_allocated_tenantid = -1
         # Mapping token to tenant ID
         self.token_to_tenantid = dict()
-       
+
     # Allocate and return a new tenant ID for a token
     def get_new_tenantid(self, token):
         if self.token_to_tenantid.get(token):
@@ -753,12 +759,36 @@ def validate_table_id(tableid):
     return tableid >= MIN_TABLE_ID and tableid <= MAX_TABLE_ID
 
 
+def validate_deviceid(deviceid):
+    return deviceid is not None and deviceid != ''
+
+
+def validate_overlayid(overlayid):
+    return overlayid is not None and overlayid != ''
+
+
 def validate_tenantid(tenantid):
-    return int(tenantid) >= 0 and int(tenantid) <= 2**32-1
+    return tenantid is not None and tenantid != ''
 
 
-def validate_vpn_type(vpn_type):
-    return True     # TODO
+def validate_overlay_type(overlay_type):
+    return overlay_type in supported_overlay_types
+
+
+def validate_overlay_name(overlay_name):
+    return overlay_name is not None and overlay_name != ''
+
+
+def validate_tunnel_mode(tunnel_mode, supported_tunnel_modes):
+    return tunnel_mode in supported_tunnel_modes
+
+
+def validate_port(port):
+    return port >= 0 and port <= 65535
+
+ 
+def validate_interface_type(interface_type):
+    return interface_type in supported_interface_types
 
 
 # Utiliy function to check if the IP
@@ -807,6 +837,9 @@ def getAddressFamily(ip):
 class OverlayType:
     IPv6Overlay = 'IPv6Overlay'
     IPv4Overlay = 'IPv4Overlay'
+
+
+supported_overlay_types = [OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
 
 '''
 class VPN:

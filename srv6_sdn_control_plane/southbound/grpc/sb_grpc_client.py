@@ -10,6 +10,7 @@ import grpc
 import json
 import sys
 import os
+import logging
 from socket import AF_INET, AF_INET6
 from threading import Thread
 
@@ -26,27 +27,26 @@ from threading import Thread
 #PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-#if PROTO_FOLDER == '':
+# if PROTO_FOLDER == '':
 #    print('Error: Set PROTO_FOLDER variable '
 #          'in sb_grpc_client.py')
 #    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
+# if not os.path.exists(PROTO_FOLDER):
 #    print('Error: PROTO_FOLDER variable in sb_grpc_client.py '
 #          'points to a non existing folder\n')
 #    sys.exit(-2)
 
 # Add path of proto files
-#sys.path.append(PROTO_FOLDER)
+# sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_utils
 from srv6_sdn_proto import srv6_manager_pb2
 from srv6_sdn_proto import srv6_manager_pb2_grpc
-from srv6_sdn_proto import status_codes_pb2
+from srv6_sdn_proto.status_codes_pb2 import SbStatusCode
 from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import empty_req_pb2
-from srv6_sdn_proto import empty_req_pb2_grpc
 from srv6_sdn_proto import gre_interface_pb2
 
 
@@ -65,6 +65,23 @@ EVENT_TYPES = {
 DEFAULT_SECURE = False
 # SSL cerificate for server validation
 DEFAULT_CERTIFICATE = 'cert_client.pem'
+
+
+# Parser for gRPC errors
+def parse_grpc_error(e):
+    status_code = e.code()
+    details = e.details()
+    logging.error('gRPC client reported an error: %s, %s'
+                  % (status_code, details))
+    if grpc.StatusCode.UNAVAILABLE == status_code:
+        code = SbStatusCode.STATUS_GRPC_SERVICE_UNAVAILABLE
+    elif grpc.StatusCode.UNAUTHENTICATED == status_code:
+        code = SbStatusCode.STATUS_GRPC_UNAUTHORIZED
+    else:
+        code = SbStatusCode.STATUS_INTERNAL_ERROR
+    # Return an error message
+    return code
+
 
 class SRv6Manager:
 
@@ -107,8 +124,6 @@ class SRv6Manager:
     def create_srv6_explicit_path(self, server_ip, server_port, destination,
                                   device, segments, encapmode="encap",
                                   table=-1):
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -126,19 +141,25 @@ class SRv6Manager:
             # Create a new segment
             srv6_segment = path.sr_path.add()
             srv6_segment.segment = text_type(segment)
-        # Add the SRv6 path
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Add the SRv6 path
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def create_srv6_explicit_path_from_json(self, server_ip, server_port, data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
-            # Each time we create a new session
-            srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
             # Create message request
             srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
             # Set the type of the carried entity
@@ -157,12 +178,21 @@ class SRv6Manager:
                 for segment in jpath['segments']:
                     srv6_segment = path.sr_path.add()
                     srv6_segment.segment = text_type(segment)
-                # Add the SRv6 path
-                response = srv6_stub.Create(srv6_request)
-                # Let's close the session
-                channel.close()
+                try:
+                    # Get the reference of the stub
+                    srv6_stub, channel = self.get_grpc_session(
+                        server_ip, server_port, self.SECURE)
+                    # Add the SRv6 path
+                    response = srv6_stub.Create(srv6_request)
+                    # Create the response
+                    response = response.status
+                except grpc.RpcError as e:
+                    # Let's close the session
+                    channel.close()
+                    # Return the error message
+                    return parse_grpc_error(e)
         # Create the response
-        return response.status
+        return response
 
     def get_srv6_explicit_path(self, server_ip, server_port, destination,
                                device, segments=[],
@@ -177,8 +207,6 @@ class SRv6Manager:
     def remove_srv6_explicit_path(self, server_ip, server_port, destination,
                                   device='', segments=[],
                                   encapmode="encap", table=-1):
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -196,19 +224,25 @@ class SRv6Manager:
             # Create a new segment
             srv6_segment = path.sr_path.add()
             srv6_segment.segment = text_type(segment)
-        # Remove the SRv6 path
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove the SRv6 path
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_srv6_explicit_path_from_json(self, server_ip, server_port, data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
-            # Each time we create a new session
-            srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
             # Create message request
             srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
             # Set the type of the carried entity
@@ -226,12 +260,21 @@ class SRv6Manager:
                     # Create a new segment
                     srv6_segment = path.sr_path.add()
                     srv6_segment.segment = text_type(segment)
-                # Remove the SRv6 path
-                response = srv6_stub.Remove(srv6_request)
-                # Let's close the session
-                channel.close()
+                try:
+                    # Get the reference of the stub
+                    srv6_stub, channel = self.get_grpc_session(
+                        server_ip, server_port, self.SECURE)
+                    # Remove the SRv6 path
+                    response = srv6_stub.Remove(srv6_request)
+                    # Create the response
+                    response = response.status
+                except grpc.RpcError as e:
+                    # Let's close the session
+                    channel.close()
+                    # Return the error message
+                    return parse_grpc_error(e)
         # Create the response
-        return response.status
+        return response
 
     # CRUD SRv6 Local Processing Function
 
@@ -240,8 +283,6 @@ class SRv6Manager:
                                               localsid_table, nexthop="",
                                               table=-1, interface="",
                                               segments=[]):
-        # Get the reference of the stub
-        srv6_stub, channel = self.get_grpc_session(server_ip, server_port, self.SECURE)
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -263,12 +304,20 @@ class SRv6Manager:
             # Create a new segment
             srv6_segment = function.segs.add()
             srv6_segment.segment = text_type(segment)
-        # Create the SRv6 local processing function
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create the SRv6 local processing function
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def get_srv6_local_processing_function(self, server_ip, server_port, segment,
                                            action, device, localsid_table,
@@ -287,9 +336,6 @@ class SRv6Manager:
                                               nexthop="", table=-1,
                                               interface="", segments=[],
                                               device=""):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -311,19 +357,24 @@ class SRv6Manager:
             # Create a new segment
             srv6_segment = function.segs.add()
             srv6_segment.segment = text_type(segment)
-        # Remove
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove SRv6 local processing function
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD VRF Device
 
     def create_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -337,20 +388,25 @@ class SRv6Manager:
         device.table = int(table)
         # Create a new interfaces
         device.interfaces.extend(interfaces)
-        # Create VRF device
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create VRF device
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def get_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
         print('Not yet implemented')
 
     def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[], op=None):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -371,17 +427,22 @@ class SRv6Manager:
             return None
         if op is not None:
             device.op = op
-        # Create VRF device
-        response = srv6_stub.Update(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Update VRF device
+            response = srv6_stub.Update(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_vrf_device(self, server_ip, server_port, name):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -392,12 +453,20 @@ class SRv6Manager:
         device = vrf_device_request.devices.add()
         # Set name
         device.name = text_type(name)
-        # Remove
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove the VRF device
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD Interface
 
@@ -419,38 +488,23 @@ class SRv6Manager:
         for interface in interfaces:
             intf = interface_request.interfaces.add()
             intf.name = text_type(interface)
-        # Get interfaces
-        response = srv6_stub.Get(srv6_request)
-        if response.status == status_codes_pb2.STATUS_SUCCESS:
-            # Parse response and retrieve interfaces information
-            interfaces = dict()
-            for interface in response.interfaces:
-                ifindex = int(interface.index)
-                ifname = text_type(interface.name)
-                macaddr = text_type(interface.macaddr)
-                ips = interface.ipaddrs
-                ipaddrs = list()
-                for ip in ips:
-                    ipaddrs.append(text_type(ip))
-                state = interface.state
-                interfaces[ifindex] = {
-                    "ifindex": int(ifindex),
-                    "ifname": text_type(ifname),
-                    "macaddr": text_type(macaddr),
-                    "ipaddr": ipaddrs,
-                    "state": text_type(state)
-                }
-        else:
-            interfaces = None
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create interface
+            response = srv6_stub.Update(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        return interfaces
+        # Return the response
+        return response
 
     def update_interface(self, server_ip, server_port, ifindex=None, name=None, macaddr=None,
                          ipaddrs=None, state=None, ospf_adv=None):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -472,12 +526,20 @@ class SRv6Manager:
             intf.state = text_type(state)
         if ospf_adv is not None:
             intf.ospf_adv = bool(ospf_adv)
-        # Create interface
-        response = srv6_stub.Update(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create interface
+            response = srv6_stub.Update(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_interface(self, server_ip, server_port, ifindex, name, macaddr,
                          ipaddrs, state, ospf_adv):
@@ -489,9 +551,6 @@ class SRv6Manager:
                       priority=-1, action="", scope=-1,
                       destination="", dst_len=-1, source="",
                       src_len=-1, in_interface="", out_interface=""):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -512,12 +571,20 @@ class SRv6Manager:
         rule.src_len = int(src_len)
         rule.in_interface = text_type(in_interface)
         rule.out_interface = text_type(out_interface)
-        # Create IP rule
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create IP rule
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def get_iprule(self, server_ip, server_port, family, table=-1,
                    priority=-1, action="", scope=-1,
@@ -535,9 +602,6 @@ class SRv6Manager:
                       priority=-1, action="", scope=-1,
                       destination="", dst_len=-1, source="",
                       src_len=-1, in_interface="", out_interface=""):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -558,12 +622,20 @@ class SRv6Manager:
         rule.src_len = int(src_len)
         rule.in_interface = text_type(in_interface)
         rule.out_interface = text_type(out_interface)
-        # Remove IP rule
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove IP rule
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD IP Route
 
@@ -571,9 +643,6 @@ class SRv6Manager:
                        table=-1, proto=-1, destination="", dst_len=-1,
                        scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -596,12 +665,20 @@ class SRv6Manager:
         route.in_interface = text_type(in_interface)
         route.out_interface = text_type(out_interface)
         route.gateway = text_type(gateway)
-        # Create IP Route
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create IP Route
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def get_iproute(self, server_ip, server_port, family=-1, tos="", type="",
                     table=-1, proto=-1, destination="", dst_len=-1,
@@ -619,9 +696,6 @@ class SRv6Manager:
                        table=-1, proto=-1, destination="", dst_len=-1,
                        scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -644,20 +718,25 @@ class SRv6Manager:
         route.in_interface = text_type(in_interface)
         route.out_interface = text_type(out_interface)
         route.gateway = text_type(gateway)
-        # Remove IP Route
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove IP Route
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD IP Address
 
     def create_ipaddr(self, server_ip, server_port,
                       ip_addr, device, net='', family=AF_INET):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -671,12 +750,20 @@ class SRv6Manager:
         addr.device = text_type(device)
         addr.family = int(family)
         addr.net = text_type(net)
-        # Create IP Address
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create IP Address
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def get_ipaddr(self, server_ip, server_port,
                    ip_addr, device, net, family=AF_INET):
@@ -687,9 +774,6 @@ class SRv6Manager:
         print('Not yet implemented')
 
     def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='', family=-1):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -703,18 +787,23 @@ class SRv6Manager:
         addr.device = text_type(device)
         addr.family = int(family)
         addr.net = text_type(net)
-        # Remove IP Address
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove IP Address
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_many_ipaddr(self, server_ip, server_port, addrs,
                            device, nets=[], family=-1):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -735,20 +824,25 @@ class SRv6Manager:
             addr.device = text_type(device)
             addr.family = int(family)
             addr.net = text_type(net)
-        # Remove IP Address
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove IP Address
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD GRE interface
 
     def create_gre_interface(self, server_ip, server_port, name, local='',
                              remote='', key=-1, type=gre_interface_pb2.GRE):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -763,17 +857,22 @@ class SRv6Manager:
         gre_interface.remote = text_type(remote)
         gre_interface.key = key
         gre_interface.type = type
-        # Create IP Address
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create GRE interface
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_gre_interface(self, server_ip, server_port, name, local=None, remote=None):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -786,20 +885,25 @@ class SRv6Manager:
         gre_interface.name = text_type(name)
         gre_interface.local = text_type(local)
         gre_interface.remote = text_type(remote)
-        # Create IP Address
-        response = srv6_stub.Remove(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove GRE interface
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     # CRUD IP neigh
 
     def create_ipneigh(self, server_ip, server_port,
                        dst, lladdr, device, family=AF_INET):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -813,18 +917,23 @@ class SRv6Manager:
         neigh.addr = text_type(dst)
         neigh.lladdr = text_type(lladdr)
         neigh.device = text_type(device)
-        # Create IP Address
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create IP neigh
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def remove_ipneigh(self, server_ip, server_port,
                        dst, lladdr, device, family=AF_INET):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -834,109 +943,133 @@ class SRv6Manager:
         # Create a new route
         neigh = neigh_request.neighs.add()
         # Set address, device, family
-        neigh.family=int(family)
+        neigh.family = int(family)
         neigh.dst = text_type(dst)
         neigh.lladdr = text_type(lladdr)
         neigh.device = text_type(device)
-        # Create IP Address
-        response = srv6_stub.Create(srv6_request)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove IP neigh
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
         srv6_request.entity_type = srv6_manager_pb2.IPVxlan
         # Create a new vxlan request
         ipvxlan_request = srv6_request.ipvxlan_request
-        # Create a new vxlan 
+        # Create a new vxlan
         vxlan = ipvxlan_request.vxlan.add()
         # Set params
         vxlan.ifname = ifname
         vxlan.vxlan_link = vxlan_link
         vxlan.vxlan_id = vxlan_id
         vxlan.vxlan_port = vxlan_port
-        # add vxlan 
-        response = srv6_stub.Create(srv6_request)
-        print(response)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Add vxlan
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def delVxLAN(self, server_ip, server_port, ifname):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
         srv6_request.entity_type = srv6_manager_pb2.IPVxlan
-        # Create a new vxlan request
+        # Create a new VXLAN request
         ipvxlan_request = srv6_request.ipvxlan_request
-        
+        # Create VXLAN message
         vxlan = ipvxlan_request.vxlan.add()
         # Set params
         vxlan.ifname = ifname
-        # remove vxlan 
-        response = srv6_stub.Remove(srv6_request)
-        print(response)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove VXLAN
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def addfdbentries(self, server_ip, server_port, ifindex, dst):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
         srv6_request.entity_type = srv6_manager_pb2.IPfdbentries
         # Create a new fdb entries request
         fdbentries_request = srv6_request.fdbentries_request
-        # Create a new fdb entries  
+        # Create a new fdb entries
         fdbentries = fdbentries_request.fdbentries.add()
         # Set params
         fdbentries.ifindex = ifindex
         fdbentries.dst = dst
-        # Create fdb entries 
-        response = srv6_stub.Create(srv6_request)
-        print(response)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Create FDB entries
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
     def delfdbentries(self, server_ip, server_port, ifindex, dst):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
         srv6_request.entity_type = srv6_manager_pb2.IPfdbentries
-        # Create a new fdb entries request
+        # Create a new FDB entries request
         fdbentries_request = srv6_request.fdbentries_request
-      
+        # Create new FDB entry
         fdbentries = fdbentries_request.fdbentries.add()
         # Set params
         fdbentries.ifindex = ifindex
         fdbentries.dst = dst
-        # remove fdb entries 
-        response = srv6_stub.Remove(srv6_request)
-        print(response)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Remove fdb entries
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
         # Let's close the session
         channel.close()
-        # Create the response
-        return response.status
+        # Return the response
+        return response
 
 
 class NetworkEventsListener:
@@ -975,62 +1108,73 @@ class NetworkEventsListener:
                 .NetworkEventsListenerStub(channel), channel)
 
     def listen(self, server_ip, server_port):
-        # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
         # Create message request
         request = empty_req_pb2.EmptyRequest()
-        # Listen for Netlink notifications
-        for event in srv6_stub.Listen(request):
-            # Parse the event
-            _event = dict()
-            if event.type == EVENT_TYPES['CONNECTION_ESTABLISHED']:
-                # Connection established event
-                _event['type'] = text_type('CONNECTION_ESTABLISHED')
-            elif event.type == EVENT_TYPES['INTF_UP']:
-                # Interface UP event
-                _event['interface'] = dict()
-                _event['type'] = 'INTF_UP'
-                # Extract interface index
-                _event['interface']['index'] = int(event.interface.index)
-                # Extract interface name
-                _event['interface']['name'] = text_type(event.interface.name)
-                # Extract interface MAC address
-                _event['interface']['macaddr'] = text_type(event.interface.macaddr)
-            elif event.type == EVENT_TYPES['INTF_DOWN']:
-                # Interface DOWN event
-                _event['interface'] = dict()
-                _event['type'] = 'INTF_DOWN'
-                # Extract interface index
-                _event['interface']['index'] = int(event.interface.index)
-                # Extract interface name
-                _event['interface']['name'] = text_type(event.interface.name)
-                # Extract interface MAC address
-                _event['interface']['macaddr'] = text_type(event.interface.macaddr)
-            elif event.type == EVENT_TYPES['INTF_DEL']:
-                # Interface DEL event
-                _event['interface'] = dict()
-                _event['type'] = 'INTF_DEL'
-                # Extract interface index
-                _event['interface']['index'] = int(event.interface.index)
-            elif event.type == EVENT_TYPES['NEW_ADDR']:
-                # NEW address event
-                _event['interface'] = dict()
-                _event['type'] = 'NEW_ADDR'
-                # Extract interface index
-                _event['interface']['index'] = int(event.interface.index)
-                # Extract address
-                _event['interface']['ipaddr'] = text_type(event.interface.ipaddr)
-            elif event.type == EVENT_TYPES['DEL_ADDR']:
-                # DEL address event
-                _event['interface'] = dict()
-                _event['type'] = 'DEL_ADDR'
-                # Extract interface index
-                _event['interface']['index'] = int(event.interface.index)
-                # Extract address
-                _event['interface']['ipaddr'] = text_type(event.interface.ipaddr)
-            # Pass the event to the caller
-            yield _event
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port, self.SECURE)
+            # Listen for Netlink notifications
+            for event in srv6_stub.Listen(request):
+                # Parse the event
+                _event = dict()
+                if event.type == EVENT_TYPES['CONNECTION_ESTABLISHED']:
+                    # Connection established event
+                    _event['type'] = text_type('CONNECTION_ESTABLISHED')
+                elif event.type == EVENT_TYPES['INTF_UP']:
+                    # Interface UP event
+                    _event['interface'] = dict()
+                    _event['type'] = 'INTF_UP'
+                    # Extract interface index
+                    _event['interface']['index'] = int(event.interface.index)
+                    # Extract interface name
+                    _event['interface']['name'] = text_type(event.interface.name)
+                    # Extract interface MAC address
+                    _event['interface']['macaddr'] = text_type(
+                        event.interface.macaddr)
+                elif event.type == EVENT_TYPES['INTF_DOWN']:
+                    # Interface DOWN event
+                    _event['interface'] = dict()
+                    _event['type'] = 'INTF_DOWN'
+                    # Extract interface index
+                    _event['interface']['index'] = int(event.interface.index)
+                    # Extract interface name
+                    _event['interface']['name'] = text_type(event.interface.name)
+                    # Extract interface MAC address
+                    _event['interface']['macaddr'] = text_type(
+                        event.interface.macaddr)
+                elif event.type == EVENT_TYPES['INTF_DEL']:
+                    # Interface DEL event
+                    _event['interface'] = dict()
+                    _event['type'] = 'INTF_DEL'
+                    # Extract interface index
+                    _event['interface']['index'] = int(event.interface.index)
+                elif event.type == EVENT_TYPES['NEW_ADDR']:
+                    # NEW address event
+                    _event['interface'] = dict()
+                    _event['type'] = 'NEW_ADDR'
+                    # Extract interface index
+                    _event['interface']['index'] = int(event.interface.index)
+                    # Extract address
+                    _event['interface']['ipaddr'] = text_type(
+                        event.interface.ipaddr)
+                elif event.type == EVENT_TYPES['DEL_ADDR']:
+                    # DEL address event
+                    _event['interface'] = dict()
+                    _event['type'] = 'DEL_ADDR'
+                    # Extract interface index
+                    _event['interface']['index'] = int(event.interface.index)
+                    # Extract address
+                    _event['interface']['ipaddr'] = text_type(
+                        event.interface.ipaddr)
+                # Pass the event to the caller
+                yield _event
+        except grpc.RpcError as e:
+            # Let's close the session
+            channel.close()
+            # Return the response
+            response = parse_grpc_error(e)
+            return None
         # Let's close the session
         channel.close()
 
@@ -1042,16 +1186,16 @@ if __name__ == "__main__":
     # Create a thread for each router and subscribe netlink notifications
     #routers = ["2000::1", "2000::2", "2000::3"]
     #thread_pool = []
-    #for router in routers:
+    # for router in routers:
     #    thread = Thread(target=srv6_manager
     #                    .createNetlinkNotificationsSubscription,
     #                    args=(router, ))
     #    thread.start()
     #    thread_pool.append(thread)
-    #for thread in thread_pool:
+    # for thread in thread_pool:
     #    thread.join()
 
-    # --- tunnel creation test 
+    # --- tunnel creation test
     '''srv6_manager.createVxLAN('10.0.14.45', 12345, 'vxlan100','ewED1-eth0', 100, 4789)
     srv6_manager.addfdbentries('10.0.14.45', 12345, 'vxlan100', '10.0.16.49')
     srv6_manager.createVxLAN('10.0.16.49', 12345, 'vxlan100','ewED2-eth0', 100, 4789)
@@ -1064,7 +1208,7 @@ if __name__ == "__main__":
 
     srv6_manager.create_iproute('10.0.14.45', 12345,  destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
     srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''
-    #---- tunnel cancellation test
+    # ---- tunnel cancellation test
     '''srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
     srv6_manager.remove_vrf_device('10.0.14.45', 12345,  'vrf1')
     srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
