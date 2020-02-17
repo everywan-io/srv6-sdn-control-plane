@@ -63,13 +63,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         db = client.EveryWan
         # Get collection
         self.slices_in_overlay = db.slices_in_overlay
-
+        # Oldo controller state 
         self.SDWANControllerState = controller_state
+
     def add_slice_to_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
+        # Get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
-        # retrive table ID 
+        # get table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-        # retrive VRF name   
+        # get VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # add slice to the VRF
         response = self.srv6_manager.update_vrf_device(
@@ -85,66 +87,49 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return STATUS_INTERNAL_ERROR
               
     def create_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
+        # get devices ID
         id_remote_site = remote_site[0]
         id_local_site = local_site[0]
-        # retrive management IP address for local and remote site 
+        # get management IP address for local and remote site 
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(local_site[0])
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(remote_site[0])
-        # retrive subnet for local and remote site 
+        # get subnet for local and remote site 
         lan_sub_remote_site = self.controller_state.get_ip_subnets(id_remote_site, remote_site[1])[0]
         lan_sub_local_site = self.controller_state.get_ip_subnets(id_local_site, local_site[1])[0]
-       
-        # retriv table ID 
+        # get table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-
-        # retrive VTEP IP remote site and local site 
+        # get VTEP IP remote site and local site 
         vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(id_remote_site, tenantid)
         vtep_ip_local_site = self.controller_state_vxlan.get_vtep_ip(id_local_site, tenantid)
-        # retrive VNI 
+        # get VNI 
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
-        # retrive VTEP name 
+        # get VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
-        # retrive WAN IP address for loal site and remote site 
+        # get WAN interface name for local site and remote site 
         wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)[0]
-        #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
         wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
-        #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
-        
+        # get external IP address for loal site and remote site 
         wan_ip_local_site = self.controller_state.get_ext_ipv4_addresses(id_local_site, wan_intf_local_site)[0].split("/")[0]
         wan_ip_remote_site = self.controller_state.get_ext_ipv4_addresses(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
-
         # DB key creation, one per tunnel direction  
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
-
+        # get tunnel dictionary from DB 
         slices_in_overlay_local = self.slices_in_overlay.find_one({'tunnel_key': key_local_to_remote})
         slices_in_overlay_remote = self.slices_in_overlay.find_one({'tunnel_key': key_remote_to_local})
-        
         # Create VNI key 
         vni_key = 'vni_%s' % (vni)
-        
-        #vnis['vni_11'] =  {'vni':12, 'interfaces': ['eth1','eth2']}
-        #tunnels = {'tunnel_key': '12345', 'vni': vni }
-
-        #if (id_local_site, id_remote_site) not in self.controller_state_vxlan.slice_in_overlay:
-        #    self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)] = dict()
-        
-        # If it's the first overlay for the device 
+        # If it's the first overlay for the devices, create dictionaries   
         if slices_in_overlay_local == None:
             slices_in_overlay_local = {
                 'tunnel_key': key_local_to_remote, 
                 'vnis': {}
             }     
-
-        #if (id_remote_site, id_local_site) not in self.controller_state_vxlan.slice_in_overlay:
-        #    self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)] = dict()
         if slices_in_overlay_remote == None:
             slices_in_overlay_remote = {
                 'tunnel_key': key_remote_to_local, 
                 'vnis': {}
             }
-        
-        #if vni not in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
         # If the local device is not yet part of this overlay 
         if vni_key not in slices_in_overlay_local['vnis']:
             # add FDB entry in local site 
@@ -158,11 +143,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
                                % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site))
                 return STATUS_INTERNAL_ERROR
-
-            #self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni] = set()
+            # update local dictionary with the new VNI
             slices_in_overlay_local['vnis'][vni_key] = {'vni':vni, 'interfaces': [] }
-
-        #if vni not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:    
         # If the remote device is not yet part of this overlay 
         if vni_key not in slices_in_overlay_remote['vnis']:
             # add FDB entry in remote site 
@@ -176,14 +158,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
                                % (wan_ip_local_site, vtep_name, mgmt_ip_remote_site))
                 return STATUS_INTERNAL_ERROR
-
-            #self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni] = set()
+            # update local dictionary with the new VNI
             slices_in_overlay_remote['vnis'][vni_key] = {'vni':vni, 'interfaces': [] } 
-
-        #if lan_sub_remote_site not in self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni]:
-        # Local device does not have the route for the remote subnet 
+        # set route in local site for the remote subnet, if not present  
         if lan_sub_remote_site not in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
-            # set route in local site  
             response = self.srv6_manager.create_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
                     destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split("/")[0],
@@ -194,14 +172,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot set route for %s in %s '
                                % (wan_ip_remote_site, mgmt_ip_local_site))
                 return STATUS_INTERNAL_ERROR
-            
-            #self.controller_state_vxlan.slice_in_overlay[(id_local_site,id_remote_site)][vni].add(lan_sub_remote_site)
+            # update local dictionary with the new subnet in overlay 
             slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').append(lan_sub_remote_site)
-
-        #if lan_sub_local_site not in self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni]:
-        # The remote devie does not have the route for the local subnet 
-        if lan_sub_local_site not in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'):
-            # set route in remote site 
+        # set route in remote site for the local subnet, if not present 
+        if lan_sub_local_site not in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'): 
             response = self.srv6_manager.create_iproute(
                     mgmt_ip_remote_site, self.grpc_client_port,
                     destination=lan_sub_local_site, gateway=vtep_ip_local_site.split("/")[0],
@@ -212,30 +186,29 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot set route for %s in %s '
                                % (lan_sub_local_site, mgmt_ip_remote_site))
                 return STATUS_INTERNAL_ERROR          
-            #self.controller_state_vxlan.slice_in_overlay[(id_remote_site,id_local_site)][vni].add(lan_sub_local_site)
+            # update local dictionary with the new subnet in overlay 
             slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').append(lan_sub_local_site)
-      
         # Insert the device overlay state in MongodB, if there isn already a state update it 
         self.slices_in_overlay.update({'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
         self.slices_in_overlay.update({'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)
 
     def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
+        # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # Get vxlan port set by user 
         vxlan_port_site = self.SDWANControllerState.tenant_info[tenantid].get('port')
-        # retrive table ID 
+        # get table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-        # retrive VRF name   
+        # get VRF name   
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface 
         wan_intf_site = self.controller_state.get_wan_interfaces(routerid)[0]
-        # retrive VNI for the overlay 
+        # get VNI for the overlay 
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid) 
-        # retrive VTEP name 
+        # get VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
-        # retrive VTEP IP address
+        # get VTEP IP address
         vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
-        
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
                 mgmt_ip_site, self.grpc_client_port,
@@ -249,7 +222,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot create VTEP %s in %s'
                             % (vtep_name, mgmt_ip_site))
             return STATUS_INTERNAL_ERROR
-
         # set VTEP IP address
         response = self.srv6_manager.create_ipaddr(mgmt_ip_site, self.grpc_client_port, ip_addr=vtep_ip_site, device=vtep_name, net='')
         if response != STATUS_SUCCESS:
@@ -269,27 +241,27 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return STATUS_INTERNAL_ERROR
         
     def init_overlay_data(self, overlay_name, tenantid, overlay_info):
-        #get VNI for the overlay 
+        # get VNI  
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid) 
         if vni == -1: 
             vni = self.controller_state_vxlan.get_new_vni(overlay_name, tenantid)
-
-        #get table ID
+        # get table ID
         tableid = self.controller_state_vxlan.get_new_tableid(overlay_name, tenantid)
         if tableid == -1:
             tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
 
     def init_tunnel_mode(self, routerid, tenantid, overlay_info):
-        # get VTEP IP address for site1
+        # get VTEP IP address 
         vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
         if vtep_ip_site == -1: 
             vtep_ip_site = self.controller_state_vxlan.get_new_vtep_ip(routerid, tenantid)
 
     def remove_slice_from_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
+        # get device management IP address 
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
-        # retrive table ID
+        # get table ID
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-        # retrive VRF name  
+        # get VRF name  
         vrf_name = 'vrf-%s' % (tableid) 
         # Remove slice from VRF
         response = self.srv6_manager.update_vrf_device(
@@ -305,45 +277,37 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return STATUS_INTERNAL_ERROR
         
     def remove_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
+        # get devices ID 
         id_local_site = local_site[0]
         id_remote_site = remote_site[0]
-        # retrive VNI
+        # get VNI
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
-        # retrive management IP local and remote site 
+        # get management IP local and remote site 
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(id_remote_site)
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(id_local_site)
-        # retrive wan IP local and remote site 
+        # get WAN interface name for local site and remote site
         wan_intf_local_site = self.controller_state.get_wan_interfaces(id_local_site)[0]
-        #wan_ip_local_site = self.controller_state.get_interface_ipv4(id_local_site, wan_intf_local_site)[0].split('/')[0]
         wan_intf_remote_site = self.controller_state.get_wan_interfaces(id_remote_site)[0]
-        #wan_ip_remote_site = self.controller_state.get_interface_ipv4(id_remote_site, wan_intf_remote_site)[0].split('/')[0]
-
+        # get external IP address for local site and remote site
         wan_ip_local_site = self.controller_state.get_ext_ipv4_addresses(id_local_site, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = self.controller_state.get_ext_ipv4_addresses(id_remote_site, wan_intf_remote_site)[0].split("/")[0]
-              
-        # retrive subnet local and remote site  
+        wan_ip_remote_site = self.controller_state.get_ext_ipv4_addresses(id_remote_site, wan_intf_remote_site)[0].split("/")[0]  
+        # get local and remote subnet   
         lan_sub_local_site = self.controller_state.get_ip_subnets(id_local_site, local_site[1])[0]
         lan_sub_remote_site = self.controller_state.get_ip_subnets(id_remote_site, remote_site[1])[0]
-        # retrive table ID
+        # get table ID
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-        # retrive VTEP name 
+        # get VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
-
         # DB key creation, one per tunnel direction  
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
-
+        # get tunnel dictionary from DB 
         slices_in_overlay_local = self.slices_in_overlay.find_one({'tunnel_key': key_local_to_remote})
         slices_in_overlay_remote = self.slices_in_overlay.find_one({'tunnel_key': key_remote_to_local})
-        
         # Create VNI key 
         vni_key = 'vni_%s' % (vni)
-        print('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°° vni_key: %s slice_local: %s slice_remote: %s ' % (vni_key, local_site[1], remote_site[1]))
-       
-        #if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
-        # Check if the remote device partecipate in the overlay 
+        # Check if the remote device has not yet been removed from the overlay
         if vni_key in slices_in_overlay_remote['vnis']:
-            #if lan_sub_local_site in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]:
             # Check if there is the route for the local subnet in the remote device 
             if lan_sub_local_site in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'):
                 # remove route in remote site         
@@ -357,12 +321,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     logger.warning('Cannot remove route to %s in %s'
                                 % (lan_sub_local_site, mgmt_ip_remote_site))
                     return STATUS_INTERNAL_ERROR
-                #self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni].remove(lan_sub_local_site) 
+                # update local dictionary
                 slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').remove(lan_sub_local_site)
-        # The subnet removed is the last subnet in the considered overlay in the local site 
-        #if len(self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]) == 0:
+        # Check if the subnet removed is the last subnet in the considered overlay in the local site 
         if vni_key not in slices_in_overlay_remote['vnis'] or len(slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces')) == 0:
-            #if lan_sub_remote_site in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]:
             # Check if there is the route for remote subnet in the local device 
             if lan_sub_remote_site in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
                 # remove route in local site 
@@ -376,13 +338,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     logger.warning('Cannot remove route to %s in %s'
                                 % (lan_sub_remote_site, mgmt_ip_local_site))
                     return STATUS_INTERNAL_ERROR
-
-                #self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni].remove(lan_sub_remote_site)
+                # update local dictionary 
                 slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').remove(lan_sub_remote_site)
-            #if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
-            # Check if the remote device partecipate in the overlay 
+            # Check if the remote device has not yet been removed from the overlay
             if vni_key in slices_in_overlay_remote['vnis']:
-            # remove FDB entry in remote site 
+                # remove FDB entry in remote site 
                 response = self.srv6_manager.delfdbentries(
                         mgmt_ip_remote_site, self.grpc_client_port,
                         ifindex=vtep_name,
@@ -393,12 +353,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     logger.warning('Cannot remove FDB entry %s in %s'
                                 % (wan_ip_local_site, mgmt_ip_remote_site))
                     return STATUS_INTERNAL_ERROR
-
-                #del self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)][vni]
+                # update local dictionary 
                 del slices_in_overlay_remote['vnis'][vni_key]
-
+            # Check if there are no more remote subnets reachable from the local site 
             if len(slices_in_overlay_local['vnis'].get(vni_key).get('interfaces')) == 0:
-                #if vni in self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)]:
                 # Check if the local device partecipate in the overlay 
                 if vni_key in slices_in_overlay_local['vnis']:
                     # remove FDB entry in local site 
@@ -412,10 +370,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                         logger.warning('Cannot remove FDB entry %s in %s'
                                     % (wan_ip_remote_site, mgmt_ip_local_site))
                         return STATUS_INTERNAL_ERROR
-
-                    #del self.controller_state_vxlan.slice_in_overlay[(id_local_site, id_remote_site)][vni]
+                    # update local dictionary 
                     del slices_in_overlay_local['vnis'][vni_key]
-
         # If there are no more overlay on the devices destroy data structure, else update it  
         if slices_in_overlay_local['vnis'] == {} and slices_in_overlay_remote['vnis'] == {}:
             self.slices_in_overlay.remove({'tunnel_key': key_local_to_remote})
@@ -425,18 +381,19 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             self.slices_in_overlay.update({'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)    
 
     def destroy_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
+        # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
-        # retrive VNI 
+        # get VNI 
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
-        # retrive table ID 
+        # get table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
-        # retrive VRF name   
+        # get VRF name   
         vrf_name = 'vrf-%s' % (tableid)
-        # retrive VTEP name 
+        # get VTEP name 
         vtep_name = 'vxlan-%s' %  (vni)
-        # Retrive VTEP IP address
+        # get VTEP IP address
         vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(routerid, tenantid)
-        #remove VTEP IP address 
+        # get VTEP IP address 
         response = self.srv6_manager.remove_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
             ip_addr = vtep_ip_site,
@@ -457,7 +414,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove VTEP %s in %s'
                         % (vtep_name, mgmt_ip_site))
             return STATUS_INTERNAL_ERROR
-
         # remove VRF device 
         response = self.srv6_manager.remove_vrf_device(
                 mgmt_ip_site, self.grpc_client_port, 
