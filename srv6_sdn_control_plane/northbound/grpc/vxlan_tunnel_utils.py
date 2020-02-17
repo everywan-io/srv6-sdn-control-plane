@@ -188,48 +188,42 @@ class VTEPIPAllocator:
         client = srv6_sdn_controller_state.get_mongodb_session()
         # Get the database
         db = client.EveryWan
-        # Mapping ID dev to VTEP ip 
-        self.dev_to_ip = db.dev_to_ip
-        # Set of reusable IP address 
-        self.reusable_ip = db.reusable_ip
-        # Last used VNI 
-        self.last_allocated_ip = db.last_allocated_ip
-        
+        # Devices collection
+        self.devices = db.devices
+        # Tenants collection 
+        self.tenants = db.tenants 
         #ip address availale 
         self.ip = IPv4Network('198.18.0.0/16')
         self.network_mask = 16
 
     def get_new_vtep_ip(self, dev_id, tenantid):
-        # check if the device does not already have a VTEP IP adress
-        if not self.dev_to_ip.count_documents({'tenantid': tenantid}, limit=1):
-            # Inizialize data sructures 
-            self.reusable_ip.insert_one({'tenantid': tenantid, 'vtep_ips': []})
-            self.last_allocated_ip.insert_one({'tenantid': tenantid, 'ip_index': -1})
-
-        if self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
-            # The device of the considered tenant already has an associated VTEP IP
+        # The device of the considered tenant already has an associated VTEP IP
+        if self.devices.find_one( {'deviceid': dev_id, 'tenantid': tenantid }, { 'vtep_ip_addr': 1 } )['vtep_ip_addr'] != None:
             return -1
+        # The device does not have a VTEP IP address
         else:
             # Check if a reusable VTEP IP is available
-            if not self.reusable_ip.find_one({ 'tenantid': tenantid, 'vtep_ips': { '$size': 0 }}):
-                #Pop VTEP IP adress from the array 
-                vtep_ips = self.reusable_ip.find_one({'tenantid': tenantid})['vtep_ips']
+            if not self.tenants.find_one({ 'tenantid': tenantid, 'reu_vtep_ip_addr': { '$size': 0 }}):
+                # Pop VTEP IP adress from the array 
+                vtep_ips = self.tenants.find_one({'tenantid': tenantid})['reu_vtep_ip_addr']
                 vtep_ip = vtep_ips.pop()
-                self.reusable_ip.find_one_and_update({'tenantid': tenantid},{'$set': {'vtep_ips': vtep_ips}})
+                self.tenants.find_one_and_update({'tenantid': tenantid},{'$set': {'reu_vtep_ip_addr': vtep_ips}})
             else:
                 # If not, get a VTEP IP address
-                self.last_allocated_ip.update({ 'tenantid': tenantid }, {'$inc':{'ip_index': +1}})
-                while self.last_allocated_ip.find_one({ 'tenantid': tenantid }, {'ip_index': 1})['ip_index'] in RESERVED_VTEP_IP:
+                self.tenants.update({ 
+                    'tenantid': tenantid }, {'$inc':{'vtep_ip_index': +1}})
+                while self.tenants.find_one({ 'tenantid': tenantid }, {'vtep_ip_index': 1})['vtep_ip_index'] in RESERVED_VTEP_IP:
                     # Skip reserved VTEP IP address
-                    self.last_allocated_ip.update({ 'tenantid': tenantid }, {'$inc':{'ip_index': +1}})
-
-                ip_index = self.last_allocated_ip.find_one( { 'tenantid': tenantid }, { 'ip_index': 1 } )['ip_index']
+                    self.tenants.find_one_and_update({ 'tenantid': tenantid }, {'$inc':{'vtep_ip_index': +1}})
+                # Get IP address 
+                ip_index = self.tenants.find_one({
+                    'tenantid': tenantid }, { 'vtep_ip_index': 1 } )['vtep_ip_index']
                 vtep_ip = "%s/%s" % (self.ip[ip_index], self.network_mask) 
-            # Assign the VTEP IP to the device 
-            self.dev_to_ip.insert_one({
+            # Assign the VTEP IP address to the device 
+            self.devices.find_one_and_update({
                 'tenantid': tenantid,
-                'dev_id': dev_id,
-                'vtep_ip': vtep_ip   
+                'deviceid': dev_id},{
+                '$set': {'vtep_ip_addr': vtep_ip}
                 } 
             )
             # And return
@@ -238,26 +232,42 @@ class VTEPIPAllocator:
     # Return VTEP IP adress assigned to the device 
     # If device has no VTEP IP address return -1
     def get_vtep_ip(self, dev_id, tenantid):
-        if not self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
+        #if not self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
+        vtep_ip = self.devices.find_one({
+            'deviceid': dev_id, 'tenantid': tenantid }, { 'vtep_ip_addr': 1 } )['vtep_ip_addr'] 
+        if vtep_ip == None:
             return -1
         else:
-            return self.dev_to_ip.find_one({ 'tenantid': tenantid, 'dev_id': dev_id }, {'vtep_ip': 1})['vtep_ip']
+            return vtep_ip
 
     # Release VTEP IP and mark it as reusable
     def release_vtep_ip(self, dev_id, tenantid):
-        # Check if the device has an associated VTEP IP 
-        if self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
-            # The device has an associated VTEP IP
-            vtep_ip = self.dev_to_ip.find_one({ 'tenantid': tenantid, 'dev_id': dev_id }, {'vtep_ip': 1})['vtep_ip']
-            # Unassign the VTEP IP
-            self.dev_to_ip.delete_one({ 'tenantid': tenantid, 'dev_id': dev_id })
-            # Mark the VTEP IP as reusable
-            self.reusable_ip.update_one({'tenantid': tenantid}, {'$push':{'vtep_ips': vtep_ip}})
-            # If the tenant has no VTEPs
-            # destroy data structues
-            if self.dev_to_ip.count_documents({'tenantid': tenantid}) == 0:
-                self.last_allocated_ip.delete_one({'tenantid': tenantid})
-                self.reusable_ip.delete_one({'tenantid': tenantid})
+        # Get device VTEP IP address
+        vtep_ip = self.devices.find_one({
+            'deviceid': dev_id, 'tenantid': tenantid }, { 'vtep_ip_addr': 1 } )['vtep_ip_addr'] 
+        # If IP address is valid 
+        if vtep_ip != None:
+            # Unassign the VTEP IP addr
+            self.devices.find_one_and_update({
+                'tenantid': tenantid,
+                'deviceid': dev_id},{
+                '$set': {'vtep_ip_addr': None}   
+                } 
+            )
+            # Mark the VTEP IP addr as reusable
+            self.tenants.update_one({
+                'tenantid': tenantid}, {'$push':{'reu_vtep_ip_addr': vtep_ip}})
+            # Get the number of aloocated VTEP IP address 
+            ip_index = self.tenants.find_one( { 
+                'tenantid': tenantid }, { 'vtep_ip_index': 1 } )['vtep_ip_index']
+            # If all addresses have been released
+            if self.tenants.find_one({ 'tenantid': tenantid, 'reu_vtep_ip_addr': { '$size': ip_index }}):
+                # reset the counter 
+                self.tenants.find_one_and_update( { 
+                    'tenantid': tenantid }, { '$set': {'vtep_ip_index': -1 }})
+                # empty reusable address list 
+                self.tenants.find_one_and_update({
+                    'tenantid': tenantid},{'$set': {'reu_vtep_ip_addr': []}})
             # Return the VTEP IP 
             return vtep_ip
         else:
