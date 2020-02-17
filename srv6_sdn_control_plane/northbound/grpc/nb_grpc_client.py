@@ -63,10 +63,10 @@ def parse_grpc_error(e):
     status_code = e.code()
     details = e.details()
     logging.error('gRPC client reported an error: %s, %s'
-                    % (status_code, details))
+                  % (status_code, details))
     if grpc.StatusCode.UNAVAILABLE == status_code:
         code = NbStatusCode.STATUS_SERVICE_UNAVAILABLE
-        reason = details
+        reason = 'Unable to contact controller (unreachable gRPC server)'
     elif grpc.StatusCode.UNAUTHENTICATED == status_code:
         code = NbStatusCode.STATUS_UNAUTHORIZED
         reason = details
@@ -88,7 +88,7 @@ class NorthboundInterface:
         if secure is True:
             if certificate is None:
                 logging.error('Error: "certificate" variable cannot be None '
-                      'in secure mode')
+                              'in secure mode')
                 sys.exit(-2)
             self.certificate = certificate
 
@@ -186,7 +186,8 @@ class NorthboundInterface:
                     elif family == AF_INET6:
                         interface.ipv6_subnets.append(subnet)
                     else:
-                        logging.error('Provided an invalid subnet: %s' % subnet)
+                        logging.error(
+                            'Provided an invalid subnet: %s' % subnet)
                         return None
             if 'type' in _interface:
                 interface.type = _interface['type']
@@ -361,7 +362,8 @@ class NorthboundInterface:
                         if interface.deviceid is not None:
                             deviceid = text_type(interface.deviceid)
                         if interface.interface_name is not None:
-                            interface_name = text_type(interface.interface_name)
+                            interface_name = text_type(
+                                interface.interface_name)
                         tunnel_interfaces.append({
                             'deviceid': deviceid,
                             'interface_name': interface_name
@@ -527,7 +529,7 @@ class NorthboundInterface:
         channel.close()
         # Return the response
         return response
-        
+
 
 if __name__ == '__main__':
     '''# Test IPv6-VPN APIs
