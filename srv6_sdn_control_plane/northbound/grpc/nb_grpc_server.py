@@ -598,24 +598,44 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             err = 'Device not found: %s' % deviceid
             logging.warning(err)
             return STATUS_BAD_REQUEST, err
+        # The device must belong to the tenant
         device = devices[0]
         if device['tenantid'] != tenantid:
             err = ('Cannot unregister the device. '
-                    'The device %s does not belong to the tenant %s'
-                    % (deviceid, tenantid))
+                   'The device %s does not belong to the tenant %s'
+                   % (deviceid, tenantid))
             logging.warning(err)
             return STATUS_BAD_REQUEST, err
+        # Check tunnels stats
+        # If the tenant has some overlays configured
+        # it is not possible to unregister it
+        num = srv6_sdn_controller_state.get_num_tunnels(deviceid)
+        if num is None:
+            err = 'Error getting tunnels stats'
+            logging.error(err)
+            return STATUS_INTERNAL_SERVER_ERROR, err
+        elif num != 0:
+            err = ('Cannot unregister the device. '
+                   'The device has %s tunnels registered'
+                   % (deviceid, tenantid))
+            logging.warning(err)
+            return STATUS_BAD_REQUEST, err
+        # All checks passed
+        # Let's unregister the device
+        #
+        # Send shutdown command to device
         res = self.srv6_manager.shutdown_device(
             device['mgmtip'], self.grpc_client_port)
         if res != SbStatusCode.STATUS_SUCCESS:
             err = ('Cannot unregister the device. '
-                    'Error while shutting down the device')
+                   'Error while shutting down the device')
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
+        # Remove device from controller state
         success = srv6_sdn_controller_state.unregister_device(deviceid)
         if success is None or success is False:
             err = ('Cannot unregister the device. '
-                    'Error while updating the controller state')
+                   'Error while updating the controller state')
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
         # Success
