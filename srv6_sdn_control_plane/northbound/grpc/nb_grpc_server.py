@@ -1390,7 +1390,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     incoming_devices.add(deviceid)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                deviceds=incoming_devices, return_dict=True)
+                deviceids=incoming_devices, return_dict=True)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)

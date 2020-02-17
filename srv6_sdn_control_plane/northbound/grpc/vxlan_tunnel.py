@@ -209,7 +209,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # Get vxlan port set by user 
-        vxlan_port_site = self.SDWANControllerState.tenant_info[tenantid].get('port')
+        vxlan_port_site = self.controller_state.get_tenant_vxlan_port(tenantid)
         # get table ID 
         tableid = self.controller_state_vxlan.get_tableid(overlay_name, tenantid)
         # get VRF name   
