@@ -315,11 +315,32 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = device.tenantid
             # Extract the interfaces
             interfaces = device.interfaces
+            # Extract the device name
+            device_name = device.name
+            # Extract the device description
+            device_description = device.description
+            # Name is mandatory
+            if device_name is None or device_name == '':
+                err = ('Invalid configuration for device %s\n'
+                       'Invalid value for the mandatory parameter '
+                       '"name": %s' % (deviceid, device_name))
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Description parameter is mandatory
+            if device_description is None or device_description == '':
+                err = ('Invalid configuration for device %s\n'
+                       'Invalid value for the mandatory parameter '
+                       '"description": %s' % (deviceid, device_description))
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Validate the device IDs
             logging.debug('Validating the device ID: %s' % deviceid)
             if not srv6_controller_utils.validate_deviceid(deviceid):
                 # If device ID is invalid, return an error message
-                err = 'Invalid device ID: %s' % deviceid
+                err = ('Invalid configuration for device %s\n'
+                       'Invalid device ID: %s' % (deviceid, deviceid))
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
@@ -327,37 +348,50 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.debug('Validating the tenant ID: %s' % tenantid)
             if not srv6_controller_utils.validate_tenantid(tenantid):
                 # If tenant ID is invalid, return an error message
-                err = 'Invalid tenant ID: %s' % tenantid
+                err = ('Invalid configuration for device %s\n'
+                       'Invalid tenant ID: %s' % (deviceid, tenantid))
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the devices exist
             if deviceid not in devices:
-                err = 'Device not found: %s' % deviceid
+                err = ('Invalid configuration for device %s\n'
+                       'Device not found: %s' % (deviceid, tenantid))
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the device belongs to the tenant
             if tenantid != devices[deviceid]['tenantid']:
-                err = ('The device %s does not belong to the tenant %s'
-                       % (deviceid, tenantid))
+                err = ('Invalid configuration for device %s\n'
+                       'The device %s does not belong to the tenant %s'
+                       % (deviceid, deviceid, tenantid))
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Validate the interfaces
+            wan_interfaces_counter = 0
+            lan_interfaces_counter = 0
             for interface in interfaces:
+                # Update counters
+                if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                    wan_interfaces_counter += 1
+                elif interface.type == srv6_controller_utils.InterfaceType.LAN:
+                    lan_interfaces_counter += 1
                 # Check if the interface exists
                 if interface.name not in devices[deviceid]['interfaces']:
-                    err = ('Interface %s not found on device %s'
-                           % (interface.name, deviceid))
+                    err = ('Invalid configuration for device %s\n'
+                           'Interface %s not found on device %s'
+                           % (deviceid, interface.name, deviceid))
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Check interface type
                 if not (srv6_controller_utils
                         .validate_interface_type(interface.type)):
-                    err = ('Invalid type %s for the interface %s (%s)'
-                           % (interface.type, interface.name, deviceid))
+                    err = ('Invalid configuration for device %s\n'
+                           'Invalid type %s for the interface %s (%s)'
+                           % (deviceid, interface.type, interface.name,
+                              deviceid))
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
@@ -365,44 +399,72 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 if interface.type == srv6_controller_utils.InterfaceType.WAN:
                     if len(interface.ipv4_addrs) > 0 or \
                             len(interface.ipv6_addrs) > 0:
-                        err = ('WAN interfaces do not support IP addrs '
-                               'assignment: %s' % (interface.name))
+                        err = ('Invalid configuration for device %s\n'
+                               'WAN interfaces do not support IP addrs '
+                               'assignment: %s' % (deviceid, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                     if len(interface.ipv4_subnets) > 0 or \
                             len(interface.ipv6_subnets) > 0:
-                        err = ('WAN interfaces do not support subnets '
-                               'assignment: %s' % (interface.name))
+                        err = ('Invalid configuration for device %s\n'
+                               'WAN interfaces do not support subnets '
+                               'assignment: %s' % (deviceid, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Validate IP addresses
                 for ipaddr in interface.ipv4_addrs:
                     if not srv6_controller_utils.validate_ipv4_address(ipaddr):
-                        err = 'Invalid IPv4 address %s' % ipaddr
+                        err = ('Invalid configuration for device %s\n'
+                               'Invalid IPv4 address %s for the interface %s'
+                               % (deviceid, ipaddr, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 for ipaddr in interface.ipv6_addrs:
                     if not srv6_controller_utils.validate_ipv6_address(ipaddr):
-                        err = 'Invalid IPv6 address %s' % ipaddr
+                        err = ('Invalid configuration for device %s\n'
+                               'Invalid IPv6 address %s for the interface %s'
+                               % (deviceid, ipaddr, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Validate subnets
                 for subnet in interface.ipv4_subnets:
                     if not srv6_controller_utils.validate_ipv4_address(subnet):
-                        err = 'Invalid subnet %s' % subnet
+                        err = ('Invalid configuration for device %s\n'
+                               'Invalid IPv4 subnet %s for the interface %s'
+                               % (deviceid, subnet, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 for subnet in interface.ipv6_subnets:
                     if not srv6_controller_utils.validate_ipv6_address(subnet):
-                        err = 'Invalid subnet %s' % subnet
+                        err = ('Invalid configuration for device %s\n'
+                               'Invalid IPv6 subnet %s for the interface %s'
+                               % (deviceid, subnet, interface.name))
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # At least one WAN interface is required
+            if wan_interfaces_counter == 0:
+                err = ('Invalid configuration for device %s\n'
+                       'The configuration must contain at least one WAN '
+                       'interface (0 found)'
+                       % (deviceid, subnet, interface.name))
+                logging.warning(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # At least one LAN interface is required
+            if lan_interfaces_counter == 0:
+                err = ('Invalid configuration for device %s\n'
+                       'The configuration must contain at least one LAN '
+                       'interface (0 found)'
+                       % (deviceid, subnet, interface.name))
+                logging.warning(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
         # All checks passed
         #
         # Extract the configurations from the request message
