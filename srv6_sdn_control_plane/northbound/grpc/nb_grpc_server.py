@@ -644,7 +644,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         logging.info('CreateOverlay request received:\n%s', request)
         # Extract the intents from the request message
         for intent in request.intents:
-            logging.info('Processing the intent:\n%s' % intent)
             # Parameters extraction
             #
             # Extract the overlay tenant ID from the intent
@@ -789,6 +788,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.info('All checks passed')
             # All checks passed
             #
+            # Save the overlay to the state
+            success = srv6_sdn_controller_state.create_overlay(
+                overlay_name, overlay_type, slices, tenantid, tunnel_name)
+            if success is None or success is False:
+                err = 'Cannot save the overlay to the controller state'
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            logging.info('Processing the intent:\n%s' % intent)
             # Get tunnel mode
             tunnel_mode = self.tunnel_modes[tunnel_name]
             # Let's create the overlay
@@ -871,15 +880,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 status=Status(code=status_code, reason=err))
                 # Add the slice to the configured set
                 configured_slices.add(site1)
-            # Save the overlay to the state
-            success = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name)
-            if success is None or success is False:
-                err = 'Cannot save the overlay to the controller state'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
         logging.info('All the intents have been processed successfully\n\n')
         # Create the response
         return OverlayServiceReply(
