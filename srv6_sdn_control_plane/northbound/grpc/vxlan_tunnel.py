@@ -86,18 +86,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
-        id_remote_site = remote_site[0]
-        id_local_site = local_site[0]
+        id_remote_site = remote_site['deviceid']
+        id_local_site = local_site['deviceid']
         # retrive management IP address for local and remote site
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(
-            local_site[0])
+            local_site['deviceid'])
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(
-            remote_site[0])
+            remote_site['deviceid'])
         # retrive subnet for local and remote site
         lan_sub_remote_site = self.controller_state.get_ip_subnets(
-            id_remote_site, remote_site[1])[0]
+            id_remote_site, remote_site['interface_name'])[0]
         lan_sub_local_site = self.controller_state.get_ip_subnets(
-            id_local_site, local_site[1])[0]
+            id_local_site, local_site['interface_name'])[0]
 
         # retriv table ID
         tableid = self.controller_state_vxlan.get_tableid(
@@ -346,8 +346,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
-        id_local_site = local_site[0]
-        id_remote_site = remote_site[0]
+        id_local_site = local_site['deviceid']
+        id_remote_site = remote_site['deviceid']
         # retrive VNI
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # retrive management IP local and remote site
@@ -370,9 +370,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
         # retrive subnet local and remote site
         lan_sub_local_site = self.controller_state.get_ip_subnets(
-            id_local_site, local_site[1])[0]
+            id_local_site, local_site['interface_name'])[0]
         lan_sub_remote_site = self.controller_state.get_ip_subnets(
-            id_remote_site, remote_site[1])[0]
+            id_remote_site, remote_site['interface_name'])[0]
         # retrive table ID
         tableid = self.controller_state_vxlan.get_tableid(
             overlay_name, tenantid)
@@ -391,7 +391,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Create VNI key
         vni_key = 'vni_%s' % (vni)
         print('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°° vni_key: %s slice_local: %s slice_remote: %s ' % (
-            vni_key, local_site[1], remote_site[1]))
+            vni_key, local_site['interface_name'], remote_site['interface_name']))
 
         # if vni in self.controller_state_vxlan.slice_in_overlay[(id_remote_site, id_local_site)]:
         # Check if the remote device partecipate in the overlay
