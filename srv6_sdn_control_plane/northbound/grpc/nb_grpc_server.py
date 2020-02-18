@@ -899,6 +899,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the device is connected
+                if not devices[deviceid]['connected']:
+                    # If the device is not connected, return an error message
+                    err = 'The device %s is not connected' % deviceid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Let's check if the interface exists
                 if interface_name not in devices[deviceid]['interfaces']:
                     # If the interface does not exists, return an error
@@ -1351,6 +1358,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the device is connected
+                if not devices[deviceid]['connected']:
+                    # If the device is not connected, return an error message
+                    err = 'The device %s is not connected' % deviceid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Let's check if the interface exists
                 if interface_name not in devices[deviceid]['interfaces']:
                     # If the interface does not exists, return an error
@@ -1601,6 +1615,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 if not devices[deviceid]['enabled']:
                     # If the device is not enabled, return an error message
                     err = 'The device %s is not enabled' % deviceid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the device is connected
+                if not devices[deviceid]['connected']:
+                    # If the device is not connected, return an error message
+                    err = 'The device %s is not connected' % deviceid
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
