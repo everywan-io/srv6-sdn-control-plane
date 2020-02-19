@@ -262,7 +262,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # it is not possible to unregister it
             num = srv6_sdn_controller_state.get_num_tunnels(deviceid)
             if num is None:
-                err = 'Error getting tunnels stats'
+                err = ('Error getting tunnels stats. Device not found '
+                       'or error during the connection to the db')
                 logging.error(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
@@ -451,8 +452,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             if wan_interfaces_counter == 0:
                 err = ('Invalid configuration for device %s\n'
                        'The configuration must contain at least one WAN '
-                       'interface (0 found)'
-                       % (deviceid, subnet, interface.name))
+                       'interface (0 provided)' % deviceid)
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
@@ -460,8 +460,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             if lan_interfaces_counter == 0:
                 err = ('Invalid configuration for device %s\n'
                        'The configuration must contain at least one LAN '
-                       'interface (0 found)'
-                       % (deviceid, subnet, interface.name))
+                       'interface (0 provided)' % deviceid)
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
@@ -2004,8 +2003,10 @@ if __name__ == '__main__':
     # Setup properly the logger
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger().setLevel(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
+        logging.getLogger().setLevel(level=logging.INFO)
     # Debug settings
     SERVER_DEBUG = logging.getEffectiveLevel() == logging.DEBUG
     logging.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
