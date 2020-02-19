@@ -60,12 +60,10 @@ class InterfaceType:
     LAN = 'lan'
 
 
-'''
 class DeviceStatus:
     NOT_CONNECTED = 'Not Connected'
     CONNECTED = 'Connected'
     RUNNING = 'Running'
-'''
 
 
 supported_interface_types = [

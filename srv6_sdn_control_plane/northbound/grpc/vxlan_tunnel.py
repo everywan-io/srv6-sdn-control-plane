@@ -92,12 +92,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_local_site = local_site[0]
         # get management IP address for local and remote site
         mgmt_ip_local_site = self.controller_state.get_router_mgmtip(
-            local_site['deviceid'])
+            local_site[0])
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(
             remote_site[0])
         # get subnet for local and remote site
         lan_sub_remote_site = self.controller_state.get_ip_subnets(
-            id_remote_site, remote_site['interface_name'])[0]
+            id_remote_site, remote_site[1])[0]
         lan_sub_local_site = self.controller_state.get_ip_subnets(
             id_local_site, local_site[1])[0]
         # get table ID
@@ -386,7 +386,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             id_remote_site, wan_intf_remote_site)[0].split("/")[0]
         # get local and remote subnet
         lan_sub_local_site = self.controller_state.get_ip_subnets(
-            id_local_site, local_site['interface_name'])[0]
+            id_local_site, local_site[1])[0]
         lan_sub_remote_site = self.controller_state.get_ip_subnets(
             id_remote_site, remote_site[1])[0]
         # get table ID

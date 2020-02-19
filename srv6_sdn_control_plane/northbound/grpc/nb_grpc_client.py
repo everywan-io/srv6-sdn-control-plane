@@ -155,48 +155,6 @@ class NorthboundInterface:
         # Return the response
         return response
 
-    def enable_device(self, deviceid, tenantid):
-        # Create the request
-        request = srv6_vpn_pb2.EnableDeviceRequest()
-        device = request.devices.add()
-        device.id = deviceid
-        device.tenantid = tenantid
-        try:
-            # Get the reference of the stub
-            srv6_vpn_stub, channel = self.get_grpc_session(
-                self.server_ip, self.server_port, self.SECURE)
-            # Configure the devices
-            response = srv6_vpn_stub.EnableDevice(request)
-            # Return
-            response = response.status.code, response.status.reason
-        except grpc.RpcError as e:
-            response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
-        # Return the response
-        return response
-
-    def disable_device(self, deviceid, tenantid):
-        # Create the request
-        request = srv6_vpn_pb2.DisableDeviceRequest()
-        device = request.devices.add()
-        device.id = deviceid
-        device.tenantid = tenantid
-        try:
-            # Get the reference of the stub
-            srv6_vpn_stub, channel = self.get_grpc_session(
-                self.server_ip, self.server_port, self.SECURE)
-            # Configure the devices
-            response = srv6_vpn_stub.DisableDevice(request)
-            # Return
-            response = response.status.code, response.status.reason
-        except grpc.RpcError as e:
-            response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
-        # Return the response
-        return response
-
     def configure_device(self, device_id, tenantid, device_name='',
                          device_description='', interfaces=[]):
         # Create the request
@@ -264,16 +222,11 @@ class NorthboundInterface:
                 devices = list()
                 for device in response.device_information.devices:
                     device_id = None
-                    mgmtip = None
-                    device_name = None
-                    device_description = None
-                    device_connected = None
-                    device_configured = None
-                    device_enabled = None
-                    loopbackip = None       # TODO?
-                    loopbacknet = None      # TODO?
-                    managementip = None     # TODO?
+                    loopbackip = None
+                    loopbacknet = None
+                    managementip = None
                     interfaces = None
+                    mgmtip = None
                     if device.id is not None:
                         device_id = text_type(device.id)
                     if device.mgmtip is not None:
@@ -282,12 +235,8 @@ class NorthboundInterface:
                         device_name = text_type(device.name)
                     if device.description is not None:
                         device_description = text_type(device.description)
-                    if device.connected is not None:
-                        device_connected = text_type(device.connected)
-                    if device.configured is not None:
-                        device_configured = text_type(device.configured)
-                    if device.enabled is not None:
-                        device_enabled = text_type(device.enabled)
+                    if device.status is not None:
+                        device_status = text_type(device.status)
                     '''
                     if device.loopbackip is not None:
                         loopbackip = text_type(device.loopbackip)
@@ -309,7 +258,7 @@ class NorthboundInterface:
                                 'state': text_type(intf.state),
                             })
                     '''
-                    interfaces = list()
+                    interfaces = dict()
                     if device.interfaces is not None:
                         for intf in device.interfaces:
                             ifname = intf.name
@@ -322,8 +271,7 @@ class NorthboundInterface:
                             ext_ipv6_addrs = intf.ext_ipv6_addrs
                             ipv4_subnets = intf.ipv4_subnets
                             ipv6_subnets = intf.ipv6_subnets
-                            interfaces.append({
-                                'name': ifname,
+                            interfaces[ifname] = {
                                 'mac_addr': mac_addr,
                                 'ipv4_addrs': ipv4_addrs,
                                 'ipv6_addrs': ipv6_addrs,
@@ -332,7 +280,7 @@ class NorthboundInterface:
                                 'ipv4_subnets': ipv4_subnets,
                                 'ipv6_subnets': ipv6_subnets,
                                 'type': type
-                            })
+                            }
                     devices.append({
                         'device_id': device_id,
                         'loopbackip': loopbackip,
@@ -342,9 +290,7 @@ class NorthboundInterface:
                         'mgmtip': mgmtip,
                         'name': device_name,
                         'description': device_description,
-                        'connected': device_connected,
-                        'configured': device_configured,
-                        'enabled': device_enabled
+                        'status': device_status
                     })
             else:
                 devices = None
