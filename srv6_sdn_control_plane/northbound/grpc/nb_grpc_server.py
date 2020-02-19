@@ -815,6 +815,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         logging.info('CreateOverlay request received:\n%s', request)
         # Extract the intents from the request message
         for intent in request.intents:
+            logging.info('Processing the intent:\n%s' % intent)
             # Parameters extraction
             #
             # Extract the overlay tenant ID from the intent
@@ -1015,7 +1016,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return OverlayServiceReply(
                     status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
                                   reason=err))
-            logging.info('Processing the intent:\n%s' % intent)
             # Get tunnel mode
             tunnel_mode = self.tunnel_modes[tunnel_name]
             # Let's create the overlay
