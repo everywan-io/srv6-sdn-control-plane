@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 # General imports
+import configparser
 import time
 import os
 import sys
@@ -933,7 +934,7 @@ def parseArguments():
     parser = ArgumentParser(description='SRv6 Controller')
     # Node IP-PORTs mapping
     parser.add_argument('--ips', action='store', dest='nodes',
-                        required=True, help='IP of the routers from '
+                        help='IP of the routers from '
                         'which the topology has to be extracted, '
                         'comma-separated IP-PORT maps '
                         '(i.e. 2000::1-2606,2000::2-2606,2000::3-2606')
@@ -1007,13 +1008,103 @@ def parseArguments():
                         help='Server key file')
     # Path of output VPN file
     parser.add_argument('-f', '--vpn-file', dest='vpn_dump', action='store',
-                        default=None, help='File where the vpns created have to be saved')
+                        default=None,
+                        help='File where the vpns created have to be saved')
     # Port of the northbound gRPC client
-    parser.add_argument('--min-interval-dumps', dest='min_interval_between_topo_dumps',
-                        action='store', default=DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS,
+    parser.add_argument('--min-interval-dumps',
+                        dest='min_interval_between_topo_dumps',
+                        action='store',
+                        default=DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS,
                         help='Minimum interval between two consecutive dumps')
+    # Config file
+    parser.add_argument('-c', '--config-file', dest='config_file',
+                        action='store', default=None,
+                        help='Path of the configuration file')
     # Parse input parameters
     args = parser.parse_args()
+    # Done, return
+    return args
+
+
+# Parse a configuration file
+def parse_config_file(config_file):
+
+    class Args:
+        nodes = None
+        period = None
+        topo_file = None
+        topo_graph = None
+        debug = None
+        password = None
+        verbose = None
+        topo_extraction = None
+        sb_interface = None
+        nb_interface = None
+        grpc_server_ip = None
+        grpc_server_port = None
+        grpc_client_port = None
+        pymerang_server_ip = None
+        pymerang_server_port = None
+        secure = None
+        server_cert = None
+        server_key = None
+        vpn_dump = None
+        min_interval_between_topo_dumps = None
+
+    args = Args()
+    # Get parser
+    config = configparser.ConfigParser()
+    # Read configuration file
+    config.read(config_file)
+    # Node IP-PORTs mapping
+    args.nodes = config['DEFAULT'].get('nodes')
+    if args.nodes is None:
+        print('Missing required argument nodes')
+        exit()
+    # Topology Information Extraction period
+    args.period = config['DEFAULT'].get('period', DEFAULT_TOPO_EXTRACTION_PERIOD)
+    # Path of topology file
+    args.topo_file = config['DEFAULT'].get('topo_file', DEFAULT_TOPOLOGY_FILE)
+    # Path of topology graph
+    args.topo_graph = config['DEFAULT'].get('topo_graph', None)
+    # Enable debug logs
+    args.debug = config['DEFAULT'].get('debug', False)
+    # Password used to log in to ospf6d daemon
+    args.password = config['DEFAULT'].get('password', DEFAULT_OSPF6D_PASSWORD)
+    # Verbose mode
+    args.verbose = config['DEFAULT'].get('verbose', False)
+    # Enable topology information extraction
+    args.topo_extraction = config['DEFAULT'].get('topo_extraction', False)
+    # Southbound interface
+    args.sb_interface = config['DEFAULT'].get('sb_interface', DEFAULT_SB_INTERFACE)
+    # Northbound interface
+    args.nb_interface = config['DEFAULT'].get('nb_interface', DEFAULT_NB_INTERFACE)
+    # IP address of the northbound gRPC server
+    args.grpc_server_ip = config['DEFAULT'].get('grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+    # Port of the northbound gRPC server
+    args.grpc_server_port = config['DEFAULT'].get(
+        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
+    # Port of the northbound gRPC client
+    args.grpc_client_port = config['DEFAULT'].get(
+        'grpc_client_port', DEFAULT_GRPC_CLIENT_PORT)
+    # IP address of the pymerang server
+    args.pymerang_server_ip = config['DEFAULT'].get(
+        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+    # Port of the pymerang server
+    args.pymerang_server_port = config['DEFAULT'].get(
+        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
+    # Enable secure mode
+    args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
+    # Server certificate
+    args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
+    # Server key
+    args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
+    # Path of output VPN file
+    args.vpn_dump = config['DEFAULT'].get('vpn_dump', None)
+    # Port of the northbound gRPC client
+    args.min_interval_between_topo_dumps = \
+        config['DEFAULT'].get('min_interval_between_topo_dumps',
+                   DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS)
     # Done, return
     return args
 
@@ -1021,6 +1112,9 @@ def parseArguments():
 def _main():
     # Let's parse input parameters
     args = parseArguments()
+    # Check if a configuration file has been provided
+    if args.config_file is not None:
+        args = parse_config_file(args.config_file)
     # Get topology filename
     topo_file = args.topo_file
     # Get topology graph image filename
