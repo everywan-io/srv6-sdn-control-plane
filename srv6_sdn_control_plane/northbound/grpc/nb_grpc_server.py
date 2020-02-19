@@ -1007,6 +1007,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.info('All checks passed')
             # All checks passed
             #
+            # Save the overlay to the controller state
+            success = srv6_sdn_controller_state.create_overlay(
+                overlay_name, overlay_type, slices, tenantid, tunnel_name)
+            if success is None or success is False:
+                err = 'Cannot save the overlay to the controller state'
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
             # Get tunnel mode
             tunnel_mode = self.tunnel_modes[tunnel_name]
             # Let's create the overlay
@@ -1089,15 +1098,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 status=Status(code=status_code, reason=err))
                 # Add the slice to the configured set
                 configured_slices.append(site1)
-            # Save the overlay to the controller state
-            success = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name)
-            if success is None or success is False:
-                err = 'Cannot save the overlay to the controller state'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
         logging.info('All the intents have been processed successfully\n\n')
         # Create the response
         return OverlayServiceReply(
@@ -1639,7 +1639,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     incoming_devices.add(deviceid)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                deviceds=incoming_devices, return_dict=True)
+                deviceids=incoming_devices, return_dict=True)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
