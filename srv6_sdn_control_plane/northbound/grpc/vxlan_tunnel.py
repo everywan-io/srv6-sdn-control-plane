@@ -59,7 +59,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Get the database
         db = client.EveryWan
         # Get collection
-        self.slices_in_overlay = db.slices_in_overlay
+        self.overlays = db.overlays
         # Oldo controller state 
         self.SDWANControllerState = controller_state
 
@@ -119,26 +119,42 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # DB key creation, one per tunnel direction  
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
-        # get tunnel dictionary from DB 
-        slices_in_overlay_local = self.slices_in_overlay.find_one({
-            'tunnel_key': key_local_to_remote})
-        slices_in_overlay_remote = self.slices_in_overlay.find_one({
-            'tunnel_key': key_remote_to_local})
-        # Create VNI key 
-        vni_key = 'vni_%s' % (vni)
-        # If it's the first overlay for the devices, create dictionaries   
-        if slices_in_overlay_local == None:
-            slices_in_overlay_local = {
+        # get tunnel dictionaries from DB 
+        dictionary_local = self.overlays.find_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': key_local_to_remote }, {
+            'created_tunnel.$.tunnel_key': 1 }
+            )
+        dictionary_remote = self.overlays.find_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': key_remote_to_local }, {
+            'created_tunnel.$.tunnel_key': 1 }
+            )
+        # If it's the first overlay for the devices, create dictionaries
+        # else take tunnel info from DB dictionaries
+        #
+        #local site
+        if dictionary_local == None:
+            tunnel_local = {
                 'tunnel_key': key_local_to_remote,
-                'vnis': {}
-            }     
-        if slices_in_overlay_remote == None:
-            slices_in_overlay_remote = {
-                'tunnel_key': key_remote_to_local,
-                'vnis': {}
+                'reach_subnets': [],
+                'fdb_entry_config': False
             }
-        # If the local device is not yet part of this overlay 
-        if vni_key not in slices_in_overlay_local['vnis']:
+        else:
+            tunnel_local = dictionary_local['created_tunnel'][0]     
+        # remote site 
+        if dictionary_remote == None:
+            tunnel_remote = {
+                'tunnel_key': key_remote_to_local,
+                'reach_subnets': [],
+                'fdb_entry_config': False
+            }
+        else:
+            tunnel_remote = dictionary_remote['created_tunnel'][0]
+        # Check if there is the fdb entry in local site for remote site 
+        if tunnel_local.get('fdb_entry_config') == False:
             # add FDB entry in local site
             response = self.srv6_manager.addfdbentries(
                 mgmt_ip_local_site, self.grpc_client_port,
@@ -150,10 +166,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
                                % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # update local dictionary with the new VNI
-            slices_in_overlay_local['vnis'][vni_key] = {'vni':vni, 'interfaces': [] }
-        # If the remote device is not yet part of this overlay 
-        if vni_key not in slices_in_overlay_remote['vnis']:
+            # update local dictionary
+            tunnel_local['fdb_entry_config'] = True 
+        # Check if there is the fdb entry in remote site for local site
+        if tunnel_remote.get('fdb_entry_config') == False:
             # add FDB entry in remote site
             response = self.srv6_manager.addfdbentries(
                 mgmt_ip_remote_site, self.grpc_client_port,
@@ -165,10 +181,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
                                % (wan_ip_local_site, vtep_name, mgmt_ip_remote_site))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # update local dictionary with the new VNI
-            slices_in_overlay_remote['vnis'][vni_key] = {'vni':vni, 'interfaces': [] } 
-        # set route in local site for the remote subnet, if not present  
-        if lan_sub_remote_site not in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
+            # update local dictionary
+            tunnel_remote['fdb_entry_config'] = True
+        # set route in local site for the remote subnet, if not present
+        if lan_sub_remote_site not in tunnel_local.get('reach_subnets'): 
             response = self.srv6_manager.create_iproute(
                 mgmt_ip_local_site, self.grpc_client_port,
                 destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split(
@@ -181,9 +197,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                % (wan_ip_remote_site, mgmt_ip_local_site))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary with the new subnet in overlay 
-            slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').append(lan_sub_remote_site)
-        # set route in remote site for the local subnet, if not present 
-        if lan_sub_local_site not in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'): 
+            tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
+        # set route in remote site for the local subnet, if not present
+        if lan_sub_local_site not in tunnel_remote.get('reach_subnets'):
             response = self.srv6_manager.create_iproute(
                 mgmt_ip_remote_site, self.grpc_client_port,
                 destination=lan_sub_local_site, gateway=vtep_ip_local_site.split(
@@ -196,12 +212,47 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                % (lan_sub_local_site, mgmt_ip_remote_site))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR          
             # update local dictionary with the new subnet in overlay 
-            slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').append(lan_sub_local_site)
-        # Insert the device overlay state in MongodB, if there isn already a state update it 
-        self.slices_in_overlay.update({
-            'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
-        self.slices_in_overlay.update({
-            'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)
+            tunnel_remote.get('reach_subnets').append(lan_sub_local_site)
+        # Insert the device overlay state in DB, if there is already a state update it 
+        #   
+        # local site 
+        new_doc_created = self.overlays.update_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': {'$ne': tunnel_local.get('tunnel_key')}},{
+                '$push': {'created_tunnel': {
+                    'tunnel_key': tunnel_local.get('tunnel_key'), 
+                    'reach_subnets': tunnel_local.get('reach_subnets'), 
+                    'fdb_entry_config': tunnel_local.get('fdb_entry_config')}}
+            }).matched_count == 1
+        if new_doc_created == False:
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid, 
+                'created_tunnel.tunnel_key': tunnel_local.get('tunnel_key')}, {
+                    '$set': {
+                        'created_tunnel.$.reach_subnets': tunnel_local.get('reach_subnets'), 
+                        'created_tunnel.$.fdb_entry_config': tunnel_local.get('fdb_entry_config')}}, 
+                upsert=True)
+        # remote site 
+        new_doc_created = self.overlays.update_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': {'$ne': tunnel_remote.get('tunnel_key')}},{
+                '$push': {'created_tunnel': {
+                    'tunnel_key': tunnel_remote.get('tunnel_key'), 
+                    'reach_subnets': tunnel_remote.get('reach_subnets'), 
+                    'fdb_entry_config': tunnel_remote.get('fdb_entry_config')}}
+            }).matched_count == 1
+        if new_doc_created == False:
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid, 
+                'created_tunnel.tunnel_key': tunnel_remote.get('tunnel_key')}, {
+                    '$set': {
+                        'created_tunnel.$.reach_subnets': tunnel_remote.get('reach_subnets'), 
+                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get('fdb_entry_config')}}, 
+                upsert=True)
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -331,17 +382,26 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # DB key creation, one per tunnel direction  
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
-        # get tunnel dictionary from DB 
-        slices_in_overlay_local = self.slices_in_overlay.find_one({
-            'tunnel_key': key_local_to_remote})
-        slices_in_overlay_remote = self.slices_in_overlay.find_one({
-            'tunnel_key': key_remote_to_local})
-        # Create VNI key 
-        vni_key = 'vni_%s' % (vni)
-        # Check if the remote device has not yet been removed from the overlay
-        if vni_key in slices_in_overlay_remote['vnis']:
+        # get tunnel dictionaries from DB 
+        #
+        # local site
+        tunnel_local = self.overlays.find_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': key_local_to_remote }, {
+            'created_tunnel.$.tunnel_key': 1 }
+            )['created_tunnel'][0]
+        # remote site 
+        tunnel_remote = self.overlays.find_one({
+            'name': overlay_name, 
+            'tenantid': tenantid, 
+            'created_tunnel.tunnel_key': key_remote_to_local }, {
+            'created_tunnel.$.tunnel_key': 1 }
+            )['created_tunnel'][0]
+        # Check if there is the fdb entry in remote site for local site
+        if tunnel_remote.get('fdb_entry_config') == True:
             # Check if there is the route for the local subnet in the remote device 
-            if lan_sub_local_site in slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces'):
+            if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
                 # remove route in remote site
                 response = self.srv6_manager.remove_iproute(
                     mgmt_ip_remote_site, self.grpc_client_port,
@@ -354,11 +414,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 % (lan_sub_local_site, mgmt_ip_remote_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary
-                slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces').remove(lan_sub_local_site)
+                tunnel_remote.get('reach_subnets').remove(lan_sub_local_site)
         # Check if the subnet removed is the last subnet in the considered overlay in the local site 
-        if vni_key not in slices_in_overlay_remote['vnis'] or len(slices_in_overlay_remote['vnis'].get(vni_key).get('interfaces')) == 0:
-            # Check if there is the route for remote subnet in the local device 
-            if lan_sub_remote_site in slices_in_overlay_local['vnis'].get(vni_key).get('interfaces'):
+        if len(tunnel_remote.get('reach_subnets')) == 0:
+            # Check if there is the route for remote subnet in the local site
+            if lan_sub_remote_site in tunnel_local.get('reach_subnets'): 
                 # remove route in local site
                 response = self.srv6_manager.remove_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
@@ -371,9 +431,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 % (lan_sub_remote_site, mgmt_ip_local_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary 
-                slices_in_overlay_local['vnis'].get(vni_key).get('interfaces').remove(lan_sub_remote_site)
-            # Check if the remote device has not yet been removed from the overlay
-            if vni_key in slices_in_overlay_remote['vnis']:
+                tunnel_local.get('reach_subnets').remove(lan_sub_remote_site)
+            # Check if there is the fdb entry in remote site for local site
+            if tunnel_remote.get('fdb_entry_config') == True:
                 # remove FDB entry in remote site 
                 response = self.srv6_manager.delfdbentries(
                     mgmt_ip_remote_site, self.grpc_client_port,
@@ -386,11 +446,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                 % (wan_ip_local_site, mgmt_ip_remote_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary 
-                del slices_in_overlay_remote['vnis'][vni_key]
+                tunnel_remote['fdb_entry_config'] = False
             # Check if there are no more remote subnets reachable from the local site 
-            if len(slices_in_overlay_local['vnis'].get(vni_key).get('interfaces')) == 0:
-                # Check if the local device partecipate in the overlay 
-                if vni_key in slices_in_overlay_local['vnis']:
+            if len(tunnel_local.get('reach_subnets')) == 0:
+                # Check if there is the fdb entry in local site for remote site
+                if tunnel_local.get('fdb_entry_config') == True:
                     # remove FDB entry in local site
                     response = self.srv6_manager.delfdbentries(
                         mgmt_ip_local_site, self.grpc_client_port,
@@ -403,18 +463,45 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     % (wan_ip_remote_site, mgmt_ip_local_site))
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary 
-                    del slices_in_overlay_local['vnis'][vni_key]
-        # If there are no more overlay on the devices destroy data structure, else update it  
-        if slices_in_overlay_local['vnis'] == {} and slices_in_overlay_remote['vnis'] == {}:
-            self.slices_in_overlay.remove({
-                'tunnel_key': key_local_to_remote})
-            self.slices_in_overlay.remove({
-                'tunnel_key': key_remote_to_local})
+                    tunnel_local['fdb_entry_config'] = False
+        # If there are no more overlay on the devices and destroy data structure, else update it
+        if tunnel_local.get('fdb_entry_config') == False and tunnel_remote.get('fdb_entry_config') == False:
+            # local site 
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid}, {
+                    '$pull': {
+                        'created_tunnel': {
+                            'tunnel_key': tunnel_local.get('tunnel_key')}}}
+                )
+            # remote site 
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid}, {
+                    '$pull': {
+                        'created_tunnel': {
+                            'tunnel_key': tunnel_remote.get('tunnel_key')}}}
+                )
         else:
-            self.slices_in_overlay.update({
-                'tunnel_key': key_local_to_remote}, {'$set': slices_in_overlay_local}, upsert=True)
-            self.slices_in_overlay.update({
-                'tunnel_key': key_remote_to_local}, {'$set': slices_in_overlay_remote}, upsert=True)
+            # local site 
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid, 
+                'created_tunnel.tunnel_key': tunnel_local.get('tunnel_key')}, {
+                    '$set': {
+                        'created_tunnel.$.reach_subnets': tunnel_local.get('reach_subnets'), 
+                        'created_tunnel.$.fdb_entry_config': tunnel_local.get('fdb_entry_config')}}
+                )
+            # remote site 
+            self.overlays.update_one({
+                'name': overlay_name, 
+                'tenantid': tenantid, 
+                'created_tunnel.tunnel_key': tunnel_remote.get('tunnel_key')}, {
+                    '$set': {
+                        'created_tunnel.$.reach_subnets': tunnel_remote.get('reach_subnets'), 
+                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get('fdb_entry_config')}}
+                )
+
         # Success
         return NbStatusCode.STATUS_OK
 
