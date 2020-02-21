@@ -253,7 +253,6 @@ class VTEPIPAllocator:
     # Return VTEP IP adress assigned to the device
     # If device has no VTEP IP address return -1
     def get_vtep_ip(self, dev_id, tenantid):
-        # if not self.dev_to_ip.count_documents({'tenantid': tenantid, 'dev_id': dev_id}, limit=1):
         vtep_ip = self.devices.find_one({
             'deviceid': dev_id, 'tenantid': tenantid}, {'vtep_ip_addr': 1})['vtep_ip_addr']
         if vtep_ip == None:
