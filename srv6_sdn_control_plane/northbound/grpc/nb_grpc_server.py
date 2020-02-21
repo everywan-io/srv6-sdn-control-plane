@@ -320,6 +320,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             device_name = device.name
             # Extract the device description
             device_description = device.description
+            # If the device is partecipating to some overlay
+            # we cannot configure it
+            overlay = srv6_sdn_controller_state.get_overlay_containing_device(
+                deviceid, tenantid)
+            if overlay is not None:
+                err = ('Cannot configure device %s: the device '
+                       'is partecipating to the overlay %s'
+                       % deviceid, overlay)
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Name is mandatory
             if device_name is None or device_name == '':
                 err = ('Invalid configuration for device %s\n'
