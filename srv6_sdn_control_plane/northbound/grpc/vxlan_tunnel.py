@@ -19,7 +19,6 @@ from ipaddress import IPv6Interface, IPv4Interface
 from ipaddress import IPv6Network, IPv4Network, IPv4Address
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
-from srv6_sdn_control_plane.northbound.grpc import vxlan_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
