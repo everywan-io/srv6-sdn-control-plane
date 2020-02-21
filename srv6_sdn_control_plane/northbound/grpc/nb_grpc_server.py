@@ -327,7 +327,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             if overlay is not None:
                 err = ('Cannot configure device %s: the device '
                        'is partecipating to the overlay %s'
-                       % deviceid, overlay)
+                       % (deviceid, overlay['_id']))
                 logging.error(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
@@ -777,9 +777,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
         elif num != 0:
-            err = ('Cannot unregister the device. '
+            err = ('Cannot unregister the device %s. '
                    'The device has %s tunnels registered'
-                   % (deviceid, tenantid))
+                   % (deviceid, deviceid))
             logging.warning(err)
             return STATUS_BAD_REQUEST, err
         # All checks passed
