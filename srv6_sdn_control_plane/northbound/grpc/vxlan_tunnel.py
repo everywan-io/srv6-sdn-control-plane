@@ -63,12 +63,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Oldo controller state
         self.SDWANControllerState = controller_state
 
-    def add_slice_to_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
+    def add_slice_to_overlay(self, overlayid, overlay_name, routerid, interface_name, tenantid, overlay_info):
         # Get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # get table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # add slice to the VRF
@@ -86,7 +89,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
+    def create_tunnel(self, overlayid, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
         # get devices ID
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
@@ -101,8 +104,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         lan_sub_local_site = self.controller_state.get_ip_subnets(
             id_local_site, local_site['interface_name'])[0]
         # get table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # get VTEP IP remote site and local site
         vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(
             id_remote_site, tenantid)
@@ -262,14 +268,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def init_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
+    def init_overlay(self, overlayid, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # Get vxlan port set by user
         vxlan_port_site = self.controller_state.get_tenant_vxlan_port(tenantid)
         # get table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface
@@ -315,18 +324,26 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def init_overlay_data(self, overlay_name, tenantid, overlay_info):
+    def init_overlay_data(self, overlayid, overlay_name, tenantid, overlay_info):
         # get VNI
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         if vni == -1:
             vni = self.controller_state_vxlan.get_new_vni(
                 overlay_name, tenantid)
         # get table ID
-        tableid = self.controller_state_vxlan.get_new_tableid(
-            overlay_name, tenantid)
-        if tableid == -1:
-            tableid = self.controller_state_vxlan.get_tableid(
-                overlay_name, tenantid)
+        tableid = self.controller_state.get_new_tableid(
+            tenantid)
+        if tableid is None:
+            logging.error('Cannot get a new table ID for the overlay %s'
+                          % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Assign the table ID to the overlay
+        success = self.controller_state.assign_tableid_to_overlay(
+            overlayid, tenantid, tableid)
+        if success is not True:
+            logging.error('Cannot assign table ID %s to the overlay %s'
+                          % (tableid, overlayid))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -340,12 +357,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def remove_slice_from_overlay(self, overlay_name, routerid, interface_name, tenantid, overlay_info):
+    def remove_slice_from_overlay(self, overlayid, overlay_name, routerid, interface_name, tenantid, overlay_info):
         # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # retrive table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # retrive VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # Remove slice from VRF
@@ -363,7 +383,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def remove_tunnel(self, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
+    def remove_tunnel(self, overlayid, overlay_name, overlay_type, local_site, remote_site, tenantid, overlay_info):
         # get devices ID
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
@@ -390,8 +410,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         lan_sub_remote_site = self.controller_state.get_ip_subnets(
             id_remote_site, remote_site['interface_name'])[0]
         # get table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # DB key creation, one per tunnel direction
@@ -520,14 +543,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def destroy_overlay(self, overlay_name, overlay_type, tenantid, routerid, overlay_info):
+    def destroy_overlay(self, overlayid, overlay_name, overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # get VNI
         vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
         # get table ID
-        tableid = self.controller_state_vxlan.get_tableid(
-            overlay_name, tenantid)
+        tableid = self.controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # get VTEP name
@@ -569,11 +595,25 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def destroy_overlay_data(self, overlay_name, tenantid, overlay_info):
+    def destroy_overlay_data(self, overlayid, overlay_name, tenantid, overlay_info):
         # release VNI
         self.controller_state_vxlan.release_vni(overlay_name, tenantid)
+        # Get the table ID assigned to the overlay
+        tableid = self.controller_state.get_tableid(overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
+        # Remove the table ID from the overlay
+        success = self.controller_state.remove_tableid_from_overlay(
+            overlayid, tenantid, tableid)
+        if success is not True:
+            logging.error('Error while removing table ID %s from the '
+                          'overlay %s' % (tableid, overlayid))
         # release tableid
-        self.controller_state_vxlan.release_tableid(overlay_name, tenantid)
+        success = self.controller_state.release_tableid(tableid, tenantid)
+        if success is not True:
+            logging.error('Error while releasing table ID %s '
+                          'for the tenant' % (tableid, tenantid))
         # Success
         return NbStatusCode.STATUS_OK
 
