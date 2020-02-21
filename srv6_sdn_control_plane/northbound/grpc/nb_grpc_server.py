@@ -368,7 +368,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Check if the devices exist
             if deviceid not in devices:
                 err = ('Invalid configuration for device %s\n'
-                       'Device not found: %s' % (deviceid, tenantid))
+                       'Device not found: %s' % (deviceid, deviceid))
                 logging.warning(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
