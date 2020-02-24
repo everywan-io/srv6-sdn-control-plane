@@ -1060,8 +1060,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                        % (overlay_name, tenantid))
                 logging.warning(err)
                 # Remove overlay DB status
-                res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                if res != NbStatusCode.STATUS_SUCCESS:
+                if srv6_sdn_controller_state.remove_overlay(
+                        overlayid) is not True:
                     logging.error('Cannot remove overlay. Inconsistent data')
                 return OverlayServiceReply(
                     status=Status(code=status_code, reason=err))
@@ -1082,18 +1082,20 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                'tenant %s)' % (deviceid, tenantid))
                         logging.warning(err)
                         # Remove overlay DB status
-                        res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                        if res != NbStatusCode.STATUS_SUCCESS:
-                            logging.error('Cannot remove overlay. Inconsistent data')
+                        if srv6_sdn_controller_state.remove_overlay(
+                                overlayid) is not True:
+                            logging.error(
+                                'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
                             status=Status(code=status_code, reason=err))
                 elif counter is None:
                     err = 'Cannot increase tunnel mode counter'
                     logging.error(err)
                     # Remove overlay DB status
-                    res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                    if res != NbStatusCode.STATUS_SUCCESS:
-                        logging.error('Cannot remove overlay. Inconsistent data')
+                    if srv6_sdn_controller_state.remove_overlay(
+                            overlayid) is not True:
+                        logging.error(
+                            'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
                         status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
                                       reason=err))
@@ -1111,9 +1113,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                % (overlay_name, deviceid, tenantid))
                         logging.warning(err)
                         # Remove overlay DB status
-                        res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                        if res != NbStatusCode.STATUS_SUCCESS:
-                            logging.error('Cannot remove overlay. Inconsistent data')
+                        if srv6_sdn_controller_state.remove_overlay(
+                                overlayid) is not True:
+                            logging.error(
+                                'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
                             status=Status(code=status_code, reason=err))
                     # Remove device from the to-be-configured devices set
@@ -1131,9 +1134,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                               interface_name, tenantid))
                     logging.warning(err)
                     # Remove overlay DB status
-                    res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                    if res != NbStatusCode.STATUS_SUCCESS:
-                        logging.error('Cannot remove overlay. Inconsistent data')
+                    if srv6_sdn_controller_state.remove_overlay(
+                            overlayid) is not True:
+                        logging.error(
+                            'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
                         status=Status(code=status_code, reason=err))
                 # Create the tunnel between all the pairs of interfaces
@@ -1151,9 +1155,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                    % (overlay_name, site1, site2, tenantid))
                             logging.warning(err)
                             # Remove overlay DB status
-                            res = srv6_sdn_controller_state.remove_overlay(overlayid)
-                            if res != NbStatusCode.STATUS_SUCCESS:
-                                logging.error('Cannot remove overlay. Inconsistent data')
+                            if srv6_sdn_controller_state.remove_overlay(
+                                    overlayid) is not True:
+                                logging.error(
+                                    'Cannot remove overlay. Inconsistent data')
                             return OverlayServiceReply(
                                 status=Status(code=status_code, reason=err))
                 # Add the slice to the configured set
