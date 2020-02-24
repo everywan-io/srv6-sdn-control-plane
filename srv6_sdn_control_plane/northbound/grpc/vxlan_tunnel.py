@@ -19,7 +19,6 @@ from ipaddress import IPv6Interface, IPv4Interface
 from ipaddress import IPv6Network, IPv4Network, IPv4Address
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
-from srv6_sdn_control_plane.northbound.grpc import vxlan_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
@@ -49,9 +48,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         self.verbose = verbose
         # Create SRv6 Manager
         self.srv6_manager = sb_grpc_client.SRv6Manager()
-        # Initialize vxlan controller state
-        self.controller_state_vxlan = vxlan_tunnel_utils.ControllerStateVXLAN(
-            controller_state)
         # Initialize controller state
         self.controller_state = srv6_sdn_controller_state
         # Get connection to MongoDB
@@ -110,12 +106,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
         # get VTEP IP remote site and local site
-        vtep_ip_remote_site = self.controller_state_vxlan.get_vtep_ip(
+        vtep_ip_remote_site = self.controller_state.get_vtep_ip(
             id_remote_site, tenantid)
-        vtep_ip_local_site = self.controller_state_vxlan.get_vtep_ip(
+        vtep_ip_local_site = self.controller_state.get_vtep_ip(
             id_local_site, tenantid)
         # get VNI
-        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
+        vni = self.controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
@@ -284,11 +280,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get WAN interface
         wan_intf_site = self.controller_state.get_wan_interfaces(routerid)[0]
         # get VNI for the overlay
-        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
+        vni = self.controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(
+        vtep_ip_site = self.controller_state.get_vtep_ip(
             routerid, tenantid)
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
@@ -326,9 +322,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def init_overlay_data(self, overlayid, overlay_name, tenantid, overlay_info):
         # get VNI
-        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
+        vni = self.controller_state.get_vni(overlay_name, tenantid)
         if vni == -1:
-            vni = self.controller_state_vxlan.get_new_vni(
+            vni = self.controller_state.get_new_vni(
                 overlay_name, tenantid)
         # get table ID
         tableid = self.controller_state.get_new_tableid(
@@ -349,10 +345,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def init_tunnel_mode(self, routerid, tenantid, overlay_info):
         # get VTEP IP address for site1
-        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(
+        vtep_ip_site = self.controller_state.get_vtep_ip(
             routerid, tenantid)
         if vtep_ip_site == -1:
-            vtep_ip_site = self.controller_state_vxlan.get_new_vtep_ip(
+            vtep_ip_site = self.controller_state.get_new_vtep_ip(
                 routerid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
@@ -388,7 +384,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
         # get VNI
-        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
+        vni = self.controller_state.get_vni(overlay_name, tenantid)
         # get management IP local and remote site
         mgmt_ip_remote_site = self.controller_state.get_router_mgmtip(
             id_remote_site)
@@ -547,7 +543,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get device management IP address
         mgmt_ip_site = self.controller_state.get_router_mgmtip(routerid)
         # get VNI
-        vni = self.controller_state_vxlan.get_vni(overlay_name, tenantid)
+        vni = self.controller_state.get_vni(overlay_name, tenantid)
         # get table ID
         tableid = self.controller_state.get_tableid(
             overlayid, tenantid)
@@ -559,7 +555,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = self.controller_state_vxlan.get_vtep_ip(
+        vtep_ip_site = self.controller_state.get_vtep_ip(
             routerid, tenantid)
         # get VTEP IP address
         response = self.srv6_manager.remove_ipaddr(
@@ -597,7 +593,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def destroy_overlay_data(self, overlayid, overlay_name, tenantid, overlay_info):
         # release VNI
-        self.controller_state_vxlan.release_vni(overlay_name, tenantid)
+        self.controller_state.release_vni(overlay_name, tenantid)
         # Get the table ID assigned to the overlay
         tableid = self.controller_state.get_tableid(overlayid, tenantid)
         if tableid is None:
@@ -619,7 +615,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device
-        self.controller_state_vxlan.release_vtep_ip(routerid, tenantid)
+        self.controller_state.release_vtep_ip(routerid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
 
