@@ -154,7 +154,8 @@ class ControllerStateGRE:
 
     def __init__(self, controller_state):
         # Create Table IDs allocator
-        self.tableid_allocator = controller_state.tableid_allocator
+        #self.tableid_allocator = controller_state.tableid_allocator
+        self.tableid_allocator = None
         # Create GRE keys allocator
         self.gre_key_allocator = GREKeyAllocator()
         # Controller state

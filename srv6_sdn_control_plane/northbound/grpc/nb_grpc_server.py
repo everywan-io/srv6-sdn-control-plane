@@ -96,22 +96,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
-                 controller_state=None, verbose=DEFAULT_VERBOSE):
+                 verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
         # Verbose mode
         self.verbose = verbose
         # Southbound interface
         self.southbound_interface = southbound_interface
-        # VPN dict
-        self.vpn_dict = controller_state.vpns
         # SRv6 Manager
         self.srv6_manager = srv6_manager
-        # Initialize controller state
-        self.controller_state = controller_state
         # Initialize tunnel state
         self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port,
-                                                     controller_state,
                                                      verbose).tunnel_modes
         self.supported_tunnel_modes = [t_mode for t_mode in self.tunnel_modes]
         logging.info('*** Supported tunnel modes: %s'
@@ -1968,7 +1963,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
     service = NorthboundInterface(
         grpc_client_port, srv6_manager,
-        southbound_interface, controller_state, verbose
+        southbound_interface, verbose
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server
@@ -1976,9 +1971,9 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     # If secure mode is enabled, we need to create a secure endpoint
     if secure:
         # Read key and certificate
-        with open(key) as f:
+        with open(key, 'rb') as f:
             key = f.read()
-        with open(certificate) as f:
+        with open(certificate, 'rb') as f:
             certificate = f.read()
         # Create server SSL credentials
         grpc_server_credentials = grpc.ssl_server_credentials(
