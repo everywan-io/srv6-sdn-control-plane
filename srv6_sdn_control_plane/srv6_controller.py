@@ -26,6 +26,7 @@ from srv6_sdn_control_plane.topology.ti_extraction import draw_topo
 from srv6_sdn_control_plane.topology.ti_extraction import connect_and_extract_topology
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
+from srv6_sdn_controller_state import srv6_sdn_controller_state
 # pymerang dependencies
 from pymerang.pymerang_server import PymerangController
 
@@ -883,6 +884,9 @@ class SRv6Controller(object):
     def run(self):
         if self.VERBOSE:
             print('*** Starting the SRv6 Controller')
+        # Init database
+        if srv6_sdn_controller_state.init_db() is not True:
+            logging.error('Error while initializing database')
         # Init Northbound Interface
         if self.nb_interface == 'gRPC':
             if self.VERBOSE:
@@ -1062,7 +1066,8 @@ def parse_config_file(config_file):
         print('Missing required argument nodes')
         exit()
     # Topology Information Extraction period
-    args.period = config['DEFAULT'].get('period', DEFAULT_TOPO_EXTRACTION_PERIOD)
+    args.period = config['DEFAULT'].get(
+        'period', DEFAULT_TOPO_EXTRACTION_PERIOD)
     # Path of topology file
     args.topo_file = config['DEFAULT'].get('topo_file', DEFAULT_TOPOLOGY_FILE)
     # Path of topology graph
@@ -1076,11 +1081,14 @@ def parse_config_file(config_file):
     # Enable topology information extraction
     args.topo_extraction = config['DEFAULT'].get('topo_extraction', False)
     # Southbound interface
-    args.sb_interface = config['DEFAULT'].get('sb_interface', DEFAULT_SB_INTERFACE)
+    args.sb_interface = config['DEFAULT'].get(
+        'sb_interface', DEFAULT_SB_INTERFACE)
     # Northbound interface
-    args.nb_interface = config['DEFAULT'].get('nb_interface', DEFAULT_NB_INTERFACE)
+    args.nb_interface = config['DEFAULT'].get(
+        'nb_interface', DEFAULT_NB_INTERFACE)
     # IP address of the northbound gRPC server
-    args.grpc_server_ip = config['DEFAULT'].get('grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+    args.grpc_server_ip = config['DEFAULT'].get(
+        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
     # Port of the northbound gRPC server
     args.grpc_server_port = config['DEFAULT'].get(
         'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
@@ -1096,7 +1104,8 @@ def parse_config_file(config_file):
     # Enable secure mode
     args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
     # Server certificate
-    args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
+    args.server_cert = config['DEFAULT'].get(
+        'server_cert', DEFAULT_CERTIFICATE)
     # Server key
     args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
     # Path of output VPN file
@@ -1104,7 +1113,7 @@ def parse_config_file(config_file):
     # Port of the northbound gRPC client
     args.min_interval_between_topo_dumps = \
         config['DEFAULT'].get('min_interval_between_topo_dumps',
-                   DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS)
+                              DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS)
     # Done, return
     return args
 
