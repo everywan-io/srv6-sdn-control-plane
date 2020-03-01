@@ -77,7 +77,7 @@ class SRv6Controller(object):
                  secure, key, certificate, grpc_server_ip, grpc_server_port,
                  grpc_client_port, pymerang_server_ip,
                  pymerang_server_port, min_interval_between_topo_dumps,
-                 vpn_dump=None, topo_extraction=False, verbose=False):
+                 topo_extraction=False, verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
         if self.VERBOSE:
@@ -119,10 +119,6 @@ class SRv6Controller(object):
         self.key = key
         # Server certificate
         self.certificate = certificate
-        # VPN dump
-        self.vpn_file = vpn_dump
-        # VPN dict
-        self.vpn_dict = dict()
         # Graph
         self.G = nx.Graph()
         # Topology information
@@ -139,8 +135,6 @@ class SRv6Controller(object):
         self.topo_graph_lock = Lock()
         # Minimum interval between dumps
         self.min_interval_between_topo_dumps = min_interval_between_topo_dumps
-        # Devices
-        self.devices = dict()
         # Topology information extraction
         self.topo_extraction = topo_extraction
         # Print configuration
@@ -160,9 +154,6 @@ class SRv6Controller(object):
             print('*** Selected southbound interface: %s' % self.sb_interface)
             print('*** Selected northbound interface: %s' % self.nb_interface)
             print()
-        # Controller state
-        self.controller_state = utils.SDWANControllerState(
-            self.topology_file, self.devices, self.vpn_dict, self.vpn_file)
 
     # Get the interface of the router facing on a net
     def get_interface_facing_on_net(self, routerid, net):
@@ -435,7 +426,7 @@ class SRv6Controller(object):
         if self.VERBOSE:
             print(('*** Extracting interface from router %s' % routerid))
         # Get the IP address of the router
-        router = self.controller_state.get_router_mgmtip(routerid)
+        router = srv6_sdn_controller_state.get_device_mgmtip(deviceid=routerid)
         if router is None:
             # Router address not found
             # The topology has not changed
@@ -525,7 +516,7 @@ class SRv6Controller(object):
     # received from the nodes through the Southbound interface
     def listen_network_events(self, routerid):
         topo_changed = False
-        router = self.controller_state.get_router_mgmtip(routerid)
+        router = srv6_sdn_controller_state.get_router_mgmtip(deviceid=routerid)
         if router is None:
             logging.warning('Error in listen_network_events(): '
                             'Cannot find an address for the router %s'
@@ -714,8 +705,8 @@ class SRv6Controller(object):
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
-                managementip = self.controller_state.get_router_mgmtip(
-                    routerid)
+                managementip = srv6_sdn_controller_state.get_router_mgmtip(
+                    deviceid=routerid)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
                 # Add the node to the graph
@@ -872,11 +863,7 @@ class SRv6Controller(object):
     def start_registration_server(self):
         logging.info('*** Starting registration server')
         server = PymerangController(server_ip=self.pymerang_server_ip,
-                                    server_port=self.pymerang_server_port,
-                                    devices=self.controller_state.devices,
-                                    controller_state=self.controller_state)
-        # Store registration server
-        self.controller_state.registration_server = server
+                                    server_port=self.pymerang_server_port)
         server.serve()
 
     # Run the SRv6 controller
@@ -903,10 +890,6 @@ class SRv6Controller(object):
                         'certificate': self.certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
-                        'vpn_dict': self.vpn_dict,
-                        'devices': self.controller_state.devices,
-                        'vpn_file': self.vpn_file,
-                        'controller_state': self.controller_state,
                         'verbose': self.VERBOSE
                         }
                         )
@@ -1010,10 +993,6 @@ def parseArguments():
     parser.add_argument('--server-key', dest='server_key',
                         action='store', default=DEFAULT_KEY,
                         help='Server key file')
-    # Path of output VPN file
-    parser.add_argument('-f', '--vpn-file', dest='vpn_dump', action='store',
-                        default=None,
-                        help='File where the vpns created have to be saved')
     # Port of the northbound gRPC client
     parser.add_argument('--min-interval-dumps',
                         dest='min_interval_between_topo_dumps',
@@ -1052,7 +1031,6 @@ def parse_config_file(config_file):
         secure = None
         server_cert = None
         server_key = None
-        vpn_dump = None
         min_interval_between_topo_dumps = None
 
     args = Args()
@@ -1108,8 +1086,6 @@ def parse_config_file(config_file):
         'server_cert', DEFAULT_CERTIFICATE)
     # Server key
     args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
-    # Path of output VPN file
-    args.vpn_dump = config['DEFAULT'].get('vpn_dump', None)
     # Port of the northbound gRPC client
     args.min_interval_between_topo_dumps = \
         config['DEFAULT'].get('min_interval_between_topo_dumps',
@@ -1145,8 +1121,6 @@ def _main():
     sb_interface = args.sb_interface
     # Northbound interface
     nb_interface = args.nb_interface
-    # Output VPN file
-    vpn_dump = args.vpn_dump
     # Topology Information Extraction
     topo_extraction = args.topo_extraction
     # Setup properly the logger
@@ -1204,7 +1178,6 @@ def _main():
         pymerang_server_ip=pymerang_server_ip,
         pymerang_server_port=pymerang_server_port,
         min_interval_between_topo_dumps=min_interval_between_topo_dumps,
-        vpn_dump=vpn_dump,
         topo_extraction=topo_extraction,
         verbose=verbose
     )

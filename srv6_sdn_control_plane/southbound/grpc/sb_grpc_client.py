@@ -107,7 +107,7 @@ class SRv6Manager:
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
-            with open(self.CERTIFICATE) as f:
+            with open(self.CERTIFICATE, 'rb') as f:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
