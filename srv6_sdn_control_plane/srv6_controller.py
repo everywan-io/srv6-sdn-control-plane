@@ -874,6 +874,7 @@ class SRv6Controller(object):
         # Init database
         if srv6_sdn_controller_state.init_db() is not True:
             logging.error('Error while initializing database')
+            return
         # Init Northbound Interface
         if self.nb_interface == 'gRPC':
             if self.VERBOSE:
