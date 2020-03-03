@@ -73,10 +73,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
             remote_site['deviceid'])
         # get subnet for local and remote site
-        lan_sub_remote_site = srv6_sdn_controller_state.get_ip_subnets(
-            id_remote_site, remote_site['interface_name'])[0]
-        lan_sub_local_site = srv6_sdn_controller_state.get_ip_subnets(
-            id_local_site, local_site['interface_name'])[0]
+        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+            id_remote_site, remote_site['interface_name'])
+        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+            id_local_site, local_site['interface_name'])
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -170,35 +170,37 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             # update local dictionary
             tunnel_remote['fdb_entry_config'] = True
         # set route in local site for the remote subnet, if not present
-        if lan_sub_remote_site not in tunnel_local.get('reach_subnets'):
-            response = self.srv6_manager.create_iproute(
-                mgmt_ip_local_site, self.grpc_client_port,
-                destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split(
-                    "/")[0],
-                table=tableid
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot set route for %s in %s '
-                               % (wan_ip_remote_site, mgmt_ip_local_site))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # update local dictionary with the new subnet in overlay
-            tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
+        for lan_sub_remote_site in lan_sub_remote_sites:
+            if lan_sub_remote_site not in tunnel_local.get('reach_subnets'):
+                response = self.srv6_manager.create_iproute(
+                    mgmt_ip_local_site, self.grpc_client_port,
+                    destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split(
+                        "/")[0],
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s in %s '
+                                % (wan_ip_remote_site, mgmt_ip_local_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # update local dictionary with the new subnet in overlay
+                tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
         # set route in remote site for the local subnet, if not present
-        if lan_sub_local_site not in tunnel_remote.get('reach_subnets'):
-            response = self.srv6_manager.create_iproute(
-                mgmt_ip_remote_site, self.grpc_client_port,
-                destination=lan_sub_local_site, gateway=vtep_ip_local_site.split(
-                    "/")[0],
-                table=tableid
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot set route for %s in %s '
-                               % (lan_sub_local_site, mgmt_ip_remote_site))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # update local dictionary with the new subnet in overlay
-            tunnel_remote.get('reach_subnets').append(lan_sub_local_site)
+        for lan_sub_local_site in lan_sub_local_sites:
+            if lan_sub_local_site not in tunnel_remote.get('reach_subnets'):
+                response = self.srv6_manager.create_iproute(
+                    mgmt_ip_remote_site, self.grpc_client_port,
+                    destination=lan_sub_local_site, gateway=vtep_ip_local_site.split(
+                        "/")[0],
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s in %s '
+                                % (lan_sub_local_site, mgmt_ip_remote_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # update local dictionary with the new subnet in overlay
+                tunnel_remote.get('reach_subnets').append(lan_sub_local_site)
         # Insert the device overlay state in DB, if there is already a state update it
         #
         # local site
