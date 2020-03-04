@@ -60,6 +60,25 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot add interface %s to the VRF %s in %s'
                            % (interface_name, vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+
+        # get subnet for local and remote site
+        subnets = srv6_sdn_controller_state.get_ip_subnets(
+            routerid, interface_name)
+        for subnet in subnets:
+            gateway = subnet['gateway']
+            subnet = subnet['subnet']
+            if gateway is not None and gateway != '':
+                response = self.srv6_manager.create_iproute(
+                    mgmt_ip_site, self.grpc_client_port,
+                    destination=subnet, gateway=gateway,
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s (gateway %s) '
+                                   'in %s ' % (subnet, gateway, mgmt_ip_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -105,24 +124,29 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
+        print('key local', key_local_to_remote)
+        print('key remote', key_remote_to_local)
         # get tunnel dictionaries from DB
         dictionary_local = self.overlays.find_one({
-            'name': overlay_name,
+            '_id': overlayid,
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_local_to_remote}, {
             'created_tunnel.$.tunnel_key': 1}
         )
         dictionary_remote = self.overlays.find_one({
-            'name': overlay_name,
+            '_id': overlayid,
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_remote_to_local}, {
             'created_tunnel.$.tunnel_key': 1}
         )
+        print('*/*/*/*/*/*/*/*/*dizionario locale gettato da db', dictionary_local)
+        print('*/*/*/*/*/*/*/*/*dizionario remote gettato da db', dictionary_remote)
         # If it's the first overlay for the devices, create dictionaries
         # else take tunnel info from DB dictionaries
         #
         # local site
         if dictionary_local == None:
+            print('\n\n*********************------> DIZIONARIO LOCALE CREATO')
             tunnel_local = {
                 'tunnel_key': key_local_to_remote,
                 'reach_subnets': [],
@@ -132,6 +156,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             tunnel_local = dictionary_local['created_tunnel'][0]
         # remote site
         if dictionary_remote == None:
+            print('\n\n*********************------> DIZIONARIO REMOTE  CREATO')
             tunnel_remote = {
                 'tunnel_key': key_remote_to_local,
                 'reach_subnets': [],
@@ -170,8 +195,14 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             # update local dictionary
             tunnel_remote['fdb_entry_config'] = True
         # set route in local site for the remote subnet, if not present
+        print('\n\n\n\n\n********************\nremote sites', lan_sub_remote_sites)
+        print('\nlocal sites', lan_sub_local_sites)
+        print('\ntunnel remote', tunnel_remote)
+        print('\ntunnel local', tunnel_local)
         for lan_sub_remote_site in lan_sub_remote_sites:
+            lan_sub_remote_site = lan_sub_remote_site['subnet']
             if lan_sub_remote_site not in tunnel_local.get('reach_subnets'):
+                print('check superato')
                 response = self.srv6_manager.create_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
                     destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split(
@@ -181,12 +212,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning('Cannot set route for %s in %s '
-                                % (wan_ip_remote_site, mgmt_ip_local_site))
+                                   % (wan_ip_remote_site, mgmt_ip_local_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
                 tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
         # set route in remote site for the local subnet, if not present
         for lan_sub_local_site in lan_sub_local_sites:
+            lan_sub_local_site = lan_sub_local_site['subnet']
             if lan_sub_local_site not in tunnel_remote.get('reach_subnets'):
                 response = self.srv6_manager.create_iproute(
                     mgmt_ip_remote_site, self.grpc_client_port,
@@ -197,7 +229,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning('Cannot set route for %s in %s '
-                                % (lan_sub_local_site, mgmt_ip_remote_site))
+                                   % (lan_sub_local_site, mgmt_ip_remote_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
                 tunnel_remote.get('reach_subnets').append(lan_sub_local_site)
@@ -337,6 +369,27 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
+        # Remove IP routes is optional
+        # Routes are removed when the interfaces is removed
+        # from the VRF
+        #
+        # get subnet for local and remote site
+        subnets = srv6_sdn_controller_state.get_ip_subnets(
+            routerid, interface_name)
+        for subnet in subnets:
+            gateway = subnet['gateway']
+            subnet = subnet['subnet']
+            if gateway is not None and gateway != '':
+                response = self.srv6_manager.remove_iproute(
+                    mgmt_ip_site, self.grpc_client_port,
+                    destination=subnet, gateway=gateway,
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot remove route for %s (gateway %s) '
+                                   'in %s ' % (subnet, gateway, mgmt_ip_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # retrive VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # Remove slice from VRF
@@ -351,6 +404,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove interface %s from VRF %s in %s'
                            % (interface_name, vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -376,10 +430,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
             id_remote_site, wan_intf_remote_site)[0].split("/")[0]
         # get local and remote subnet
-        lan_sub_local_site = srv6_sdn_controller_state.get_ip_subnets(
-            id_local_site, local_site['interface_name'])[0]
-        lan_sub_remote_site = srv6_sdn_controller_state.get_ip_subnets(
-            id_remote_site, remote_site['interface_name'])[0]
+        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+            id_local_site, local_site['interface_name'])
+        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+            id_remote_site, remote_site['interface_name'])
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -410,37 +464,39 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Check if there is the fdb entry in remote site for local site
         if tunnel_remote.get('fdb_entry_config') == True:
             # Check if there is the route for the local subnet in the remote device
-            if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
-                # remove route in remote site
-                response = self.srv6_manager.remove_iproute(
-                    mgmt_ip_remote_site, self.grpc_client_port,
-                    destination=lan_sub_local_site,
-                    table=tableid
-                )
-                if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning('Cannot remove route to %s in %s'
-                                   % (lan_sub_local_site, mgmt_ip_remote_site))
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-                # update local dictionary
-                tunnel_remote.get('reach_subnets').remove(lan_sub_local_site)
+            for lan_sub_local_site in lan_sub_local_sites:
+                if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
+                    # remove route in remote site
+                    response = self.srv6_manager.remove_iproute(
+                        mgmt_ip_remote_site, self.grpc_client_port,
+                        destination=lan_sub_local_site,
+                        table=tableid
+                    )
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove route to %s in %s'
+                                    % (lan_sub_local_site, mgmt_ip_remote_site))
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    # update local dictionary
+                    tunnel_remote.get('reach_subnets').remove(lan_sub_local_site)
         # Check if the subnet removed is the last subnet in the considered overlay in the local site
         if len(tunnel_remote.get('reach_subnets')) == 0:
             # Check if there is the route for remote subnet in the local site
-            if lan_sub_remote_site in tunnel_local.get('reach_subnets'):
-                # remove route in local site
-                response = self.srv6_manager.remove_iproute(
-                    mgmt_ip_local_site, self.grpc_client_port,
-                    destination=lan_sub_remote_site,
-                    table=tableid
-                )
-                if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning('Cannot remove route to %s in %s'
-                                   % (lan_sub_remote_site, mgmt_ip_local_site))
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-                # update local dictionary
-                tunnel_local.get('reach_subnets').remove(lan_sub_remote_site)
+            for lan_sub_remote_site in lan_sub_remote_sites:
+                if lan_sub_remote_site in tunnel_local.get('reach_subnets'):
+                    # remove route in local site
+                    response = self.srv6_manager.remove_iproute(
+                        mgmt_ip_local_site, self.grpc_client_port,
+                        destination=lan_sub_remote_site,
+                        table=tableid
+                    )
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove route to %s in %s'
+                                    % (lan_sub_remote_site, mgmt_ip_local_site))
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    # update local dictionary
+                    tunnel_local.get('reach_subnets').remove(lan_sub_remote_site)
             # Check if there is the fdb entry in remote site for local site
             if tunnel_remote.get('fdb_entry_config') == True:
                 # remove FDB entry in remote site
@@ -570,7 +626,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # release VNI
         srv6_sdn_controller_state.release_vni(overlay_name, tenantid)
         # release tableid
-        success = srv6_sdn_controller_state.release_tableid(overlayid, tenantid)
+        success = srv6_sdn_controller_state.release_tableid(
+            overlayid, tenantid)
         if success is not True:
             logging.error('Error while releasing table ID associated '
                           'to the overlay %s (tenant %s)'
