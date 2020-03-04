@@ -68,16 +68,23 @@ DEFAULT_SB_INTERFACE = 'gRPC'
 DEFAULT_NB_INTERFACE = 'gRPC'
 # Minimum interval between two topology dumps (in seconds)
 DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
+# Default interval between two keep alive messages
+DEFAULT_KEEP_ALIVE_INTERVAL = 30
 
 
 class SRv6Controller(object):
 
     def __init__(self, nodes, period, topo_file, topo_graph,
                  ospf6d_pwd, sb_interface, nb_interface,
-                 secure, key, certificate, grpc_server_ip, grpc_server_port,
+                 nb_secure, sb_secure,
+                 nb_server_key, nb_server_certificate,
+                 sb_server_key, sb_server_certificate,
+                 client_certificate, grpc_server_ip, grpc_server_port,
                  grpc_client_port, pymerang_server_ip,
                  pymerang_server_port, min_interval_between_topo_dumps,
-                 topo_extraction=False, verbose=False):
+                 topo_extraction=False,
+                 keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
+                 verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
         if self.VERBOSE:
@@ -113,12 +120,20 @@ class SRv6Controller(object):
         self.pymerang_server_ip = pymerang_server_ip
         # Port of the pymerang server
         self.pymerang_server_port = pymerang_server_port
-        # Secure mode
-        self.secure = secure
-        # Server key
-        self.key = key
-        # Server certificate
-        self.certificate = certificate
+        # Northbound secure mode
+        self.nb_secure = nb_secure
+        # Southbound secure mode
+        self.sb_secure = sb_secure
+        # Northbound server key
+        self.nb_server_key = nb_server_key
+        # Northbound server certificate
+        self.nb_server_certificate = nb_server_certificate
+        # Southbound server key
+        self.sb_server_key = sb_server_key
+        # Southbound server certificate
+        self.sb_server_certificate = sb_server_certificate
+        # Client certificate
+        self.client_certificate = client_certificate
         # Graph
         self.G = nx.Graph()
         # Topology information
@@ -137,6 +152,8 @@ class SRv6Controller(object):
         self.min_interval_between_topo_dumps = min_interval_between_topo_dumps
         # Topology information extraction
         self.topo_extraction = topo_extraction
+        # Interval between two consecutive keep-alive messages
+        self.keep_alive_interval = keep_alive_interval
         # Print configuration
         if self.VERBOSE:
             print()
@@ -862,8 +879,12 @@ class SRv6Controller(object):
     # Start registration server
     def start_registration_server(self):
         logging.info('*** Starting registration server')
-        server = PymerangController(server_ip=self.pymerang_server_ip,
-                                    server_port=self.pymerang_server_port)
+        server = PymerangController(
+            server_ip=self.pymerang_server_ip,
+            server_port=self.pymerang_server_port,
+            keep_alive_interval=self.keep_alive_interval,
+            secure=self.sb_secure, key=self.sb_server_key,
+            certificate=self.sb_server_certificate)
         server.serve()
 
     # Run the SRv6 controller
@@ -886,9 +907,11 @@ class SRv6Controller(object):
                         'grpc_server_ip': self.grpc_server_ip,
                         'grpc_server_port': self.grpc_server_port,
                         'grpc_client_port': self.grpc_client_port,
-                        'secure': self.secure,
-                        'key': self.key,
-                        'certificate': self.certificate,
+                        'nb_secure': self.nb_secure,
+                        'server_key': self.nb_server_key,
+                        'server_certificate': self.nb_server_certificate,
+                        'sb_secure': self.sb_secure,
+                        'client_certificate': self.client_certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
                         'verbose': self.VERBOSE
@@ -902,7 +925,7 @@ class SRv6Controller(object):
             target=self.dump_and_draw_topo
         )
         thread.daemon = True
-        thread.start()
+        #thread.start()
         # Start registration server
         thread = Thread(
             target=self.start_registration_server
@@ -983,17 +1006,36 @@ def parseArguments():
     parser.add_argument('--pymerang-server-port', dest='pymerang_server_port',
                         action='store', default=DEFAULT_PYMERANG_SERVER_PORT,
                         help='Port of the pymerang server')
-    # Enable secure mode
-    parser.add_argument('-s', '--secure', action='store_true',
-                        default=DEFAULT_SECURE, help='Activate secure mode')
+    # Enable secure mode for the northbound interface
+    parser.add_argument('-s', '--nb-secure', action='store_true',
+                        dest='nb_secure',
+                        default=DEFAULT_SECURE, help='Activate secure mode '
+                        'for the northbound interface')
+    # Enable secure mode for the southboun interface
+    parser.add_argument('-x', '--sb-secure', action='store_true',
+                        dest='sb_secure',
+                        default=DEFAULT_SECURE, help='Activate secure mode '
+                        'for the southbound interface')
     # Server certificate
-    parser.add_argument('--server-cert', dest='server_cert',
+    parser.add_argument('--nb-server-cert', dest='nb_server_cert',
                         action='store', default=DEFAULT_CERTIFICATE,
-                        help='Server certificate file')
+                        help='Northbound server certificate file')
     # Server key
-    parser.add_argument('--server-key', dest='server_key',
+    parser.add_argument('--nb-server-key', dest='nb_server_key',
                         action='store', default=DEFAULT_KEY,
-                        help='Server key file')
+                        help='Northbound server key file')
+    # Server certificate
+    parser.add_argument('--sb-server-cert', dest='sb_server_cert',
+                        action='store', default=DEFAULT_CERTIFICATE,
+                        help='Southbound server certificate file')
+    # Server key
+    parser.add_argument('--sb-server-key', dest='sb_server_key',
+                        action='store', default=DEFAULT_KEY,
+                        help='Southbound server key file')
+    # Client certificate
+    parser.add_argument('--client-cert', dest='client_cert',
+                        action='store', default=DEFAULT_CERTIFICATE,
+                        help='Client certificate file')
     # Port of the northbound gRPC client
     parser.add_argument('--min-interval-dumps',
                         dest='min_interval_between_topo_dumps',
@@ -1004,6 +1046,11 @@ def parseArguments():
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
                         help='Path of the configuration file')
+    # Config file
+    parser.add_argument('--keep-alive-interval', dest='keep_alive_interval',
+                        action='store', default=DEFAULT_KEEP_ALIVE_INTERVAL,
+                        help='Interval between two consecutive '
+                        'keep alive messages')
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -1029,10 +1076,15 @@ def parse_config_file(config_file):
         grpc_client_port = None
         pymerang_server_ip = None
         pymerang_server_port = None
-        secure = None
-        server_cert = None
-        server_key = None
+        nb_secure = None
+        sb_secure = None
+        nb_server_cert = None
+        nb_server_key = None
+        sb_server_cert = None
+        sb_server_key = None
+        client_cert = None
         min_interval_between_topo_dumps = None
+        keep_alive_interval = None
 
     args = Args()
     # Get parser
@@ -1080,17 +1132,30 @@ def parse_config_file(config_file):
     # Port of the pymerang server
     args.pymerang_server_port = config['DEFAULT'].get(
         'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
-    # Enable secure mode
-    args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
+    # Enable secure mode for the northbound interface
+    args.nb_secure = config['DEFAULT'].get('nb_secure', DEFAULT_SECURE)
+    # Enable secure mode for the southbound interface
+    args.sb_secure = config['DEFAULT'].get('sb_secure', DEFAULT_SECURE)
     # Server certificate
-    args.server_cert = config['DEFAULT'].get(
-        'server_cert', DEFAULT_CERTIFICATE)
+    args.nb_server_cert = config['DEFAULT'].get(
+        'nb_server_cert', DEFAULT_CERTIFICATE)
     # Server key
-    args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
+    args.nb_server_key = config['DEFAULT'].get('nb_server_key', DEFAULT_KEY)
+    # Server certificate
+    args.sb_server_cert = config['DEFAULT'].get(
+        'sb_server_cert', DEFAULT_CERTIFICATE)
+    # Server key
+    args.sb_server_key = config['DEFAULT'].get('sb_server_key', DEFAULT_KEY)
+    # Client certificate
+    args.client_cert = config['DEFAULT'].get(
+        'client_cert', DEFAULT_CERTIFICATE)
     # Port of the northbound gRPC client
     args.min_interval_between_topo_dumps = \
         config['DEFAULT'].get('min_interval_between_topo_dumps',
                               DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS)
+    # Keep-alive interval
+    args.keep_alive_interval = config['DEFAULT'].get(
+        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
     # Done, return
     return args
 
@@ -1132,10 +1197,15 @@ def _main():
         logging.basicConfig(level=logging.INFO)
         logging.getLogger().setLevel(level=logging.INFO)
     # Setup properly the secure mode
-    if args.secure:
-        secure = True
+    if args.nb_secure:
+        nb_secure = True
     else:
-        secure = False
+        nb_secure = False
+    # Setup properly the secure mode
+    if args.sb_secure:
+        sb_secure = True
+    else:
+        sb_secure = False
     # gRPC server IP
     grpc_server_ip = args.grpc_server_ip
     # gRPC server port
@@ -1146,12 +1216,20 @@ def _main():
     pymerang_server_ip = args.pymerang_server_ip
     # pymerang server port
     pymerang_server_port = args.pymerang_server_port
-    # Server certificate
-    certificate = args.server_cert
+    # Northbound server certificate
+    nb_server_certificate = args.nb_server_cert
+    # Northbound server key
+    nb_server_key = args.nb_server_key
+    # Southbound server certificate
+    sb_server_certificate = args.sb_server_cert
     # Server key
-    key = args.server_key
+    sb_server_key = args.sb_server_key
+    # Client certificate
+    client_certificate = args.client_cert
     # Minimum interval between two consecutive topology dumps
     min_interval_between_topo_dumps = args.min_interval_between_topo_dumps
+    # Keep-alive interval
+    keep_alive_interval = args.keep_alive_interval
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
@@ -1170,9 +1248,13 @@ def _main():
         ospf6d_pwd=pwd,
         sb_interface=sb_interface,
         nb_interface=nb_interface,
-        secure=secure,
-        key=key,
-        certificate=certificate,
+        nb_secure=nb_secure,
+        sb_secure=sb_secure,
+        nb_server_key=nb_server_key,
+        nb_server_certificate=nb_server_certificate,
+        sb_server_key=sb_server_key,
+        sb_server_certificate=sb_server_certificate,
+        client_certificate=client_certificate,
         grpc_server_ip=grpc_server_ip,
         grpc_server_port=grpc_server_port,
         grpc_client_port=grpc_client_port,
@@ -1180,6 +1262,7 @@ def _main():
         pymerang_server_port=pymerang_server_port,
         min_interval_between_topo_dumps=min_interval_between_topo_dumps,
         topo_extraction=topo_extraction,
+        keep_alive_interval=keep_alive_interval,
         verbose=verbose
     )
     # Start the controller

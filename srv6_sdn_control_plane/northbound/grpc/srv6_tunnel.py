@@ -35,7 +35,7 @@ from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
-
+from srv6_sdn_controller_state import srv6_sdn_controller_state
 
 # Global variables definition
 
@@ -59,7 +59,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Verbose mode
         self.verbose = verbose
         # VPN dict
-        self.vpn_dict = controller_state.vpns
+        self.vpn_dict = None
         # Create SRv6 Manager
         self.srv6_manager = sb_grpc_client.SRv6Manager()
         # Initialize controller state
@@ -108,7 +108,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get WAN interface')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
-        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
+        tableid = self.controller_state_srv6.get_tableid(
+            overlay_name, tenantid)
         if tableid == -1:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -162,7 +163,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
-        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
+        tableid = self.controller_state_srv6.get_tableid(
+            overlay_name, tenantid)
         if tableid == -1:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -198,11 +200,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         #
         # Get a new table ID for the overlay
         logger.debug('Attempting to get a new table ID for the VPN')
-        tableid = self.controller_state_srv6.get_new_tableid(
+        tableid = srv6_sdn_controller_state.get_new_tableid(
             overlay_name, tenantid
         )
-        logger.debug('New table ID assigned to the VPN:%s', tableid)
-        logger.debug('Validating the table ID:\n%s' % tableid)
+        logger.debug('New table ID assigned to the VPN: %s', tableid)
+        logger.debug('Validating the table ID: %s' % tableid)
         # Validate the table ID
         if not srv6_controller_utils.validate_table_id(tableid):
             logger.warning('Invalid table ID: %s' % tableid)
@@ -213,13 +215,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % overlay_name)
         return NbStatusCode.STATUS_OK
 
-    def init_tunnel_mode(self, deviceid, overlay_info):
+    def init_tunnel_mode(self, deviceid, tenantid, overlay_info):
         logger.debug('Initiating tunnel mode on router %s'
                      % deviceid)
         # Initialize the tunnel mode on the router
         #
         # Get the router address
-        deviceip = self.controller_state.get_router_mgmtip(deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -265,11 +267,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % deviceid)
         return NbStatusCode.STATUS_OK
 
-    def init_overlay(self, overlay_name, overlay_type, tenantid, deviceid, overlay_info):
+    def init_overlay(self, overlayid, overlay_name, overlay_type, tenantid, deviceid, overlay_info):
         logger.debug('Initiating overlay %s on the device %s'
                      % (overlay_name, deviceid))
         # Get the router address
-        deviceip = self.controller_state.get_router_mgmtip(deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -288,8 +290,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID for the VPN
         logger.debug('Attempting to retrieve the table ID assigned to the VPN')
-        tableid = self.controller_state_srv6.get_tableid(
-            overlay_name, tenantid
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid
         )
         if tableid == -1:
             # Table ID not yet assigned
@@ -337,13 +339,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      'deviceid %s' % (overlay_name, deviceid))
         return NbStatusCode.STATUS_OK
 
-    def add_slice_to_overlay(self, overlay_name,
-                             deviceid, interface_name, overlay_info):
+    def add_slice_to_overlay(self, overlayid, overlay_name,
+                             deviceid, interface_name, tenantid, overlay_info):
         logger.debug('Attempting to add the slice %s from the router %s '
                      'to the overlay %s'
                      % (interface_name, deviceid, overlay_name))
         # Get router address
-        deviceip = self.controller_state.get_router_mgmtip(deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -470,7 +472,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Extract params from the VPN
-        tableid = self.controller_state_srv6.get_tableid(overlay_name, tenantid)
+        tableid = self.controller_state_srv6.get_tableid(
+            overlay_name, tenantid)
         if tableid == -1:
             # If the operation has failed, return an error message
             logger.warning('Cannot get table ID for the VPN %s' % overlay_name)
@@ -591,7 +594,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
 
     def get_overlays(self):
         # Create the response
-        response = srv6_vpn_pb2.SRv6VPNReply(status=SbStatusCode.STATUS_SUCCESS)
+        response = srv6_vpn_pb2.SRv6VPNReply(
+            status=SbStatusCode.STATUS_SUCCESS)
         # Build the VPNs list
         for _vpn in self.controller_state_srv6.controller_state.get_vpns():
             # Add a new VPN to the VPNs list
