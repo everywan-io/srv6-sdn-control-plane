@@ -124,8 +124,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
-        print('key local', key_local_to_remote)
-        print('key remote', key_remote_to_local)
         # get tunnel dictionaries from DB
         dictionary_local = self.overlays.find_one({
             '_id': overlayid,
@@ -139,14 +137,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             'created_tunnel.tunnel_key': key_remote_to_local}, {
             'created_tunnel.$.tunnel_key': 1}
         )
-        print('*/*/*/*/*/*/*/*/*dizionario locale gettato da db', dictionary_local)
-        print('*/*/*/*/*/*/*/*/*dizionario remote gettato da db', dictionary_remote)
         # If it's the first overlay for the devices, create dictionaries
         # else take tunnel info from DB dictionaries
         #
         # local site
         if dictionary_local == None:
-            print('\n\n*********************------> DIZIONARIO LOCALE CREATO')
             tunnel_local = {
                 'tunnel_key': key_local_to_remote,
                 'reach_subnets': [],
@@ -156,7 +151,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             tunnel_local = dictionary_local['created_tunnel'][0]
         # remote site
         if dictionary_remote == None:
-            print('\n\n*********************------> DIZIONARIO REMOTE  CREATO')
             tunnel_remote = {
                 'tunnel_key': key_remote_to_local,
                 'reach_subnets': [],
@@ -195,14 +189,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             # update local dictionary
             tunnel_remote['fdb_entry_config'] = True
         # set route in local site for the remote subnet, if not present
-        print('\n\n\n\n\n********************\nremote sites', lan_sub_remote_sites)
-        print('\nlocal sites', lan_sub_local_sites)
-        print('\ntunnel remote', tunnel_remote)
-        print('\ntunnel local', tunnel_local)
         for lan_sub_remote_site in lan_sub_remote_sites:
             lan_sub_remote_site = lan_sub_remote_site['subnet']
             if lan_sub_remote_site not in tunnel_local.get('reach_subnets'):
-                print('check superato')
                 response = self.srv6_manager.create_iproute(
                     mgmt_ip_local_site, self.grpc_client_port,
                     destination=lan_sub_remote_site, gateway=vtep_ip_remote_site.split(
