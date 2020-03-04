@@ -60,7 +60,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot add interface %s to the VRF %s in %s'
                            % (interface_name, vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-
         # get subnet for local and remote site
         subnets = srv6_sdn_controller_state.get_ip_subnets(
             routerid, interface_name)
@@ -78,7 +77,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     logger.warning('Cannot set route for %s (gateway %s) '
                                    'in %s ' % (subnet, gateway, mgmt_ip_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -395,7 +393,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove interface %s from VRF %s in %s'
                            % (interface_name, vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -456,6 +453,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if tunnel_remote.get('fdb_entry_config') == True:
             # Check if there is the route for the local subnet in the remote device
             for lan_sub_local_site in lan_sub_local_sites:
+                lan_sub_local_site = lan_sub_local_site['subnet']
                 if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
                     # remove route in remote site
                     response = self.srv6_manager.remove_iproute(
@@ -475,6 +473,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if len(tunnel_remote.get('reach_subnets')) == 0:
             # Check if there is the route for remote subnet in the local site
             for lan_sub_remote_site in lan_sub_remote_sites:
+                lan_sub_remote_site = lan_sub_remote_site['subnet']
                 if lan_sub_remote_site in tunnel_local.get('reach_subnets'):
                     # remove route in local site
                     response = self.srv6_manager.remove_iproute(
