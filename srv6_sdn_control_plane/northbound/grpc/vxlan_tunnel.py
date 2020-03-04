@@ -358,9 +358,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
-        # Remove IP routes is optional
-        # Routes are removed when the interfaces is removed
-        # from the VRF
+        # Remove IP routes from the VRF
+        # This step is optional, because the routes are
+        # automatically removed when the interfaces is removed
+        # from the VRF. We do it just for symmetry with respect
+        # to the add_slice_to_overlay function
         #
         # get subnet for local and remote site
         subnets = srv6_sdn_controller_state.get_ip_subnets(
@@ -393,7 +395,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove interface %s from VRF %s in %s'
                            % (interface_name, vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        
+
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -464,10 +466,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning('Cannot remove route to %s in %s'
-                                    % (lan_sub_local_site, mgmt_ip_remote_site))
+                                       % (lan_sub_local_site, mgmt_ip_remote_site))
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
-                    tunnel_remote.get('reach_subnets').remove(lan_sub_local_site)
+                    tunnel_remote.get('reach_subnets').remove(
+                        lan_sub_local_site)
         # Check if the subnet removed is the last subnet in the considered overlay in the local site
         if len(tunnel_remote.get('reach_subnets')) == 0:
             # Check if there is the route for remote subnet in the local site
@@ -482,10 +485,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning('Cannot remove route to %s in %s'
-                                    % (lan_sub_remote_site, mgmt_ip_local_site))
+                                       % (lan_sub_remote_site, mgmt_ip_local_site))
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
-                    tunnel_local.get('reach_subnets').remove(lan_sub_remote_site)
+                    tunnel_local.get('reach_subnets').remove(
+                        lan_sub_remote_site)
             # Check if there is the fdb entry in remote site for local site
             if tunnel_remote.get('fdb_entry_config') == True:
                 # remove FDB entry in remote site
