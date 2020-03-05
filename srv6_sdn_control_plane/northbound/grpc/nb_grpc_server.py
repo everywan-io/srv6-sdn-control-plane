@@ -1185,10 +1185,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                    % (overlay_name, site1, site2, tenantid))
                             logging.warning(err)
                             # Remove overlay DB status
-                            #if srv6_sdn_controller_state.remove_overlay(
-                            #        overlayid) is not True:
-                            #    logging.error(
-                            #        'Cannot remove overlay. Inconsistent data')
+                            if srv6_sdn_controller_state.remove_overlay(
+                                    overlayid) is not True:
+                                logging.error(
+                                    'Cannot remove overlay. Inconsistent data')
                             return OverlayServiceReply(
                                 status=Status(code=status_code, reason=err))
                 # Add the slice to the configured set
@@ -1252,8 +1252,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logging.debug('Checking the overlay: %s' % overlayid)
-        overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-            overlayid])
+        overlays = srv6_sdn_controller_state.get_overlays(
+            overlayids=[overlayid])
         if overlays is None:
             err = 'Error getting the overlay'
             logging.error(err)
@@ -1405,8 +1405,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return TenantReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Get the overlay
-            overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                overlayid])
+            overlays = srv6_sdn_controller_state.get_overlays(
+                overlayids=[overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)

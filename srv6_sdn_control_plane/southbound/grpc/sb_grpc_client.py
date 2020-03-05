@@ -86,9 +86,6 @@ def parse_grpc_error(e):
 class SRv6Manager:
 
     def __init__(self, secure=DEFAULT_SECURE, certificate=DEFAULT_CERTIFICATE):
-        print('\n\n\nTLS mode\n')
-        print(secure)
-        print(certificate)
         self.SECURE = secure
         if secure is True:
             if certificate is None:

@@ -925,7 +925,7 @@ class SRv6Controller(object):
             target=self.dump_and_draw_topo
         )
         thread.daemon = True
-        #thread.start()
+        thread.start()
         # Start registration server
         thread = Thread(
             target=self.start_registration_server
