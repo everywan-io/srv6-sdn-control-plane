@@ -221,12 +221,18 @@ class NorthboundInterface:
                         logging.error('Provided an invalid address: %s' % addr)
                         return None
             if 'subnets' in _interface:
-                for subnet in _interface['subnets']:
-                    family = srv6_controller_utils.getAddressFamily(subnet)
+                for _subnet in _interface['subnets']:
+                    family = srv6_controller_utils.getAddressFamily(_subnet['subnet'])
                     if family == AF_INET:
-                        interface.ipv4_subnets.append(subnet)
+                        subnet = interface.ipv4_subnets.add()
+                        subnet.subnet = _subnet['subnet']
+                        if 'gateway' in _subnet:
+                            subnet.gateway = _subnet['gateway']
                     elif family == AF_INET6:
-                        interface.ipv6_subnets.append(subnet)
+                        subnet = interface.ipv6_subnets.add()
+                        subnet.subnet = _subnet['subnet']
+                        if 'gateway' in _subnet:
+                            subnet.gateway = _subnet['gateway']
                     else:
                         logging.error(
                             'Provided an invalid subnet: %s' % subnet)
