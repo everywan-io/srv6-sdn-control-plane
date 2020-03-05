@@ -505,7 +505,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 else:
                     if len(interface.ipv4_addrs) > 0:
                         addrs = list()
-                        nets = list()
                         for addr in interfaces[interface.name]['ipv4_addrs']:
                             addrs.append(addr)
                         response = self.srv6_manager.remove_many_ipaddr(
@@ -577,9 +576,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 err = status_codes_pb2.STATUS_INTERNAL_ERROR
                             interfaces[interface.name]['ipv6_addrs'].append(
                                 ipv6_addr)
+                    interfaces[interface.name]['ipv4_subnets'] = list()
                     for subnet in interface.ipv4_subnets:
                         interfaces[interface.name]['ipv4_subnets'].append(
-                            subnet)
+                            {'subnet': subnet, 'gateway': gateway})
+                    interfaces[interface.name]['ipv6_subnets'] = list()
                     for subnet in interface.ipv6_subnets:
                         interfaces[interface.name]['ipv6_subnets'].append(
                             subnet)
