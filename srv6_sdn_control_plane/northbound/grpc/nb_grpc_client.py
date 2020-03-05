@@ -209,6 +209,9 @@ class NorthboundInterface:
         for _interface in interfaces:
             interface = device.interfaces.add()
             interface.name = _interface['name']
+            logging.error('Invalid name provided for the '
+                          'interface %s'
+                          % _interface)
             if 'addrs' in _interface:
                 for ip_addr in _interface['addrs']:
                     addr = ip_addr.split('/')[0]
@@ -222,7 +225,12 @@ class NorthboundInterface:
                         return None
             if 'subnets' in _interface:
                 for _subnet in _interface['subnets']:
-                    family = srv6_controller_utils.getAddressFamily(_subnet['subnet'])
+                    if _subnet.get('subnet') is None:
+                        logging.error('Invalid subnet provided for the '
+                                      'interface %s: %s'
+                                      % (_subnet, interface.name))
+                    family = srv6_controller_utils.getAddressFamily(
+                        _subnet['subnet'])
                     if family == AF_INET:
                         subnet = interface.ipv4_subnets.add()
                         subnet.subnet = _subnet['subnet']
