@@ -439,6 +439,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Validate subnets
                 for subnet in interface.ipv4_subnets:
+                    gateway = subnet.gateway
+                    subnet = subnet.subnet
                     if not srv6_controller_utils.validate_ipv4_address(subnet):
                         err = ('Invalid configuration for device %s\n'
                                'Invalid IPv4 subnet %s for the interface %s'
@@ -446,7 +448,19 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    if gateway is not None and gateway != '':
+                        if (not srv6_controller_utils
+                                .validate_ipv4_address(gateway)):
+                            err = ('Invalid configuration for device %s\n'
+                                   'Invalid IPv4 gateway %s for the subnet %s '
+                                   'on the interface %s'
+                                   % (deviceid, gateway, subnet, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 for subnet in interface.ipv6_subnets:
+                    gateway = subnet.gateway
+                    subnet = subnet.subnet
                     if not srv6_controller_utils.validate_ipv6_address(subnet):
                         err = ('Invalid configuration for device %s\n'
                                'Invalid IPv6 subnet %s for the interface %s'
@@ -454,6 +468,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    if gateway is not None and gateway != '':
+                        if (not srv6_controller_utils
+                                .validate_ipv6_address(gateway)):
+                            err = ('Invalid configuration for device %s\n'
+                                   'Invalid IPv6 gateway %s for the subnet %s '
+                                   'on the interface %s'
+                                   % (deviceid, gateway, subnet, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(
+                                    code=STATUS_BAD_REQUEST, reason=err))
             # At least one WAN interface is required
             if wan_interfaces_counter == 0:
                 err = ('Invalid configuration for device %s\n'
@@ -578,12 +603,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 ipv6_addr)
                     interfaces[interface.name]['ipv4_subnets'] = list()
                     for subnet in interface.ipv4_subnets:
+                        gateway = subnet.gateway
+                        subnet = subnet.subnet
                         interfaces[interface.name]['ipv4_subnets'].append(
                             {'subnet': subnet, 'gateway': gateway})
                     interfaces[interface.name]['ipv6_subnets'] = list()
                     for subnet in interface.ipv6_subnets:
+                        gateway = subnet.gateway
+                        subnet = subnet.subnet
                         interfaces[interface.name]['ipv6_subnets'].append(
-                            subnet)
+                            {'subnet': subnet, 'gateway': gateway})
             # Push the new configuration
             if err == STATUS_OK:
                 logging.debug('The device %s has been configured successfully'
@@ -664,8 +693,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 interface.ipv6_addrs.extend(ifinfo['ipv6_addrs'])
                 interface.ext_ipv4_addrs.extend(ifinfo['ext_ipv4_addrs'])
                 interface.ext_ipv6_addrs.extend(ifinfo['ext_ipv6_addrs'])
-                interface.ipv4_subnets.extend(ifinfo['ipv4_subnets'])
-                interface.ipv6_subnets.extend(ifinfo['ipv6_subnets'])
+                for _subnet in ifinfo['ipv4_subnets']:
+                    subnet = interface.ipv4_subnets.add()
+                    subnet.subnet = _subnet['subnet']
+                    subnet.gateway = _subnet['gateway']
+                for _subnet in ifinfo['ipv6_subnets']:
+                    subnet = interface.ipv6_subnets.add()
+                    subnet.subnet = _subnet['subnet']
+                    subnet.gateway = _subnet['gateway']
                 interface.type = ifinfo['type']
             mgmtip = _device.get('mgmtip')
             name = _device.get('name')
@@ -1218,8 +1253,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Let's check if the overlay exists
         logging.debug('Checking the overlay: %s' % overlayid)
-        overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                                                          overlayid])
+        overlays = srv6_sdn_controller_state.get_overlays(
+            overlayids=[overlayid])
         if overlays is None:
             err = 'Error getting the overlay'
             logging.error(err)
@@ -1267,8 +1302,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                'site2 %s, tenant %s)'
                                % (overlay_name, site1, site2, tenantid))
                         logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
+                        return status_code, err
             # Mark the site1 as unconfigured
             configured_slices.remove(site1)
             # Remove the interface from the overlay
@@ -1283,8 +1317,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                        'device %s, slice %s, tenant %s)'
                        % (overlay_name, deviceid, interface_name, tenantid))
                 logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=status_code, reason=err))
+                return status_code, err
             # Check if the overlay and the tunnel mode
             # has already been deleted on the device
             devices.remove(deviceid)
@@ -1300,8 +1333,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     err = ('Cannot destroy overlay (overlay %s, device %s '
                            'tenant %s)' % (overlay_name, deviceid, tenantid))
                     logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=status_code, reason=err))
+                    return status_code, err
             # Destroy tunnel mode on the devices
             counter = (srv6_sdn_controller_state
                        .dec_and_get_tunnel_mode_counter(tunnel_name,
@@ -1313,8 +1345,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     err = ('Cannot destroy tunnel mode (device %s, tenant %s)'
                            % (deviceid, tenantid))
                     logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=status_code, reason=err))
+                    return status_code, err
             elif counter is None:
                 err = 'Cannot decrease tunnel mode counter'
                 logging.error(err)
@@ -1326,8 +1357,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             err = ('Cannot destroy overlay data (overlay %s, tenant %s)'
                    % (overlay_name, tenantid))
             logging.warning(err)
-            return OverlayServiceReply(
-                status=Status(code=status_code, reason=err))
+            return status_code, err
         # Delete the overlay
         success = srv6_sdn_controller_state.remove_overlay(overlayid)
         if success is None or success is False:
@@ -1376,8 +1406,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return TenantReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Get the overlay
-            overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                                                              overlayid])
+            overlays = srv6_sdn_controller_state.get_overlays(
+                overlayids=[overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1659,7 +1689,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's check if the overlay exists
             logging.debug('Checking the overlay: %s' % overlayid)
             overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                                                              overlayid])
+                overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1941,8 +1971,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
                  grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
-                 secure=DEFAULT_SECURE, key=DEFAULT_KEY,
-                 certificate=DEFAULT_CERTIFICATE,
+                 nb_secure=DEFAULT_SECURE, server_key=DEFAULT_KEY,
+                 server_certificate=DEFAULT_CERTIFICATE,
+                 sb_secure=DEFAULT_SECURE,
+                 client_certificate=DEFAULT_CERTIFICATE,
                  southbound_interface=DEFAULT_SB_INTERFACE,
                  topo_graph=None, vpn_dict=None,
                  devices=None,
@@ -1957,7 +1989,8 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     #    vpn_file=vpn_file
     # )
     # Create SRv6 Manager
-    srv6_manager = sb_grpc_client.SRv6Manager()
+    srv6_manager = sb_grpc_client.SRv6Manager(secure=sb_secure,
+                                              certificate=client_certificate)
     # Setup gRPC server
     #
     # Create the server and add the handler
@@ -1970,11 +2003,11 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
         service, grpc_server
     )
     # If secure mode is enabled, we need to create a secure endpoint
-    if secure:
+    if nb_secure:
         # Read key and certificate
-        with open(key, 'rb') as f:
+        with open(server_key, 'rb') as f:
             key = f.read()
-        with open(certificate, 'rb') as f:
+        with open(server_certificate, 'rb') as f:
             certificate = f.read()
         # Create server SSL credentials
         grpc_server_credentials = grpc.ssl_server_credentials(

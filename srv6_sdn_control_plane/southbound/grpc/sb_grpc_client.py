@@ -95,7 +95,7 @@ class SRv6Manager:
             self.CERTIFICATE = certificate
 
     # Build a grpc stub
-    def get_grpc_session(self, ip_address, port, secure):
+    def get_grpc_session(self, ip_address, port):
         addr_family = sb_grpc_utils.getAddressFamily(ip_address)
         if addr_family == AF_INET6:
             ip_address = "ipv6:[%s]:%s" % (ip_address, port)
@@ -105,7 +105,7 @@ class SRv6Manager:
             print('Invalid address: %s' % ip_address)
             return
         # If secure we need to establish a channel with the secure endpoint
-        if secure:
+        if self.SECURE:
             # Open the certificate file
             with open(self.CERTIFICATE, 'rb') as f:
                 certificate = f.read()
@@ -126,7 +126,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Shutdown the device
             response = srv6_stub.ShutdownDevice(srv6_request)
             # Create the response
@@ -163,7 +163,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Add the SRv6 path
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -200,7 +200,7 @@ class SRv6Manager:
                 try:
                     # Get the reference of the stub
                     srv6_stub, channel = self.get_grpc_session(
-                        server_ip, server_port, self.SECURE)
+                        server_ip, server_port)
                     # Add the SRv6 path
                     response = srv6_stub.Create(srv6_request)
                     # Create the response
@@ -246,7 +246,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove the SRv6 path
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -282,7 +282,7 @@ class SRv6Manager:
                 try:
                     # Get the reference of the stub
                     srv6_stub, channel = self.get_grpc_session(
-                        server_ip, server_port, self.SECURE)
+                        server_ip, server_port)
                     # Remove the SRv6 path
                     response = srv6_stub.Remove(srv6_request)
                     # Create the response
@@ -326,7 +326,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create the SRv6 local processing function
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -379,7 +379,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove SRv6 local processing function
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -410,7 +410,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create VRF device
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -449,7 +449,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Update VRF device
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -475,7 +475,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove the VRF device
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -496,7 +496,7 @@ class SRv6Manager:
     def get_interface(self, server_ip, server_port, interfaces=[]):
         # Get the reference of the stub
         srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port, self.SECURE))
+                              .get_grpc_session(server_ip, server_port))
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -510,7 +510,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create interface
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -548,7 +548,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create interface
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -593,7 +593,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create IP rule
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -644,7 +644,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove IP rule
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -687,7 +687,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create IP Route
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -740,7 +740,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove IP Route
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -772,7 +772,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create IP Address
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -809,7 +809,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove IP Address
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -846,7 +846,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove IP Address
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -879,7 +879,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create GRE interface
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -907,7 +907,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove GRE interface
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -939,7 +939,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create IP neigh
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -969,7 +969,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove IP neigh
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -998,7 +998,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Add vxlan
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1024,7 +1024,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove VXLAN
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1051,7 +1051,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Create FDB entries
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1078,7 +1078,7 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Remove fdb entries
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1132,7 +1132,7 @@ class NetworkEventsListener:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port, self.SECURE)
+                server_ip, server_port)
             # Listen for Netlink notifications
             for event in srv6_stub.Listen(request):
                 # Parse the event
