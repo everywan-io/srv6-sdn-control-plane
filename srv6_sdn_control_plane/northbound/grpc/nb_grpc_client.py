@@ -209,34 +209,42 @@ class NorthboundInterface:
         for _interface in interfaces:
             interface = device.interfaces.add()
             interface.name = _interface['name']
-            if 'addrs' in _interface:
-                for ip_addr in _interface['addrs']:
-                    addr = ip_addr.split('/')[0]
-                    family = srv6_controller_utils.getAddressFamily(addr)
-                    if family == AF_INET:
-                        interface.ipv4_addrs.append(ip_addr)
-                    elif family == AF_INET6:
-                        interface.ipv6_addrs.append(ip_addr)
-                    else:
+            if 'ipv4_addrs' in _interface:
+                for ip_addr in _interface['ipv4_addrs']:
+                    addr = ip_addr
+                    if not srv6_controller_utils.validate_ipv4_address(addr):
                         logging.error('Provided an invalid address: %s' % addr)
                         return None
-            if 'subnets' in _interface:
-                for _subnet in _interface['subnets']:
-                    family = srv6_controller_utils.getAddressFamily(_subnet['subnet'])
-                    if family == AF_INET:
-                        subnet = interface.ipv4_subnets.add()
-                        subnet.subnet = _subnet['subnet']
-                        if 'gateway' in _subnet:
-                            subnet.gateway = _subnet['gateway']
-                    elif family == AF_INET6:
-                        subnet = interface.ipv6_subnets.add()
-                        subnet.subnet = _subnet['subnet']
-                        if 'gateway' in _subnet:
-                            subnet.gateway = _subnet['gateway']
-                    else:
+                    interface.ipv4_addrs.append(ip_addr)
+            if 'ipv4_subnets' in _interface:
+                for _subnet in _interface['ipv4_subnets']:
+                    if not srv6_controller_utils.validate_ipv4_address(
+                            _subnet['subnet']):
                         logging.error(
-                            'Provided an invalid subnet: %s' % subnet)
+                            'Provided an invalid subnet: %s' % _subnet)
                         return None
+                    subnet = interface.ipv4_subnets.add()
+                    subnet.subnet = _subnet['subnet']
+                    if 'gateway' in _subnet:
+                        subnet.gateway = _subnet['gateway']
+            if 'ipv6_addrs' in _interface:
+                for ip_addr in _interface['ipv6_addrs']:
+                    addr = ip_addr
+                    if not srv6_controller_utils.validate_ipv6_address(addr):
+                        logging.error('Provided an invalid address: %s' % addr)
+                        return None
+                    interface.ipv6_addrs.append(ip_addr)
+            if 'ipv6_subnets' in _interface:
+                for _subnet in _interface['ipv6_subnets']:
+                    if not srv6_controller_utils.validate_ipv6_address(
+                            _subnet['subnet']):
+                        logging.error(
+                            'Provided an invalid subnet: %s' % _subnet)
+                        return None
+                    subnet = interface.ipv6_subnets.add()
+                    subnet.subnet = _subnet['subnet']
+                    if 'gateway' in _subnet:
+                        subnet.gateway = _subnet['gateway']
             if 'type' in _interface:
                 interface.type = _interface['type']
         try:
