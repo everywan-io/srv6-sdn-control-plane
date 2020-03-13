@@ -533,7 +533,8 @@ class SRv6Controller(object):
     # received from the nodes through the Southbound interface
     def listen_network_events(self, routerid):
         topo_changed = False
-        router = srv6_sdn_controller_state.get_router_mgmtip(deviceid=routerid)
+        router = srv6_sdn_controller_state.get_router_mgmtip(
+            deviceid=routerid)
         if router is None:
             logging.warning('Error in listen_network_events(): '
                             'Cannot find an address for the router %s'
