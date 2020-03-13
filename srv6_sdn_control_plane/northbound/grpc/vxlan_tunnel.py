@@ -3,6 +3,7 @@
 from __future__ import absolute_import, division, print_function
 # General imports
 import logging
+from bson.objectid import ObjectId
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
@@ -128,13 +129,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
         # get tunnel dictionaries from DB
         dictionary_local = self.overlays.find_one({
-            '_id': overlayid,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_local_to_remote}, {
             'created_tunnel.$.tunnel_key': 1}
         )
         dictionary_remote = self.overlays.find_one({
-            '_id': overlayid,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_remote_to_local}, {
             'created_tunnel.$.tunnel_key': 1}
@@ -205,7 +206,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning('Cannot set route for %s in %s '
-                                   % (wan_ip_remote_site, mgmt_ip_local_site))
+                                   % (lan_sub_remote_site, mgmt_ip_local_site))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
                 tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
@@ -231,7 +232,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         #
         # local site
         new_doc_created = self.overlays.update_one({
-            'name': overlay_name,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': {'$ne': tunnel_local.get(
                 'tunnel_key')}}, {
@@ -242,7 +243,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         }).matched_count == 1
         if new_doc_created is False:
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
                 'created_tunnel.tunnel_key': tunnel_local.get('tunnel_key')}, {
                     '$set': {
@@ -253,7 +254,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 upsert=True)
         # remote site
         new_doc_created = self.overlays.update_one({
-            'name': overlay_name,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': {'$ne': tunnel_remote.get(
                 'tunnel_key')}}, {
@@ -264,7 +265,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         }).matched_count == 1
         if new_doc_created is False:
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
                 'created_tunnel.tunnel_key': tunnel_remote.get(
                     'tunnel_key')}, {
@@ -456,14 +457,14 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         #
         # local site
         tunnel_local = self.overlays.find_one({
-            'name': overlay_name,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_local_to_remote}, {
             'created_tunnel.$.tunnel_key': 1}
         )['created_tunnel'][0]
         # remote site
         tunnel_remote = self.overlays.find_one({
-            'name': overlay_name,
+            '_id': ObjectId(overlayid),
             'tenantid': tenantid,
             'created_tunnel.tunnel_key': key_remote_to_local}, {
             'created_tunnel.$.tunnel_key': 1}
@@ -552,7 +553,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 tunnel_remote.get('fdb_entry_config') is False:
             # local site
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid}, {
                     '$pull': {
                         'created_tunnel': {
@@ -560,7 +561,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             )
             # remote site
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid}, {
                     '$pull': {
                         'created_tunnel': {
@@ -569,7 +570,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         else:
             # local site
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
                 'created_tunnel.tunnel_key': tunnel_local.get('tunnel_key')}, {
                     '$set': {
@@ -580,7 +581,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             )
             # remote site
             self.overlays.update_one({
-                'name': overlay_name,
+                '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
                 'created_tunnel.tunnel_key': tunnel_remote.get(
                     'tunnel_key')}, {
