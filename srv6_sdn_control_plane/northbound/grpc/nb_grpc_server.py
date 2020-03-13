@@ -96,6 +96,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
+                 auth_controller=None,
                  verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
@@ -105,9 +106,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         self.southbound_interface = southbound_interface
         # SRv6 Manager
         self.srv6_manager = srv6_manager
+        # Authentication controller
+        self.auth_controller = auth_controller
         # Initialize tunnel state
-        self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port,
-                                                     verbose).tunnel_modes
+        self.tunnel_modes = tunnel_utils.TunnelState(
+            srv6_manager=srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose
+        ).tunnel_modes
         self.supported_tunnel_modes = [t_mode for t_mode in self.tunnel_modes]
         logging.info('*** Supported tunnel modes: %s'
                      % self.supported_tunnel_modes)
@@ -824,6 +830,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                    'Error while shutting down the device')
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
+        # Remove management information from the controller (e.g. VTEP info)
+        if self.auth_controller is not None:
+            res = self.auth_controller.unregister_device(deviceid, tenantid)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                err = ('Cannot unregister the device. '
+                       'Error while removing management information')
+                logging.error(err)
+                return STATUS_INTERNAL_SERVER_ERROR, err
         # Remove device from controller state
         success = srv6_sdn_controller_state.unregister_device(deviceid)
         if success is None or success is False:
@@ -1980,6 +1994,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  devices=None,
                  vpn_file=DEFAULT_VPN_DUMP,
                  controller_state=None,
+                 auth_controller=None,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
     # controller_state = srv6_controller_utils.ControllerState(
@@ -1996,8 +2011,11 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
     service = NorthboundInterface(
-        grpc_client_port, srv6_manager,
-        southbound_interface, verbose
+        grpc_client_port=grpc_client_port,
+        srv6_manager=srv6_manager,
+        southbound_interface=southbound_interface,
+        auth_controller=auth_controller,
+        verbose=verbose
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server
@@ -2161,7 +2179,7 @@ if __name__ == '__main__':
         start_server(
             grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
             certificate, southbound_interface, topo_graph, None, vpn_dump,
-            verbose
+            None, verbose
         )
         while True:
             time.sleep(5)

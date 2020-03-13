@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 class VXLANTunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
-    def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+    def __init__(self, srv6_manager,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  verbose=DEFAULT_VERBOSE):
         # Name of the tunnel mode
         self.name = 'VXLAN'
@@ -30,7 +31,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Verbose mode
         self.verbose = verbose
         # Create SRv6 Manager
-        self.srv6_manager = sb_grpc_client.SRv6Manager()
+        self.srv6_manager = srv6_manager
         # Get connection to MongoDB
         client = srv6_sdn_controller_state.get_mongodb_session()
         # Get the database

@@ -50,7 +50,8 @@ logger = logging.getLogger(__name__)
 class SRv6Tunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
-    def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+    def __init__(self, srv6_manager,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  controller_state=None, verbose=DEFAULT_VERBOSE):
         # Name of the tunnel mode
         self.name = 'SRv6'
@@ -61,7 +62,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # VPN dict
         self.vpn_dict = None
         # Create SRv6 Manager
-        self.srv6_manager = sb_grpc_client.SRv6Manager()
+        self.srv6_manager = srv6_manager
         # Initialize controller state
         self.controller_state = controller_state
         # Initialize controller state
@@ -221,7 +222,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Initialize the tunnel mode on the router
         #
         # Get the router address
-        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -271,7 +273,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('Initiating overlay %s on the device %s'
                      % (overlay_name, deviceid))
         # Get the router address
-        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -345,7 +348,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      'to the overlay %s'
                      % (interface_name, deviceid, overlay_name))
         # Get router address
-        deviceip = srv6_sdn_controller_state.get_device_mgmtip(tenantid, deviceid)
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
