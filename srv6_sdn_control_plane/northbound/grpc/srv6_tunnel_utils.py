@@ -30,7 +30,7 @@ from ipaddress import IPv6Interface
 from ipaddress import IPv6Network
 # SRv6 dependencies
 #from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
-from srv6_sdn_control_plane import srv6_controller_utils
+from srv6_sdn_controller_state import srv6_sdn_controller_state
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -84,54 +84,17 @@ class ControllerStateSRv6:
     """
 
     def __init__(self, controller_state):
-        # Create Table IDs allocator
-        self.tableid_allocator = srv6_controller_utils.TableIDAllocator()
         # Create SIDs allocator
         self.sid_allocator = SIDAllocator()
-        # Controller state
-        self.controller_state = controller_state
-        # Interfaces in VPN
-        self.interfaces_in_vpn = dict()
-        # SRv6 VPNs
-        self.srv6_vpns = dict()
-        # Sites in VPN
-        self.sites_in_vpn = dict()
-        # If VPN dumping is enabled, import the VPNs from the dump
-        '''
-        if vpn_file is not None:
-            try:
-                self.import_vpns_from_dump()
-            except:
-                print('Corrupted VPN file')
-        '''
-        # Number of tunnels between a device and a slice
-        self.num_tunnels = dict()
-
-    # Return VPN type
-    def get_vpn_tableid(self, vpn_name):
-        print('srv6', self.srv6_vpns)
-        if vpn_name not in self.srv6_vpns:
-            return None
-        return self.srv6_vpns[vpn_name].tableid
 
     # Return SID
-    def get_sid(self, routerid, tableid):
-        loopbacknet = self.controller_state.get_loopbacknet(routerid)
+    def get_sid(self, deviceid, tenantid, tableid):
+        loopbacknet = srv6_sdn_controller_state.get_loopbacknet_ipv6(
+            deviceid, tenantid)
         return self.sid_allocator.getSID(loopbacknet, tableid)
 
     # Return SID
-    def get_sid_family(self, routerid):
-        loopbacknet = self.controller_state.get_loopbacknet(routerid)
+    def get_sid_family(self, deviceid, tenantid):
+        loopbacknet = srv6_sdn_controller_state.get_loopbacknet_ipv6(
+            deviceid, tenantid)
         return self.sid_allocator.getSIDFamily(loopbacknet)
-
-    # Get a new table ID
-    def get_new_tableid(self, vpn_name, tenantid):
-        return self.tableid_allocator.get_new_tableid(vpn_name, tenantid)
-
-    # Get a new table ID
-    def get_tableid(self, vpn_name, tenantid):
-        return self.tableid_allocator.get_tableid(vpn_name, tenantid)
-
-    # Release a table ID
-    def release_tableid(self, vpn_name, tenantid):
-        return self.tableid_allocator.release_tableid(vpn_name, tenantid)

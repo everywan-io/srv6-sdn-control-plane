@@ -59,14 +59,15 @@ DEFAULT_CERTIFICATE = 'cert_client.pem'
 
 
 # Parser for gRPC errors
-def parse_grpc_error(e):
+def parse_grpc_error(e, ip, port):
     status_code = e.code()
     details = e.details()
     logging.error('gRPC client reported an error: %s, %s'
                   % (status_code, details))
     if grpc.StatusCode.UNAVAILABLE == status_code:
         code = NbStatusCode.STATUS_SERVICE_UNAVAILABLE
-        reason = 'Unable to contact controller (unreachable gRPC server)'
+        reason = ('Unable to contact controller - gRPC server is '
+                  'unreachable (ip %s, port %s)' % (ip, port))
     elif grpc.StatusCode.UNAUTHENTICATED == status_code:
         code = NbStatusCode.STATUS_UNAUTHORIZED
         reason = details
@@ -130,7 +131,7 @@ class NorthboundInterface:
             # Create the response
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -149,7 +150,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -170,7 +171,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -191,7 +192,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -256,7 +257,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -365,7 +366,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason, devices
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
             response = response[0], response[1], None
         # Let's close the session
         channel.close()
@@ -396,7 +397,7 @@ class NorthboundInterface:
             # Create the response
             response = response.status.code, response.status.reason, topology
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
             response = response[0], response[1], None
         # Let's close the session
         channel.close()
@@ -449,7 +450,7 @@ class NorthboundInterface:
             # Create the response
             response = response.status.code, response.status.reason, tunnels
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
             response = response[0], response[1], None
         # Let's close the session
         channel.close()
@@ -477,7 +478,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -498,7 +499,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -523,7 +524,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -548,7 +549,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response
@@ -592,7 +593,7 @@ class NorthboundInterface:
             # Return
             response = response.status.code, response.status.reason
         except grpc.RpcError as e:
-            response = parse_grpc_error(e)
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
         # Let's close the session
         channel.close()
         # Return the response

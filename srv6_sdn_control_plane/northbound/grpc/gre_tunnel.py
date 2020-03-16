@@ -83,8 +83,8 @@ class GRETunnel(tunnel_mode.TunnelMode):
         # Get the VPN type
         overlay_type = self.controller_state_gre.overlay_type[overlay_name]
 
-        local_router = self.controller_state.get_router_mgmtip(local_site.routerid)
-        remote_router = self.controller_state.get_router_mgmtip(remote_site.routerid)
+        local_router = self.controller_state.get_router_mgmtip(local_site.routerid, tenantid)
+        remote_router = self.controller_state.get_router_mgmtip(remote_site.routerid, tenantid)
 
         tableid = self.controller_state_gre.get_tableid(overlay_name)
 

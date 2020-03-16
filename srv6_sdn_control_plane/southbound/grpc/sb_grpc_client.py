@@ -13,6 +13,7 @@ import os
 import logging
 from socket import AF_INET, AF_INET6
 from threading import Thread
+from srv6_sdn_proto.status_codes_pb2 import SbStatusCode
 
 
 ################## Setup these variables ##################
@@ -217,11 +218,13 @@ class SRv6Manager:
                                device, segments=[],
                                encapmode="encap", table=-1):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_srv6_explicit_path(self, server_ip, server_port, destination,
                                   device, segments=[],
                                   encapmode="encap", table=-1):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def remove_srv6_explicit_path(self, server_ip, server_port, destination,
                                   device='', segments=[],
@@ -343,12 +346,14 @@ class SRv6Manager:
                                            nexthop="", table=-1,
                                            interface="", segments=[]):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_srv6_local_processing_function(self, server_ip, server_port, segment,
                                               action, device, localsid_table,
                                               nexthop="", table=-1,
                                               interface="", segments=[]):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def remove_srv6_local_processing_function(self, server_ip, server_port, segment,
                                               localsid_table, action="",
@@ -424,6 +429,7 @@ class SRv6Manager:
 
     def get_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[], op=None):
         # Create message request
@@ -492,6 +498,7 @@ class SRv6Manager:
     def create_interface(self, server_ip, server_port, ifindex, name, macaddr,
                          ipaddrs, state, ospf_adv):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def get_interface(self, server_ip, server_port, interfaces=[]):
         # Get the reference of the stub
@@ -563,6 +570,7 @@ class SRv6Manager:
     def remove_interface(self, server_ip, server_port, ifindex, name, macaddr,
                          ipaddrs, state, ospf_adv):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     # CRUD IP rule
 
@@ -610,12 +618,14 @@ class SRv6Manager:
                    destination="", dst_len=-1, source="",
                    src_len=-1, in_interface="", out_interface=""):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_iprule(self, server_ip, server_port, family, table=-1,
                       priority=-1, action="", scope=-1,
                       destination="", dst_len=-1, source="",
                       src_len=-1, in_interface="", out_interface=""):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def remove_iprule(self, server_ip, server_port, family, table=-1,
                       priority=-1, action="", scope=-1,
@@ -704,12 +714,14 @@ class SRv6Manager:
                     scope=-1, preferred_source="", src_len=-1,
                     in_interface="", out_interface="", gateway=""):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_iproute(self, server_ip, server_port, family=-1, tos="", type="",
                        table=-1, proto=-1, destination="", dst_len=-1,
                        scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def remove_iproute(self, server_ip, server_port, family=-1, tos="", type="",
                        table=-1, proto=-1, destination="", dst_len=-1,
@@ -787,10 +799,12 @@ class SRv6Manager:
     def get_ipaddr(self, server_ip, server_port,
                    ip_addr, device, net, family=AF_INET):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def update_ipaddr(self, server_ip, server_port,
                       ip_addr, device, net, family=AF_INET):
         print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
 
     def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='', family=-1):
         # Create message request

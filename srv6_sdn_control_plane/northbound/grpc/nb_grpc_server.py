@@ -210,10 +210,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         return InventoryServiceReply(
             status=Status(code=STATUS_OK, reason='OK'))
 
-    def enable_disable_device(self, deviceid, enabled):
+    def enable_disable_device(self, deviceid, tenantid, enabled):
         # Enable/Disable the device
         res = srv6_sdn_controller_state.set_device_enabled_flag(
-            deviceid=deviceid, enabled=enabled)
+            deviceid=deviceid, tenantid=tenantid, enabled=enabled)
         if res is None:
             err = ('Error while changing the enabled flag for the device %s: '
                    'Unable to update the controller state' % deviceid)
@@ -236,9 +236,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Extract device ID
             deviceid = device.id
             # Extract tenant ID
-            # tenantid = device.tenantid
+            tenantid = device.tenantid
             # Enable the device
             status_code, reason = self.enable_disable_device(deviceid=deviceid,
+                                                             tenantid=tenantid,
                                                              enabled=True)
             if status_code != STATUS_OK:
                 # Error
@@ -261,7 +262,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Check tunnels stats
             # If the tenant has some overlays configured
             # it is not possible to unregister it
-            num = srv6_sdn_controller_state.get_num_tunnels(deviceid)
+            num = srv6_sdn_controller_state.get_num_tunnels(deviceid, tenantid)
             if num is None:
                 err = ('Error getting tunnels stats. Device not found '
                        'or error during the connection to the db')
@@ -278,6 +279,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Disable the device
             status_code, reason = self.enable_disable_device(deviceid=deviceid,
+                                                             tenantid=tenantid,
                                                              enabled=False)
             if status_code != STATUS_OK:
                 # Error
@@ -628,6 +630,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     'name': device_name,
                     'description': device_description,
                     'interfaces': interfaces,
+                    'tenantid': tenantid,
                     'configured': True
                 })
             else:
@@ -808,7 +811,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Check tunnels stats
         # If the tenant has some overlays configured
         # it is not possible to unregister it
-        num = srv6_sdn_controller_state.get_num_tunnels(deviceid)
+        num = srv6_sdn_controller_state.get_num_tunnels(deviceid, tenantid)
         if num is None:
             err = 'Error getting tunnels stats'
             logging.error(err)
@@ -839,7 +842,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.error(err)
                 return STATUS_INTERNAL_SERVER_ERROR, err
         # Remove device from controller state
-        success = srv6_sdn_controller_state.unregister_device(deviceid)
+        success = srv6_sdn_controller_state.unregister_device(
+            deviceid, tenantid)
         if success is None or success is False:
             err = ('Cannot unregister the device. '
                    'Error while updating the controller state')
@@ -1106,7 +1110,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 # Remove overlay DB status
                 if srv6_sdn_controller_state.remove_overlay(
-                        overlayid) is not True:
+                        overlayid, tenantid) is not True:
                     logging.error('Cannot remove overlay. Inconsistent data')
                 return OverlayServiceReply(
                     status=Status(code=status_code, reason=err))
@@ -1118,7 +1122,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Init tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
                            .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid))
+                                                            deviceid,
+                                                            tenantid))
                 if counter == 0:
                     status_code = tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1128,7 +1133,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         # Remove overlay DB status
                         if srv6_sdn_controller_state.remove_overlay(
-                                overlayid) is not True:
+                                overlayid, tenantid) is not True:
                             logging.error(
                                 'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
@@ -1138,7 +1143,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.error(err)
                     # Remove overlay DB status
                     if srv6_sdn_controller_state.remove_overlay(
-                            overlayid) is not True:
+                            overlayid, tenantid) is not True:
                         logging.error(
                             'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
@@ -1159,7 +1164,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         # Remove overlay DB status
                         if srv6_sdn_controller_state.remove_overlay(
-                                overlayid) is not True:
+                                overlayid, tenantid) is not True:
                             logging.error(
                                 'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
@@ -1180,7 +1185,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     # Remove overlay DB status
                     if srv6_sdn_controller_state.remove_overlay(
-                            overlayid) is not True:
+                            overlayid, tenantid) is not True:
                         logging.error(
                             'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
@@ -1201,7 +1206,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             logging.warning(err)
                             # Remove overlay DB status
                             if srv6_sdn_controller_state.remove_overlay(
-                                    overlayid) is not True:
+                                    overlayid, tenantid) is not True:
                                 logging.error(
                                     'Cannot remove overlay. Inconsistent data')
                             return OverlayServiceReply(
@@ -1351,7 +1356,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Destroy tunnel mode on the devices
             counter = (srv6_sdn_controller_state
                        .dec_and_get_tunnel_mode_counter(tunnel_name,
-                                                        deviceid))
+                                                        deviceid,
+                                                        tenantid))
             if counter == 0:
                 status_code = tunnel_mode.destroy_tunnel_mode(
                     deviceid, tenantid, tunnel_info)
@@ -1373,7 +1379,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.warning(err)
             return status_code, err
         # Delete the overlay
-        success = srv6_sdn_controller_state.remove_overlay(overlayid)
+        success = srv6_sdn_controller_state.remove_overlay(overlayid, tenantid)
         if success is None or success is False:
             err = 'Cannot remove the overlay from the controller state'
             logging.error(err)
@@ -1582,7 +1588,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Init tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
                            .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid))
+                                                            deviceid,
+                                                            tenantid))
                 if counter == 0:
                     status_code = tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1650,7 +1657,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 configured_slices.append(site1)
             # Save the overlay to the state
             success = srv6_sdn_controller_state.add_many_slices_to_overlay(
-                overlayid, incoming_slices)
+                overlayid, tenantid, incoming_slices)
             if success is None or success is False:
                 err = 'Cannot update overlay in controller state'
                 logging.error(err)
@@ -1881,7 +1888,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Destroy tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
                            .dec_and_get_tunnel_mode_counter(tunnel_name,
-                                                            deviceid))
+                                                            deviceid,
+                                                            tenantid))
                 if counter == 0:
                     status_code = tunnel_mode.destroy_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1900,7 +1908,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Save the overlay to the state
             success = (srv6_sdn_controller_state
                        .remove_many_slices_from_overlay(
-                           overlayid, incoming_slices))
+                           overlayid, tenantid, incoming_slices))
             if success is None or success is False:
                 err = 'Cannot update overlay in controller state'
                 logging.error(err)
