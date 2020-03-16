@@ -94,6 +94,8 @@ class SRv6Manager:
                       'in secure mode')
                 sys.exit(-2)
             self.CERTIFICATE = certificate
+        # Channel
+        self.channel = None
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port):
@@ -105,20 +107,22 @@ class SRv6Manager:
         else:
             print('Invalid address: %s' % ip_address)
             return
-        # If secure we need to establish a channel with the secure endpoint
-        if self.SECURE:
-            # Open the certificate file
-            with open(self.CERTIFICATE, 'rb') as f:
-                certificate = f.read()
-            # Then create the SSL credentials and establish the channel
-            grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
-                                          grpc_client_credentials)
-        else:
-            channel = grpc.insecure_channel(ip_address)
-
+        # If no channel has been created yet, create a new one
+        if self.channel is None:
+            # If secure we need to establish a channel with the secure endpoint
+            if self.SECURE:
+                # Open the certificate file
+                with open(self.CERTIFICATE, 'rb') as f:
+                    certificate = f.read()
+                # Then create the SSL credentials and establish the channel
+                grpc_client_credentials = grpc.ssl_channel_credentials(
+                    certificate)
+                self.channel = grpc.secure_channel(ip_address,
+                                                   grpc_client_credentials)
+            else:
+                self.channel = grpc.insecure_channel(ip_address)
         return (srv6_manager_pb2_grpc
-                .SRv6ManagerStub(channel), channel)
+                .SRv6ManagerStub(self.channel), self.channel)
 
     # Shutdown device
     def shutdown_device(self, server_ip, server_port):
@@ -134,8 +138,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -171,8 +173,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -207,8 +207,6 @@ class SRv6Manager:
                     # Create the response
                     response = response.status
                 except grpc.RpcError as e:
-                    # Let's close the session
-                    channel.close()
                     # Return the error message
                     return parse_grpc_error(e)
         # Create the response
@@ -256,8 +254,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -291,8 +287,6 @@ class SRv6Manager:
                     # Create the response
                     response = response.status
                 except grpc.RpcError as e:
-                    # Let's close the session
-                    channel.close()
                     # Return the error message
                     return parse_grpc_error(e)
         # Create the response
@@ -336,8 +330,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -391,8 +383,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -422,8 +412,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -462,8 +450,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -488,8 +474,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -524,8 +508,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -562,8 +544,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -608,8 +588,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -661,8 +639,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -704,8 +680,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -759,8 +733,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -791,8 +763,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -830,8 +800,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -867,8 +835,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -900,8 +866,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -928,8 +892,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -960,8 +922,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -990,8 +950,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -1019,8 +977,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -1045,8 +1001,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -1072,8 +1026,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -1099,8 +1051,6 @@ class SRv6Manager:
             response = response.status
         except grpc.RpcError as e:
             response = parse_grpc_error(e)
-        # Let's close the session
-        channel.close()
         # Return the response
         return response
 
@@ -1161,7 +1111,8 @@ class NetworkEventsListener:
                     # Extract interface index
                     _event['interface']['index'] = int(event.interface.index)
                     # Extract interface name
-                    _event['interface']['name'] = text_type(event.interface.name)
+                    _event['interface']['name'] = text_type(
+                        event.interface.name)
                     # Extract interface MAC address
                     _event['interface']['macaddr'] = text_type(
                         event.interface.macaddr)
@@ -1172,7 +1123,8 @@ class NetworkEventsListener:
                     # Extract interface index
                     _event['interface']['index'] = int(event.interface.index)
                     # Extract interface name
-                    _event['interface']['name'] = text_type(event.interface.name)
+                    _event['interface']['name'] = text_type(
+                        event.interface.name)
                     # Extract interface MAC address
                     _event['interface']['macaddr'] = text_type(
                         event.interface.macaddr)
@@ -1203,13 +1155,9 @@ class NetworkEventsListener:
                 # Pass the event to the caller
                 yield _event
         except grpc.RpcError as e:
-            # Let's close the session
-            channel.close()
             # Return the response
             response = parse_grpc_error(e)
             return None
-        # Let's close the session
-        channel.close()
 
 
 # Test features
