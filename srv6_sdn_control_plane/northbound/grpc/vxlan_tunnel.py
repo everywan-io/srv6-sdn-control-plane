@@ -42,7 +42,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def add_slice_to_overlay(self, overlayid, overlay_name,
                              routerid, interface_name, tenantid, overlay_info):
         # Get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
+        mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(routerid, tenantid)
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -91,9 +91,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
         # get management IP address for local and remote site
-        mgmt_ip_local_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_local_site = srv6_sdn_controller_state.get_device_hostname(
             local_site['deviceid'], tenantid)
-        mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_remote_site = srv6_sdn_controller_state.get_device_hostname(
             remote_site['deviceid'], tenantid)
         # get subnet for local and remote site
         lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
@@ -282,7 +282,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay(self, overlayid, overlay_name,
                      overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
+        mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(routerid, tenantid)
         # Get vxlan port set by user
         vxlan_port_site = srv6_sdn_controller_state.get_tenant_vxlan_port(
             tenantid)
@@ -369,7 +369,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def remove_slice_from_overlay(self, overlayid, overlay_name, routerid,
                                   interface_name, tenantid, overlay_info):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
+        mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(routerid, tenantid)
         # retrive table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -424,9 +424,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get management IP local and remote site
-        mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_remote_site = srv6_sdn_controller_state.get_device_hostname(
             id_remote_site, tenantid)
-        mgmt_ip_local_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_local_site = srv6_sdn_controller_state.get_device_hostname(
             id_local_site, tenantid)
         # get WAN interface name for local site and remote site
         wan_intf_local_site = (srv6_sdn_controller_state
@@ -599,7 +599,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def destroy_overlay(self, overlayid, overlay_name,
                         overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
+        mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(routerid, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get table ID

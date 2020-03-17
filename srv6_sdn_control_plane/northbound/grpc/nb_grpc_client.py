@@ -94,15 +94,18 @@ class NorthboundInterface:
             self.certificate = certificate
 
     # Build a grpc stub
-    def get_grpc_session(self, ip_address, port, secure):
-        addr_family = srv6_controller_utils.getAddressFamily(ip_address)
+    def get_grpc_session(self, address, port, secure):
+        # Get the address of the server
+        addr_family = srv6_controller_utils.getAddressFamily(address)
         if addr_family == AF_INET6:
-            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+            # IPv6 address
+            server_address = "ipv6:[%s]:%s" % (address, port)
         elif addr_family == AF_INET:
-            ip_address = "ipv4:%s:%s" % (ip_address, port)
+            # IPv4 address
+            server_address = "ipv4:%s:%s" % (address, port)
         else:
-            logging.error('Invalid address: %s' % ip_address)
-            return
+            # Address is a hostname
+            server_address = "%s:%s" % (address, port)
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -110,10 +113,10 @@ class NorthboundInterface:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
+            channel = grpc.secure_channel(server_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel(ip_address)
+            channel = grpc.insecure_channel(server_address)
         return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
 
     def configure_tenant(self, tenantid, tenant_info='', vxlan_port=-1):

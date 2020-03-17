@@ -71,6 +71,9 @@ DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
 # Default interval between two keep alive messages
 DEFAULT_KEEP_ALIVE_INTERVAL = 30
 
+# Force the gRPC library to use native DNS resolver
+os.environ['GRPC_DNS_RESOLVER'] = 'native'
+
 
 class SRv6Controller(object):
 
@@ -533,7 +536,7 @@ class SRv6Controller(object):
     # received from the nodes through the Southbound interface
     def listen_network_events(self, routerid):
         topo_changed = False
-        router = srv6_sdn_controller_state.get_router_mgmtip(
+        router = srv6_sdn_controller_state.get_device_hostname(
             deviceid=routerid)
         if router is None:
             logging.warning('Error in listen_network_events(): '
@@ -723,7 +726,7 @@ class SRv6Controller(object):
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
-                managementip = srv6_sdn_controller_state.get_router_mgmtip(
+                managementip = srv6_sdn_controller_state.get_device_hostname(
                     deviceid=routerid)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)

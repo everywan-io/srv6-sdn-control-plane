@@ -96,15 +96,18 @@ class SRv6Manager:
             self.CERTIFICATE = certificate
 
     # Build a grpc stub
-    def get_grpc_session(self, ip_address, port):
-        addr_family = sb_grpc_utils.getAddressFamily(ip_address)
+    def get_grpc_session(self, address, port):
+        # Get the address of the server
+        addr_family = sb_grpc_utils.getAddressFamily(address)
         if addr_family == AF_INET6:
-            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+            # IPv6 address
+            server_address = "ipv6:[%s]:%s" % (address, port)
         elif addr_family == AF_INET:
-            ip_address = "ipv4:%s:%s" % (ip_address, port)
+            # IPv4 address
+            server_address = "ipv4:%s:%s" % (address, port)
         else:
-            print('Invalid address: %s' % ip_address)
-            return
+            # Address is a hostname
+            server_address = "%s:%s" % (address, port)
         # If secure we need to establish a channel with the secure endpoint
         if self.SECURE:
             # Open the certificate file
@@ -112,10 +115,10 @@ class SRv6Manager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
+            channel = grpc.secure_channel(server_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel(ip_address)
+            channel = grpc.insecure_channel(server_address)
 
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(channel), channel)
@@ -1117,15 +1120,18 @@ class NetworkEventsListener:
             self.CERTIFICATE = certificate
 
     # Build a grpc stub
-    def get_grpc_session(self, ip_address, port, secure):
-        addr_family = sb_grpc_utils.getAddressFamily(ip_address)
+    def get_grpc_session(self, address, port, secure):
+        # Get the address of the server
+        addr_family = sb_grpc_utils.getAddressFamily(address)
         if addr_family == AF_INET6:
-            ip_address = "ipv6:[%s]:%s" % (ip_address, port)
+            # IPv6 address
+            server_address = "ipv6:[%s]:%s" % (address, port)
         elif addr_family == AF_INET:
-            ip_address = "ipv4:%s:%s" % (ip_address, port)
+            # IPv4 address
+            server_address = "ipv4:%s:%s" % (address, port)
         else:
-            print('Invalid address: %s' % ip_address)
-            return
+            # Address is a hostname
+            server_address = "%s:%s" % (address, port)    
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
@@ -1133,10 +1139,10 @@ class NetworkEventsListener:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
+            channel = grpc.secure_channel(server_address,
                                           grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel(ip_address)
+            channel = grpc.insecure_channel(server_address)
         return (network_events_listener_pb2_grpc
                 .NetworkEventsListenerStub(channel), channel)
 

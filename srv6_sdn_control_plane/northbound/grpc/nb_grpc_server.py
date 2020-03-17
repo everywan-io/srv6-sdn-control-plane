@@ -39,6 +39,7 @@ from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv6Interface
 # SRv6 dependencies
+from srv6_sdn_openssl import utils as srv6_sdn_utils
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_control_plane import srv6_controller_utils
@@ -519,6 +520,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             device_description = device.description
             # Extract the tenant ID
             tenantid = device.tenantid
+            # Get the hostname of the device
+            device_hostname = (srv6_sdn_utils
+                               .get_device_hostname(tenantid, deviceid))
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             err = STATUS_OK
@@ -541,7 +545,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         for addr in interfaces[interface.name]['ipv4_addrs']:
                             addrs.append(addr)
                         response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
+                            device_hostname,
                             self.grpc_client_port, addrs=addrs,
                             device=interface.name, family=AF_UNSPEC
                         )
@@ -557,7 +561,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         # Add IP address to the interface
                         for ipv4_addr in interface.ipv4_addrs:
                             response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
+                                device_hostname,
                                 self.grpc_client_port, ip_addr=ipv4_addr,
                                 device=interface.name, family=AF_INET
                             )
@@ -578,7 +582,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             addrs.append(addr)
                             nets.append(str(IPv6Interface(addr).network))
                         response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
+                            device_hostname,
                             self.grpc_client_port, addrs=addrs,
                             nets=nets, device=interface.name, family=AF_UNSPEC
                         )
@@ -595,7 +599,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         for ipv6_addr in interface.ipv6_addrs:
                             net = IPv6Interface(ipv6_addr).network.__str__()
                             response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
+                                device_hostname,
                                 self.grpc_client_port, ip_addr=ipv6_addr,
                                 device=interface.name, net=net, family=AF_INET6
                             )
@@ -825,9 +829,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # All checks passed
         # Let's unregister the device
         #
+        # Get the hostname of the device
+        device_hostname = (srv6_sdn_utils
+                           .get_device_hostname(tenantid, deviceid))
         # Send shutdown command to device
         res = self.srv6_manager.shutdown_device(
-            device['mgmtip'], self.grpc_client_port)
+            device_hostname, self.grpc_client_port)
         if res != SbStatusCode.STATUS_SUCCESS:
             err = ('Cannot unregister the device. '
                    'Error while shutting down the device')
