@@ -346,11 +346,12 @@ def getAddressFamily(ip):
 
 
 class OverlayType:
-    IPv6Overlay = 'IPv6Overlay'
+    L2Overlay = 'L2Overlay'
     IPv4Overlay = 'IPv4Overlay'
+    IPv6Overlay = 'IPv6Overlay'
 
 
-supported_overlay_types = [OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
+supported_overlay_types = [OverlayType.L2Overlay, OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
 
 '''
 class VPN:
