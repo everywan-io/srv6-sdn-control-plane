@@ -39,6 +39,7 @@ from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv6Interface
 # SRv6 dependencies
+from srv6_sdn_openssl import utils as srv6_sdn_utils
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_control_plane import srv6_controller_utils
@@ -96,6 +97,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
+                 auth_controller=None,
                  verbose=DEFAULT_VERBOSE):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
@@ -105,9 +107,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         self.southbound_interface = southbound_interface
         # SRv6 Manager
         self.srv6_manager = srv6_manager
+        # Authentication controller
+        self.auth_controller = auth_controller
         # Initialize tunnel state
-        self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port,
-                                                     verbose).tunnel_modes
+        self.tunnel_modes = tunnel_utils.TunnelState(
+            srv6_manager=srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose
+        ).tunnel_modes
         self.supported_tunnel_modes = [t_mode for t_mode in self.tunnel_modes]
         logging.info('*** Supported tunnel modes: %s'
                      % self.supported_tunnel_modes)
@@ -513,6 +520,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             device_description = device.description
             # Extract the tenant ID
             tenantid = device.tenantid
+            # Get the hostname of the device
+            device_hostname = (srv6_sdn_utils
+                               .get_device_hostname(deviceid, tenantid))
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             err = STATUS_OK
@@ -535,7 +545,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         for addr in interfaces[interface.name]['ipv4_addrs']:
                             addrs.append(addr)
                         response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
+                            device_hostname,
                             self.grpc_client_port, addrs=addrs,
                             device=interface.name, family=AF_UNSPEC
                         )
@@ -551,7 +561,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         # Add IP address to the interface
                         for ipv4_addr in interface.ipv4_addrs:
                             response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
+                                device_hostname,
                                 self.grpc_client_port, ip_addr=ipv4_addr,
                                 device=interface.name, family=AF_INET
                             )
@@ -572,7 +582,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             addrs.append(addr)
                             nets.append(str(IPv6Interface(addr).network))
                         response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
+                            device_hostname,
                             self.grpc_client_port, addrs=addrs,
                             nets=nets, device=interface.name, family=AF_UNSPEC
                         )
@@ -589,7 +599,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         for ipv6_addr in interface.ipv6_addrs:
                             net = IPv6Interface(ipv6_addr).network.__str__()
                             response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
+                                device_hostname,
                                 self.grpc_client_port, ip_addr=ipv6_addr,
                                 device=interface.name, net=net, family=AF_INET6
                             )
@@ -819,14 +829,25 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # All checks passed
         # Let's unregister the device
         #
+        # Get the hostname of the device
+        device_hostname = (srv6_sdn_utils
+                           .get_device_hostname(deviceid, tenantid))
         # Send shutdown command to device
         res = self.srv6_manager.shutdown_device(
-            device['mgmtip'], self.grpc_client_port)
+            device_hostname, self.grpc_client_port)
         if res != SbStatusCode.STATUS_SUCCESS:
             err = ('Cannot unregister the device. '
                    'Error while shutting down the device')
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
+        # Remove management information from the controller (e.g. VTEP info)
+        if self.auth_controller is not None:
+            res = self.auth_controller.unregister_device(deviceid, tenantid)
+            if res != status_codes_pb2.STATUS_SUCCESS:
+                err = ('Cannot unregister the device. '
+                       'Error while removing management information')
+                logging.error(err)
+                return STATUS_INTERNAL_SERVER_ERROR, err
         # Remove device from controller state
         success = srv6_sdn_controller_state.unregister_device(
             deviceid, tenantid)
@@ -1988,6 +2009,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  devices=None,
                  vpn_file=DEFAULT_VPN_DUMP,
                  controller_state=None,
+                 auth_controller=None,
                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
     # controller_state = srv6_controller_utils.ControllerState(
@@ -2004,8 +2026,11 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
     service = NorthboundInterface(
-        grpc_client_port, srv6_manager,
-        southbound_interface, verbose
+        grpc_client_port=grpc_client_port,
+        srv6_manager=srv6_manager,
+        southbound_interface=southbound_interface,
+        auth_controller=auth_controller,
+        verbose=verbose
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server
@@ -2169,7 +2194,7 @@ if __name__ == '__main__':
         start_server(
             grpc_server_ip, grpc_server_port, grpc_client_port, secure, key,
             certificate, southbound_interface, topo_graph, None, vpn_dump,
-            verbose
+            None, verbose
         )
         while True:
             time.sleep(5)

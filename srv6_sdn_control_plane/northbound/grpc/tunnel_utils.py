@@ -12,8 +12,9 @@ tunnel_info = dict()
 
 class TunnelState:
 
-    def __init__(self, grpc_client_port, verbose):
+    def __init__(self, srv6_manager, grpc_client_port, verbose):
         self.tunnel_modes = dict()
+        self.srv6_manager = srv6_manager
         self.init_tunnel_modes(grpc_client_port, verbose)
 
     def register_tunnel_mode(self, name, tunnel_mode):
@@ -23,6 +24,18 @@ class TunnelState:
         del self.tunnel_modes[name]
 
     def init_tunnel_modes(self, grpc_client_port, verbose):
-        self.register_tunnel_mode('SRv6', srv6_tunnel.SRv6Tunnel(grpc_client_port=grpc_client_port, verbose=verbose))
-        self.register_tunnel_mode('GRE', gre_tunnel.GRETunnel(grpc_client_port=grpc_client_port, verbose=verbose))
-        self.register_tunnel_mode('VXLAN', vxlan_tunnel.VXLANTunnel(grpc_client_port=grpc_client_port, verbose=verbose))
+        self.register_tunnel_mode('SRv6', srv6_tunnel.SRv6Tunnel(
+            srv6_manager=self.srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose)
+        )
+        self.register_tunnel_mode('GRE', gre_tunnel.GRETunnel(
+            srv6_manager=self.srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose)
+        )
+        self.register_tunnel_mode('VXLAN', vxlan_tunnel.VXLANTunnel(
+            srv6_manager=self.srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose)
+        )

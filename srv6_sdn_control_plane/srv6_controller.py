@@ -71,6 +71,9 @@ DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
 # Default interval between two keep alive messages
 DEFAULT_KEEP_ALIVE_INTERVAL = 30
 
+# Force the gRPC library to use native DNS resolver
+os.environ['GRPC_DNS_RESOLVER'] = 'native'
+
 
 class SRv6Controller(object):
 
@@ -533,7 +536,7 @@ class SRv6Controller(object):
     # received from the nodes through the Southbound interface
     def listen_network_events(self, routerid):
         topo_changed = False
-        router = srv6_sdn_controller_state.get_router_mgmtip(
+        router = srv6_sdn_controller_state.get_device_hostname(
             deviceid=routerid)
         if router is None:
             logging.warning('Error in listen_network_events(): '
@@ -723,7 +726,7 @@ class SRv6Controller(object):
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
-                managementip = srv6_sdn_controller_state.get_router_mgmtip(
+                managementip = srv6_sdn_controller_state.get_device_hostname(
                     deviceid=routerid)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
@@ -878,21 +881,23 @@ class SRv6Controller(object):
             print('*** Done')
 
     # Start registration server
-    def start_registration_server(self):
+    def start_registration_server(self, auth_controller):
         logging.info('*** Starting registration server')
-        server = PymerangController(
-            server_ip=self.pymerang_server_ip,
-            server_port=self.pymerang_server_port,
-            keep_alive_interval=self.keep_alive_interval,
-            secure=self.sb_secure, key=self.sb_server_key,
-            certificate=self.sb_server_certificate)
-        server.serve()
+        auth_controller.serve()
 
     # Run the SRv6 controller
 
     def run(self):
         if self.VERBOSE:
             print('*** Starting the SRv6 Controller')
+        # Authentication controller
+        auth_controller = PymerangController(
+            server_ip=self.pymerang_server_ip,
+            server_port=self.pymerang_server_port,
+            keep_alive_interval=self.keep_alive_interval,
+            secure=self.sb_secure, server_key=self.sb_server_key,
+            server_certificate=self.sb_server_certificate,
+            client_certificate=self.client_certificate)
         # Init database
         if srv6_sdn_controller_state.init_db() is not True:
             logging.error('Error while initializing database')
@@ -915,6 +920,7 @@ class SRv6Controller(object):
                         'client_certificate': self.client_certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
+                        'auth_controller': auth_controller,
                         'verbose': self.VERBOSE
                         }
                         )
@@ -929,7 +935,8 @@ class SRv6Controller(object):
         thread.start()
         # Start registration server
         thread = Thread(
-            target=self.start_registration_server
+            target=self.start_registration_server,
+            args=(auth_controller,)
         )
         thread.daemon = True
         thread.start()

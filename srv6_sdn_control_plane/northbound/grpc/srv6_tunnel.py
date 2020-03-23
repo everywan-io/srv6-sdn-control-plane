@@ -49,7 +49,8 @@ logger = logging.getLogger(__name__)
 class SRv6Tunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
-    def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+    def __init__(self, srv6_manager,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  controller_state=None, verbose=DEFAULT_VERBOSE):
         # Name of the tunnel mode
         self.name = 'SRv6'
@@ -60,7 +61,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # VPN dict
         self.vpn_dict = None
         # Create SRv6 Manager
-        self.srv6_manager = sb_grpc_client.SRv6Manager()
+        self.srv6_manager = srv6_manager
         # Initialize controller state
         self.controller_state_srv6 = \
             srv6_tunnel_utils.ControllerStateSRv6(controller_state)
