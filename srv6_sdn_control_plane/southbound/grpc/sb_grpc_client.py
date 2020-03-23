@@ -1107,6 +1107,101 @@ class SRv6Manager:
         # Return the response
         return response
 
+    # CRUD Bridge Device
+
+    def create_bridge_device(self, server_ip, server_port, name, interfaces=[]):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.BridgeDevice
+        # Create a new bridge device request
+        bridge_device_request = srv6_request.bridge_device_request
+        # Create a new bridge device
+        device = bridge_device_request.devices.add()
+        # Set name
+        device.name = text_type(name)
+        # Create a new interfaces
+        device.interfaces.extend(interfaces)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Create VRF device
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
+    def get_bridge_device(self, server_ip, server_port, name, interfaces=[]):
+        print('Not yet implemented')
+        return SbStatusCode.STATUS_INTERNAL_ERROR
+
+    def update_bridge_device(self, server_ip,
+                             server_port, name, interfaces=[], op=None):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.BridgeDevice
+        # Create a new bridge device request
+        bridge_device_request = srv6_request.bridge_device_request
+        # Create a new bridge device
+        device = bridge_device_request.devices.add()
+        # Set name
+        device.name = text_type(name)
+        # Create a new interfaces
+        device.interfaces.extend(interfaces)
+        # Operation
+        if op not in [None, 'replace_interfaces', 'add_interfaces', 'del_interfaces']:
+            print('Invalid operation type: %s' % op)
+            return None
+        if op is not None:
+            device.op = op
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Update bridge device
+            response = srv6_stub.Update(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
+    def remove_bridge_device(self, server_ip, server_port, name):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.BridgeDevice
+        # Create a new bridge device request
+        bridge_device_request = srv6_request.bridge_device_request
+        # Create a new bridge device
+        device = bridge_device_request.devices.add()
+        # Set name
+        device.name = text_type(name)
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Remove the VRF device
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
 
 class NetworkEventsListener:
 
