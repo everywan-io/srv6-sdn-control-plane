@@ -350,7 +350,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      'deviceid %s' % (overlay_name, deviceid))
         return NbStatusCode.STATUS_OK
 
-    def add_slice_to_overlay(self, overlayid, overlay_name,
+    def add_slice_to_overlay(self, overlayid, overlay_name, overlay_type,
                              deviceid, interface_name, tenantid, overlay_info):
         logger.debug('Attempting to add the slice %s from the router %s '
                      'to the overlay %s'

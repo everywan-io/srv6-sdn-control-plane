@@ -17,7 +17,7 @@ class TunnelMode(object):
                      overlay_type, tenantid, deviceid, overlay_info):
         pass
 
-    def add_slice_to_overlay(self, overlayid, overlay_name,
+    def add_slice_to_overlay(self, overlayid, overlay_name, overlay_type,
                              deviceid, interface_name, tenantid, overlay_info):
         pass
 

@@ -522,7 +522,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tenantid = device.tenantid
             # Get the hostname of the device
             device_hostname = (srv6_sdn_utils
-                               .get_device_hostname(tenantid, deviceid))
+                               .get_device_hostname(deviceid, tenantid))
             # Extract the device interfaces from the configuration
             interfaces = devices[deviceid]['interfaces']
             err = STATUS_OK
@@ -831,7 +831,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Get the hostname of the device
         device_hostname = (srv6_sdn_utils
-                           .get_device_hostname(tenantid, deviceid))
+                           .get_device_hostname(deviceid, tenantid))
         # Send shutdown command to device
         res = self.srv6_manager.shutdown_device(
             device_hostname, self.grpc_client_port)
@@ -1181,7 +1181,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Add the interface to the overlay
                 status_code = (tunnel_mode
                                .add_slice_to_overlay(overlayid,
-                                                     overlay_name, deviceid,
+                                                     overlay_name,
+                                                     overlay_type, deviceid,
                                                      interface_name, tenantid,
                                                      tunnel_info))
                 if status_code != STATUS_OK:
@@ -1632,6 +1633,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Add the interface to the overlay
                 status_code = tunnel_mode.add_slice_to_overlay(overlayid,
                                                                overlay_name,
+                                                               overlay_type,
                                                                deviceid,
                                                                interface_name,
                                                                tenantid,
