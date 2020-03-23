@@ -117,10 +117,10 @@ class SRv6Manager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(server_address,
-                                          grpc_client_credentials)
+            self.channel = grpc.secure_channel(server_address,
+                                               grpc_client_credentials)
         else:
-            channel = grpc.insecure_channel(server_address)
+            self.channel = grpc.insecure_channel(server_address)
 
         return (srv6_manager_pb2_grpc
                 .SRv6ManagerStub(self.channel), self.channel)
@@ -1079,7 +1079,7 @@ class NetworkEventsListener:
             server_address = "ipv4:%s:%s" % (address, port)
         else:
             # Address is a hostname
-            server_address = "%s:%s" % (address, port)    
+            server_address = "%s:%s" % (address, port)
         # If secure we need to establish a channel with the secure endpoint
         if secure:
             # Open the certificate file
