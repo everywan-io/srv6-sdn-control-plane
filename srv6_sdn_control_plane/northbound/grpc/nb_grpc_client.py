@@ -108,18 +108,20 @@ class NorthboundInterface:
         else:
             # Address is a hostname
             server_address = "%s:%s" % (address, port)
-        # If secure we need to establish a channel with the secure endpoint
-        if secure:
-            # Open the certificate file
-            with open(self.certificate, 'rb') as f:
-                certificate = f.read()
-            # Then create the SSL credentials and establish the channel
-            grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(server_address,
-                                          grpc_client_credentials)
-        else:
-            channel = grpc.insecure_channel(server_address)
-        return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
+        if self.channel is None:
+            # If secure we need to establish a channel with the secure endpoint
+            if secure:
+                # Open the certificate file
+                with open(self.certificate, 'rb') as f:
+                    certificate = f.read()
+                # Then create the SSL credentials and establish the channel
+                grpc_client_credentials = grpc.ssl_channel_credentials(
+                    certificate)
+                self.channel = grpc.secure_channel(server_address,
+                                                   grpc_client_credentials)
+            else:
+                self.channel = grpc.insecure_channel(server_address)
+        return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(self.channel), self.channel
 
     def configure_tenant(self, tenantid, tenant_info='', vxlan_port=-1):
         # Create request
