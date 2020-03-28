@@ -140,12 +140,24 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Build SID list used for the outgoing packets
         wan_ip_addr = wan_ip_addrs[0]
         sid_list = [sid, wan_ip_addr]
+        # Get SEG6 encap mode
+        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
+            # L2 encapsulation
+            encapmode = 'l2encap'
+        elif overlay_type in [srv6_controller_utils.OverlayType.IPv4Overlay,
+                              srv6_controller_utils.OverlayType.IPv6Overlay]:
+            # L3 encapsulation
+            encapmode = 'encap'
+        else:
+            logger.error('Unrecognized overlay type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
             response = self.srv6_manager.create_srv6_explicit_path(
-                l_deviceip, self.grpc_client_port, destination=subnet,
-                table=tableid, device=dev, segments=sid_list, encapmode='encap'
+                l_deviceip, self.grpc_client_port,
+                destination=subnet, table=tableid, device=dev,
+                segments=sid_list, encapmode=encapmode
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
@@ -294,18 +306,6 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # Cannot get the router address
             logging.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Second step is the creation of the decapsulation and lookup route
-        if overlay_type == OverlayType.IPv6Overlay:
-            # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
-            # table. This behavior is realized by End.DT6 SRv6 action
-            action = 'End.DT6'
-        elif overlay_type == OverlayType.IPv4Overlay:
-            # For IPv4 VPN we have to perform decap and lookup in IPv6 routing
-            # table. This behavior is realized by End.DT4 SRv6 action
-            action = 'End.DT4'
-        else:
-            logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID for the VPN
         logging.debug(
             'Attempting to retrieve the table ID assigned to the VPN')
@@ -317,6 +317,27 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logging.debug('Cannot get table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         logging.debug('Received table ID:%s', tableid)
+        # Second step is the creation of the decapsulation and lookup route
+        oif = ''
+        table = -1
+        if overlay_type == OverlayType.L2Overlay:
+            # For L2 VPN we have to perform decap and forward to the VPN bridge
+            # This behavior is realized by End.DX2 SRv6 action
+            action = 'End.DX2'
+            oif = 'br-%s' % tableid
+        if overlay_type == OverlayType.IPv6Overlay:
+            # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
+            # table. This behavior is realized by End.DT6 SRv6 action
+            action = 'End.DT6'
+            table = tableid
+        elif overlay_type == OverlayType.IPv4Overlay:
+            # For IPv4 VPN we have to perform decap and lookup in IPv6 routing
+            # table. This behavior is realized by End.DT4 SRv6 action
+            action = 'End.DT4'
+            table = tableid
+        else:
+            logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get a WAN interface
         # We use the WAN interface
         # in order to solve an issue of routes getting deleted when the
@@ -339,8 +360,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add the End.DT4 / End.DT6 route
         response = self.srv6_manager.create_srv6_local_processing_function(
             deviceip, self.grpc_client_port, segment=sid,
-            action=action, device=dev,
-            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE, table=tableid
+            action=action, device=dev, interface=oif, table=table,
+            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -349,9 +370,27 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             # The operation has failed, return an error message
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If this is a L2 Overlay, we need a bridge
+        devices_in_vrf = []
+        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
+            # get bridge name
+            br_name = 'br-%s' % tableid
+            # create bridge and add the VTEP interface
+            response = self.srv6_manager.create_bridge_device(
+                deviceip, self.grpc_client_port,
+                name=br_name
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create bridge %s in %s'
+                               % (br_name, deviceip))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Enslave bridge in VRF
+            devices_in_vrf = [br_name]
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
-            deviceip, self.grpc_client_port, name=overlay_name, table=tableid
+            deviceip, self.grpc_client_port, name=overlay_name,
+            table=tableid, interfaces=devices_in_vrf
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -376,6 +415,12 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # Cannot get the router address
             logging.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.warning('Cannot retrieve VPN table ID')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Don't advertise the private customer network
         response = self.srv6_manager.update_interface(
             deviceip, self.grpc_client_port,
@@ -389,42 +434,56 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # If the operation has failed, report an error message
             logging.warning('Cannot disable OSPF advertisements')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Add the interface to the VRF
-        response = self.srv6_manager.update_vrf_device(
-            deviceip, self.grpc_client_port, name=overlay_name,
-            interfaces=[interface_name],
-            op='add_interfaces'
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            # If the operation has failed, report an error message
-            logging.warning(
-                'Cannot assign the interface to the VRF: %s' % response
+        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
+            # get bridge name
+            br_name = 'br-%s' % tableid
+            # add slice to the VRF
+            response = self.srv6_manager.update_bridge_device(
+                deviceip, self.grpc_client_port,
+                name=br_name,
+                interfaces=[interface_name],
+                op='add_interfaces'
             )
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Get the table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
-        if tableid is None:
-            logging.warning('Cannot retrieve VPN table ID')
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Create the routes for the subnets
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
-            deviceid, tenantid, interface_name)
-        for subnet in subnets:
-            gateway = subnet['gateway']
-            subnet = subnet['subnet']
-            if gateway is not None and gateway != '':
-                response = self.srv6_manager.create_iproute(
-                    deviceip, self.grpc_client_port,
-                    destination=subnet, gateway=gateway,
-                    out_interface=interface_name,
-                    table=tableid
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot add interface %s to the bridge %s in %s'
+                               % (interface_name, br_name, deviceip))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        elif overlay_type in [srv6_controller_utils.OverlayType.IPv4Overlay,
+                              srv6_controller_utils.OverlayType.IPv6Overlay]:
+            # Add the interface to the VRF
+            response = self.srv6_manager.update_vrf_device(
+                deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[interface_name],
+                op='add_interfaces'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logging.warning(
+                    'Cannot assign the interface to the VRF: %s' % response
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logging.warning('Cannot set route for %s (gateway %s) '
-                                    'in %s ' % (subnet, gateway, deviceip))
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Create the routes for the subnets
+            subnets = srv6_sdn_controller_state.get_ip_subnets(
+                deviceid, tenantid, interface_name)
+            for subnet in subnets:
+                gateway = subnet['gateway']
+                subnet = subnet['subnet']
+                if gateway is not None and gateway != '':
+                    response = self.srv6_manager.create_iproute(
+                        deviceip, self.grpc_client_port,
+                        destination=subnet, gateway=gateway,
+                        out_interface=interface_name,
+                        table=tableid
+                    )
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logging.warning('Cannot set route for %s (gateway %s) '
+                                        'in %s ' % (subnet, gateway, deviceip))
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        else:
+            logger.error('Unrecognized overlay type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logging.debug('Add slice to overlay completed')
         return NbStatusCode.STATUS_OK
