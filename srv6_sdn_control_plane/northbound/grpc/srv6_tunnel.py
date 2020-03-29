@@ -118,12 +118,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             r_slice['deviceid'], tenantid, tableid
         )
         # Get the subnets
+        subnets = list()
         if overlay_type == OverlayType.IPv6Overlay:
             subnets = srv6_sdn_controller_state.get_ipv6_subnets(
                 r_slice['deviceid'], tenantid, r_slice['interface_name'])
         elif overlay_type == OverlayType.IPv4Overlay:
             subnets = srv6_sdn_controller_state.get_ipv4_subnets(
                 r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        elif overlay_type == OverlayType.L2Overlay:
+            pass
         else:
             logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -194,12 +197,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logging.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the subnets
+        subnets = list()
         if overlay_type == OverlayType.IPv6Overlay:
             subnets = srv6_sdn_controller_state.get_ipv6_subnets(
                 r_slice['deviceid'], tenantid, r_slice['interface_name'])
         elif overlay_type == OverlayType.IPv4Overlay:
             subnets = srv6_sdn_controller_state.get_ipv4_subnets(
                 r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        elif overlay_type == OverlayType.L2Overlay:
+            pass
         else:
             logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -317,6 +323,23 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logging.debug('Cannot get table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         logging.debug('Received table ID:%s', tableid)
+        # If this is a L2 Overlay, we need a bridge
+        devices_in_vrf = []
+        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
+            # get bridge name
+            br_name = 'br-%s' % tableid
+            # create bridge and add the VTEP interface
+            response = self.srv6_manager.create_bridge_device(
+                deviceip, self.grpc_client_port,
+                name=br_name
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create bridge %s in %s'
+                               % (br_name, deviceip))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Enslave bridge in VRF
+            devices_in_vrf = [br_name]
         # Second step is the creation of the decapsulation and lookup route
         oif = ''
         table = -1
@@ -325,7 +348,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # This behavior is realized by End.DX2 SRv6 action
             action = 'End.DX2'
             oif = 'br-%s' % tableid
-        if overlay_type == OverlayType.IPv6Overlay:
+        elif overlay_type == OverlayType.IPv6Overlay:
             # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
             # table. This behavior is realized by End.DT6 SRv6 action
             action = 'End.DT6'
@@ -370,23 +393,6 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             # The operation has failed, return an error message
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # If this is a L2 Overlay, we need a bridge
-        devices_in_vrf = []
-        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
-            # get bridge name
-            br_name = 'br-%s' % tableid
-            # create bridge and add the VTEP interface
-            response = self.srv6_manager.create_bridge_device(
-                deviceip, self.grpc_client_port,
-                name=br_name
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot create bridge %s in %s'
-                               % (br_name, deviceip))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # Enslave bridge in VRF
-            devices_in_vrf = [br_name]
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
             deviceip, self.grpc_client_port, name=overlay_name,
