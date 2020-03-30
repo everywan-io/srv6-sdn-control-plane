@@ -41,7 +41,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         self.overlays = db.overlays
 
     def add_slice_to_overlay(self, overlayid, overlay_name, overlay_type,
-                             routerid, interface_name, tenantid, overlay_info):
+                             routerid, interface_name, tenantid, overlay_info,
+                             topo_type):
         # Get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(
             routerid, tenantid)
@@ -101,6 +102,29 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                         logger.warning('Cannot set route for %s (gateway %s) '
                                        'in %s ' % (subnet, gateway, mgmt_ip_site))
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if topo_type == utils.TopologyType.HubAndSpoke:
+                    # get VNI
+                    vni = srv6_sdn_controller_state.get_vni(
+                        overlay_name, tenantid, routerid)
+                    # get VTEP name
+                    vtep_name = 'vxlan-%s' % (vni)
+                    # Get hub
+                    overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
+                    hub = overlay['hub']
+                    vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+                        routerid, tenantid).split('/')[0]
+                    response = self.srv6_manager.create_iproute(
+                        hub, self.grpc_client_port,
+                        destination=subnet,
+                        gateway=vtep_ip,
+                        table=tableid,
+                        out_interface=vtep_name
+                    )
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot set route for %s in %s '
+                                    % (subnet, hub))
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         else:
             logger.error('Unrecognized overlay type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -108,7 +132,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info):
+                      local_site, remote_site, tenantid, overlay_info,
+                      topo_type):
+        # Get hub
+        overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
+        hub = overlay['hub']
         # get devices ID
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
@@ -117,6 +145,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             local_site['deviceid'], tenantid)
         mgmt_ip_remote_site = srv6_sdn_controller_state.get_device_hostname(
             remote_site['deviceid'], tenantid)
+        hub_ip = None
+        if topo_type == utils.TopologyType.HubAndSpoke:
+            wan_hub = (srv6_sdn_controller_state
+                       .get_wan_interfaces(hub, tenantid)[0])
+            hub_ip = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                hub, tenantid, wan_hub)[0]
         # get subnet for local and remote site
         lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
             id_remote_site, tenantid, remote_site['interface_name'])
@@ -133,8 +167,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             id_remote_site, tenantid)
         vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
             id_local_site, tenantid)
+        vtep_ip_hub = None
+        if topo_type == utils.TopologyType.HubAndSpoke:
+            vtep_ip_hub = srv6_sdn_controller_state.get_vtep_ip(
+                hub, tenantid)
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if topo_type == utils.TopologyType.HubAndSpoke:
+            vni = srv6_sdn_controller_state.get_vni(
+                overlay_name, tenantid, id_local_site)
+        else:
+            vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
@@ -186,72 +228,177 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             tunnel_remote = dictionary_remote['created_tunnel'][0]
         # Check if there is the fdb entry in local site for remote site
         if tunnel_local.get('fdb_entry_config') is False:
-            # add FDB entry in local site
-            response = self.srv6_manager.addfdbentries(
-                mgmt_ip_local_site, self.grpc_client_port,
-                ifindex=vtep_name,
-                dst=wan_ip_remote_site
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
-                               % (wan_ip_remote_site,
-                                  vtep_name, mgmt_ip_local_site))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # If it's a hub-and-spoke topology,
+            # the traffic is steered through the hub
+            if topo_type == utils.TopologyType.HubAndSpoke:
+                # add FDB entry in local site
+                response = self.srv6_manager.addfdbentries(
+                    mgmt_ip_local_site, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=hub_ip
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (wan_ip_remote_site,
+                                    vtep_name, mgmt_ip_local_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # add FDB entry in local site
+                response = self.srv6_manager.addfdbentries(
+                    hub, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=wan_ip_local_site
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (wan_ip_local_site,
+                                    vtep_name, hub_ip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:                
+                # add FDB entry in local site
+                response = self.srv6_manager.addfdbentries(
+                    mgmt_ip_local_site, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=wan_ip_remote_site
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (wan_ip_remote_site,
+                                    vtep_name, mgmt_ip_local_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
             tunnel_local['fdb_entry_config'] = True
         # Check if there is the fdb entry in remote site for local site
         if tunnel_remote.get('fdb_entry_config') is False:
-            # add FDB entry in remote site
-            response = self.srv6_manager.addfdbentries(
-                mgmt_ip_remote_site, self.grpc_client_port,
-                ifindex=vtep_name,
-                dst=wan_ip_local_site
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
-                               % (wan_ip_local_site,
-                                  vtep_name, mgmt_ip_remote_site))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # get VNI
+            if topo_type == utils.TopologyType.HubAndSpoke:
+                vni = srv6_sdn_controller_state.get_vni(
+                    overlay_name, tenantid, id_remote_site)
+                # get VTEP name
+                vtep_name = 'vxlan-%s' % (vni)
+            # If it's a hub-and-spoke topology,
+            # the traffic is steered through the hub
+            if topo_type == utils.TopologyType.HubAndSpoke:
+                # add FDB entry in remote site
+                response = self.srv6_manager.addfdbentries(
+                    mgmt_ip_remote_site, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=hub_ip
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (hub_ip,
+                                    vtep_name, mgmt_ip_remote_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # add FDB entry in remote site
+                response = self.srv6_manager.addfdbentries(
+                    hub, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=wan_ip_remote_site
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (wan_ip_remote_site,
+                                    vtep_name, hub_ip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:
+                # add FDB entry in remote site
+                response = self.srv6_manager.addfdbentries(
+                    mgmt_ip_remote_site, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=wan_ip_local_site
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
+                                % (wan_ip_local_site,
+                                    vtep_name, mgmt_ip_remote_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
             tunnel_remote['fdb_entry_config'] = True
         if overlay_type in \
                 [utils.OverlayType.IPv4Overlay, utils.OverlayType.IPv6Overlay]:
             # set route in local site for the remote subnet, if not present
             for lan_sub_remote_site in lan_sub_remote_sites:
+                # If it's a hub-and-spoke topology,
+                # the traffic is steered through the hub
+                gateway = vtep_ip_remote_site.split("/")[0]
+                    
+                print('gateway', gateway)
                 lan_sub_remote_site = lan_sub_remote_site['subnet']
                 if lan_sub_remote_site not in tunnel_local.get('reach_subnets'):
-                    response = self.srv6_manager.create_iproute(
-                        mgmt_ip_local_site, self.grpc_client_port,
-                        destination=lan_sub_remote_site,
-                        gateway=vtep_ip_remote_site.split("/")[0],
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot set route for %s in %s '
-                                    % (lan_sub_remote_site, mgmt_ip_local_site))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if topo_type == utils.TopologyType.HubAndSpoke:
+                        hub_gateway = vtep_ip_hub.split('/')[0]
+                        response = self.srv6_manager.create_iproute(
+                            mgmt_ip_local_site, self.grpc_client_port,
+                            destination=lan_sub_remote_site,
+                            gateway=hub_gateway,
+                            table=tableid
+                        )
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot set route for %s in %s '
+                                        % (lan_sub_remote_site, mgmt_ip_local_site))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    else:
+                        response = self.srv6_manager.create_iproute(
+                            mgmt_ip_local_site, self.grpc_client_port,
+                            destination=lan_sub_remote_site,
+                            gateway=gateway,
+                            table=tableid
+                        )
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot set route for %s in %s '
+                                        % (lan_sub_remote_site, mgmt_ip_local_site))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    
+                    
                     # update local dictionary with the new subnet in overlay
-                    tunnel_local.get('reach_subnets').append(lan_sub_remote_site)
+                    tunnel_local.get('reach_subnets').append(
+                        lan_sub_remote_site)
             # set route in remote site for the local subnet, if not present
             for lan_sub_local_site in lan_sub_local_sites:
+                # If it's a hub-and-spoke topology,
+                # the traffic is steered through the hub
+                gateway = vtep_ip_local_site.split("/")[0]
+                if topo_type == utils.TopologyType.HubAndSpoke:
+                    gateway = vtep_ip_hub.split('/')[0]
+                print('gateway', gateway)
                 lan_sub_local_site = lan_sub_local_site['subnet']
                 if lan_sub_local_site not in tunnel_remote.get('reach_subnets'):
-                    response = self.srv6_manager.create_iproute(
-                        mgmt_ip_remote_site, self.grpc_client_port,
-                        destination=lan_sub_local_site,
-                        gateway=vtep_ip_local_site.split("/")[0],
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot set route for %s in %s '
-                                    % (lan_sub_local_site, mgmt_ip_remote_site))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if topo_type == utils.TopologyType.HubAndSpoke:
+                        hub_gateway = vtep_ip_hub.split('/')[0]
+                        response = self.srv6_manager.create_iproute(
+                            mgmt_ip_remote_site, self.grpc_client_port,
+                            destination=lan_sub_local_site,
+                            gateway=hub_gateway,
+                            table=tableid
+                        )
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot set route for %s in %s '
+                                        % (lan_sub_remote_site, mgmt_ip_local_site))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    else:
+                        response = self.srv6_manager.create_iproute(
+                            mgmt_ip_remote_site, self.grpc_client_port,
+                            destination=lan_sub_local_site,
+                            gateway=gateway,
+                            table=tableid
+                        )
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot set route for %s in %s '
+                                        % (lan_sub_local_site, mgmt_ip_remote_site))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary with the new subnet in overlay
-                    tunnel_remote.get('reach_subnets').append(lan_sub_local_site)
+                    tunnel_remote.get('reach_subnets').append(
+                        lan_sub_local_site)
         # Insert the device overlay state in DB,
         # if there is already a state update it
         #
@@ -304,7 +451,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def init_overlay(self, overlayid, overlay_name,
-                     overlay_type, tenantid, routerid, overlay_info):
+                     overlay_type, tenantid,
+                     routerid, overlay_info, topo_type):
+        # Get hub
+        overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
+        hub = overlay['hub']
+        print('\n\n\ninit ', routerid)
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(
             routerid, tenantid)
@@ -323,7 +475,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_site = srv6_sdn_controller_state.get_wan_interfaces(
             routerid, tenantid)[0]
         # get VNI for the overlay
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if topo_type == utils.TopologyType.HubAndSpoke:
+            vni = srv6_sdn_controller_state.get_new_vni(
+                overlay_name, tenantid, routerid)
+        else:
+            vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
@@ -379,15 +535,77 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot create VRF %s in %s'
                            % (vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If it's hub-and-spoke topology, we need to create the
+        # VTEPs on the hub and attach them to the bridge
+        #
+        if topo_type == utils.TopologyType.HubAndSpoke:
+            # Get the IP address of the hub
+            hub = srv6_sdn_controller_state.get_device_hostname(
+                hub, tenantid)
+            # Get WAN interface IP address of the hub
+            wan_intf_hub = (srv6_sdn_controller_state
+                            .get_wan_interfaces(hub, tenantid)[0])
+            # crete VTEP interface
+            response = self.srv6_manager.createVxLAN(
+                hub, self.grpc_client_port,
+                ifname=vtep_name,
+                vxlan_link=wan_intf_hub,
+                vxlan_id=vni,
+                vxlan_port=vxlan_port_site
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create VTEP %s in %s'
+                               % (vtep_name, hub))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if overlay_type == utils.OverlayType.L2Overlay:
+                # Get the name of the bridge on the hub
+                br_name = 'br-%s' % tableid
+                # Add slice to the VRF
+                response = self.srv6_manager.update_bridge_device(
+                    hub, self.grpc_client_port,
+                    name=br_name,
+                    interfaces=[vtep_name],
+                    op='add_interfaces'
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add interface %s to the bridge %s in %s'
+                                % (vtep_name, br_name, hub))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:
+                hub_ip = srv6_sdn_controller_state.get_vtep_ip(
+            hub, tenantid)
+                # Set VTEP IP address
+                response = self.srv6_manager.create_ipaddr(
+                    hub, self.grpc_client_port,
+                    ip_addr=hub_ip, device=vtep_name, net='')
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set IP %s for VTEP %s in %s'
+                                % (hub_ip, vtep_name, mgmt_ip_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # Add slice to the VRF
+                response = self.srv6_manager.update_vrf_device(
+                    hub, self.grpc_client_port,
+                    name=vrf_name,
+                    interfaces=[vtep_name],
+                    op='add_interfaces'
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot add interface %s to the bridge %s in %s'
+                                % (vtep_name, br_name, hub))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
     def init_overlay_data(self, overlayid,
-                          overlay_name, tenantid, overlay_info):
-        # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
-        if vni == -1:
-            vni = srv6_sdn_controller_state.get_new_vni(
+                          overlay_name, tenantid, overlay_info,
+                          topo_type):
+        if topo_type != utils.TopologyType.HubAndSpoke:
+            # get VNI
+            srv6_sdn_controller_state.get_new_vni(
                 overlay_name, tenantid)
         # get table ID
         tableid = srv6_sdn_controller_state.get_new_tableid(
@@ -406,6 +624,64 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if vtep_ip_site == -1:
             vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
                 routerid, tenantid)
+        # Success
+        return NbStatusCode.STATUS_OK
+
+    def init_hub(self, overlayid, overlay_name,
+                 overlay_type, tenantid, deviceid, overlay_info):
+        # Get IP address
+        device_ip = srv6_sdn_controller_state.get_device_hostname(
+            deviceid, tenantid)
+        # get table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
+        vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
+            deviceid, tenantid)
+        # Get VTEP IP address
+        vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+            deviceid, tenantid)
+        # get VRF name
+        vrf_name = 'vrf-%s' % (tableid)
+        devices_in_vrf = []
+        if overlay_type == utils.OverlayType.L2Overlay:
+            # get bridge name
+            br_name = 'br-%s' % tableid
+            # create bridge and add the VTEP interface
+            response = self.srv6_manager.create_bridge_device(
+                device_ip, self.grpc_client_port,
+                name=br_name
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create bridge %s in %s'
+                            % (br_name, device_ip))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            devices_in_vrf.append(br_name)
+            # Set VTEP IP address
+            # The tunnel endpoint IP address is assigned to the bridge,
+            # not to the VTEP device. This trick allows to have fewer
+            # addresses allocated
+            response = self.srv6_manager.create_ipaddr(
+                device_ip, self.grpc_client_port,
+                ip_addr=vtep_ip, device=br_name, net='')
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot set IP %s for VTEP %s in %s'
+                            % (vtep_ip, br_name, device_ip))
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # create VRF and add the VTEP interface
+        response = self.srv6_manager.create_vrf_device(
+            device_ip, self.grpc_client_port,
+            name=vrf_name, table=tableid, interfaces=devices_in_vrf
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot create VRF %s in %s'
+                           % (vrf_name, device_ip))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 

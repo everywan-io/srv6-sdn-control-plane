@@ -87,6 +87,8 @@ class SRv6Controller(object):
                  pymerang_server_port, min_interval_between_topo_dumps,
                  topo_extraction=False,
                  keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
+                 ca_server_ip=DEFAULT_PYMERANG_SERVER_IP,
+                 ca_server_port=DEFAULT_PYMERANG_SERVER_PORT,
                  verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
@@ -157,6 +159,10 @@ class SRv6Controller(object):
         self.topo_extraction = topo_extraction
         # Interval between two consecutive keep-alive messages
         self.keep_alive_interval = keep_alive_interval
+        # CA server IP
+        self.ca_server_ip = ca_server_ip
+        # CA server port
+        self.ca_server_port = ca_server_port
         # Print configuration
         if self.VERBOSE:
             print()
@@ -897,7 +903,9 @@ class SRv6Controller(object):
             keep_alive_interval=self.keep_alive_interval,
             secure=self.sb_secure, server_key=self.sb_server_key,
             server_certificate=self.sb_server_certificate,
-            client_certificate=self.client_certificate)
+            client_certificate=self.client_certificate,
+            ca_server_ip=self.ca_server_ip,
+            ca_server_port=self.ca_server_port)
         # Init database
         if srv6_sdn_controller_state.init_db() is not True:
             logging.error('Error while initializing database')
@@ -1059,6 +1067,18 @@ def parseArguments():
                         action='store', default=DEFAULT_KEEP_ALIVE_INTERVAL,
                         help='Interval between two consecutive '
                         'keep alive messages')
+    # IP address of the certification authority
+    parser.add_argument(
+        '--ca-server-ip', dest='ca_server_ip',
+        default=DEFAULT_PYMERANG_SERVER_IP,
+        help='Certification authority server IP address'
+    )
+    # Port of the gRPC server on the certification authority
+    parser.add_argument(
+        '--ca-server-port', dest='ca_server_port',
+        default=DEFAULT_PYMERANG_SERVER_PORT,
+        help='Certification authority server port'
+    )
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -1164,6 +1184,12 @@ def parse_config_file(config_file):
     # Keep-alive interval
     args.keep_alive_interval = config['DEFAULT'].get(
         'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+    # IP address of the certification authority
+    args.ca_server_ip = config['DEFAULT'].get(
+        'ca_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+    # Port of the gRPC server on the certification authority
+    args.ca_server_port = config['DEFAULT'].get(
+        'ca_server_port', DEFAULT_PYMERANG_SERVER_PORT)
     # Done, return
     return args
 
@@ -1238,6 +1264,10 @@ def _main():
     min_interval_between_topo_dumps = args.min_interval_between_topo_dumps
     # Keep-alive interval
     keep_alive_interval = args.keep_alive_interval
+    # CA Server IP
+    ca_server_ip = args.ca_server_ip
+    # CA Server port
+    ca_server_port = args.ca_server_port
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
@@ -1271,6 +1301,8 @@ def _main():
         min_interval_between_topo_dumps=min_interval_between_topo_dumps,
         topo_extraction=topo_extraction,
         keep_alive_interval=keep_alive_interval,
+        ca_server_ip=ca_server_ip,
+        ca_server_port=ca_server_port,
         verbose=verbose
     )
     # Start the controller
