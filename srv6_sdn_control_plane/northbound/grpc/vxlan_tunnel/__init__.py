@@ -1,0 +1,13 @@
+#!/usr/bin/python
+
+from srv6_sdn_control_plane.northbound.grpc.vxlan_tunnel import vxlan_tunnel_l2_hub_and_spoke
+from srv6_sdn_control_plane.northbound.grpc.vxlan_tunnel import vxlan_tunnel_l2_full_mesh
+from srv6_sdn_control_plane.northbound.grpc.vxlan_tunnel import vxlan_tunnel_l3_hub_and_spoke
+from srv6_sdn_control_plane.northbound.grpc.vxlan_tunnel import vxlan_tunnel_l3_full_mesh
+
+L2VXLANTunnelFM = vxlan_tunnel_l2_full_mesh.L2VXLANTunnelFM
+L2VXLANTunnelHS = vxlan_tunnel_l2_hub_and_spoke.L2VXLANTunnelHS
+IPv4VXLANTunnelFM = vxlan_tunnel_l3_full_mesh.IPv4VXLANTunnelFM
+IPv4VXLANTunnelHS = vxlan_tunnel_l3_hub_and_spoke.IPv4VXLANTunnelHS
+IPv6VXLANTunnelFM = vxlan_tunnel_l3_full_mesh.IPv6VXLANTunnelFM
+IPv6VXLANTunnelHS = vxlan_tunnel_l3_hub_and_spoke.IPv6VXLANTunnelHS
