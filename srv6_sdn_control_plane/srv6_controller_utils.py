@@ -54,6 +54,19 @@ logger = logging.getLogger(__name__)
 random.seed(time.time())
 
 
+class TopologyType:
+    HubAndSpoke = 'HubAndSpoke'
+    FullMesh = 'FullMesh'
+
+
+supported_topology_types = [TopologyType.HubAndSpoke, TopologyType.FullMesh]
+
+
+# Utiliy function to check if the provided topology type is valid
+def validate_topology_type(topo_type):
+    return topo_type in supported_topology_types
+
+
 class InterfaceType:
     UNKNOWN = 'unknown'
     WAN = 'wan'
