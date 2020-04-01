@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
+from abc import ABC
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode
 
 
-class TunnelMode(object):
+class TunnelMode(ABC, object):
 
     def __init__(self, name, overlay_type, topo_type,
                  grpc_client_port, srv6_manager, verbose):

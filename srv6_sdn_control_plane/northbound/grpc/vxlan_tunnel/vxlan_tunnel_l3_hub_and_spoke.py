@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division, print_function
 # General imports
+from abc import abstractmethod
 import logging
 from bson.objectid import ObjectId
 # SRv6 dependencies
@@ -39,6 +40,22 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             verbose=verbose
         )
 
+    @abstractmethod
+    def get_new_vtep_ip(self, deviceid, tenantid):
+        pass
+
+    @abstractmethod
+    def get_vtep_ip(self, deviceid, tenantid):
+        pass
+
+    @abstractmethod
+    def release_vtep_ip(self, deviceid, tenantid):
+        pass
+
+    @abstractmethod
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        pass
+
     def add_slice_to_overlay(self, overlayid, overlay_name, routerid,
                              interface_name, tenantid, overlay_info):
         # Get device management IP address
@@ -50,6 +67,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # add slice to the VRF
@@ -66,7 +84,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create routes for subnets
         # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = self.get_subnets(
             routerid, tenantid, interface_name)
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -96,7 +114,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             overlay = srv6_sdn_controller_state.get_overlay(
                 overlayid, tenantid)
             hub = overlay['hub']
-            vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip = self.get_vtep_ip(
                 routerid, tenantid).split('/')[0]
             response = self.srv6_manager.create_iproute(
                 hub, self.grpc_client_port,
@@ -131,9 +149,9 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         hub_ip = srv6_sdn_controller_state.get_ext_ipv4_addresses(
             hub, tenantid, wan_hub)[0]
         # get subnet for local and remote site
-        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_remote_sites = self.get_subnets(
             id_remote_site, tenantid, remote_site['interface_name'])
-        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_local_sites = self.get_subnets(
             id_local_site, tenantid, local_site['interface_name'])
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
@@ -142,8 +160,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
         # get VTEP IP remote site and local site
-        vtep_ip_hub = srv6_sdn_controller_state.get_vtep_ip(
-            hub, tenantid)
+        vtep_ip_hub = self.get_vtep_ip(hub, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(
             overlay_name, tenantid)
@@ -365,9 +382,6 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
 
     def init_overlay(self, overlayid, overlay_name,
                      tenantid, routerid, overlay_info):
-        # Get hub
-        overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
-        hub = overlay['hub']
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(
             routerid, tenantid)
@@ -395,7 +409,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip_site = self.get_vtep_ip(
             routerid, tenantid)
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
@@ -454,11 +468,16 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
 
     def init_tunnel_mode(self, routerid, tenantid, overlay_info):
         # get VTEP IP address for site1
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
-            routerid, tenantid)
-        if vtep_ip_site == -1:
-            vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
-                routerid, tenantid)
+        if srv6_sdn_controller_state.get_new_vtep_ipv4(
+                routerid, tenantid) is None:
+            logging.error('Error while getting a new VTEP IPv4 address '
+                          'for the device %s' % routerid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if srv6_sdn_controller_state.get_new_vtep_ipv6(
+                routerid, tenantid) is None:
+            logging.error('Error while getting a new VTEP IPv6 address '
+                          'for the device %s' % routerid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -505,7 +524,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
                            % (vtep_name, deviceid))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         devices_in_vrf.append(vtep_name)
-        hub_ip = srv6_sdn_controller_state.get_vtep_ip(
+        hub_ip = self.get_vtep_ip(
             deviceid, tenantid)
         # Set VTEP IP address
         response = self.srv6_manager.create_ipaddr(
@@ -547,7 +566,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         # to the add_slice_to_overlay function
         #
         # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = self.get_subnets(
             routerid, tenantid, interface_name)
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -578,7 +597,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             overlay = srv6_sdn_controller_state.get_overlay(
                 overlayid, tenantid)
             hub = overlay['hub']
-            vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip = self.get_vtep_ip(
                 routerid, tenantid).split('/')[0]
             response = self.srv6_manager.remove_iproute(
                 hub, self.grpc_client_port,
@@ -643,9 +662,9 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
             id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
         # get local and remote subnet
-        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_local_sites = self.get_subnets(
             id_local_site, tenantid, local_site['interface_name'])
-        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_remote_sites = self.get_subnets(
             id_remote_site, tenantid, remote_site['interface_name'])
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
@@ -853,7 +872,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip_site = self.get_vtep_ip(
             routerid, tenantid)
         # get VTEP IP address
         response = self.srv6_manager.remove_ipaddr(
@@ -909,7 +928,18 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
 
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device
-        srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
+        if srv6_sdn_controller_state.release_vtep_ipv4(
+                routerid, tenantid) is None:
+            logging.error('Error while releasing VTEP IPv4 address associated '
+                          'to the device %s (tenant %s)'
+                          % (routerid, tenantid))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if srv6_sdn_controller_state.release_vtep_ipv6(
+                routerid, tenantid) is None:
+            logging.error('Error while releasing VTEP IPv6 address associated '
+                          'to the device %s (tenant %s)'
+                          % (routerid, tenantid))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -935,7 +965,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
-        hub_ip = srv6_sdn_controller_state.get_vtep_ip(
+        hub_ip = self.get_vtep_ip(
             deviceid, tenantid)
         # Set VTEP IP address
         response = self.srv6_manager.remove_ipaddr(
@@ -986,6 +1016,22 @@ class IPv4VXLANTunnelHS(L3VXLANTunnelHS):
             verbose=verbose
         )
 
+    def get_new_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.get_new_vtep_ipv4(
+                deviceid, tenantid)
+
+    def get_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.get_vtep_ipv4(
+                deviceid, tenantid)
+
+    def release_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.release_vtep_ipv4(
+                deviceid, tenantid)
+
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        return srv6_sdn_controller_state.get_ipv4_subnets(
+            deviceid, tenantid, interface_name)
+
 
 class IPv6VXLANTunnelHS(L3VXLANTunnelHS):
 
@@ -999,3 +1045,19 @@ class IPv6VXLANTunnelHS(L3VXLANTunnelHS):
             srv6_manager=srv6_manager,
             verbose=verbose
         )
+
+    def get_new_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.get_new_vtep_ipv6(
+                deviceid, tenantid)
+
+    def get_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.get_vtep_ipv6(
+                deviceid, tenantid)
+
+    def release_vtep_ip(self, deviceid, tenantid):
+        return srv6_sdn_controller_state.release_vtep_ipv6(
+                deviceid, tenantid)
+
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        return srv6_sdn_controller_state.get_ipv6_subnets(
+            deviceid, tenantid, interface_name)

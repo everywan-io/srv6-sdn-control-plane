@@ -300,7 +300,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv4(
             routerid, tenantid)
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
@@ -400,11 +400,16 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
 
     def init_tunnel_mode(self, routerid, tenantid, overlay_info):
         # get VTEP IP address for site1
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
-            routerid, tenantid)
-        if vtep_ip_site == -1:
-            vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
-                routerid, tenantid)
+        if srv6_sdn_controller_state.get_new_vtep_ipv4(
+                routerid, tenantid) is None:
+            logging.error('Error while getting a new VTEP IPv4 address '
+                          'for the device %s' % routerid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if srv6_sdn_controller_state.get_new_vtep_ipv6(
+                routerid, tenantid) is None:
+            logging.error('Error while getting a new VTEP IPv6 address '
+                          'for the device %s' % routerid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -419,8 +424,9 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get VTEP IP address
-        vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip = srv6_sdn_controller_state.get_vtep_ipv4(
             deviceid, tenantid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -722,7 +728,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv4(
             routerid, tenantid)
         # get VTEP IP address
         response = self.srv6_manager.remove_ipaddr(
@@ -806,7 +812,18 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
 
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device
-        srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
+        if srv6_sdn_controller_state.release_vtep_ipv4(
+                routerid, tenantid) is None:
+            logging.error('Error while releasing VTEP IPv4 address associated '
+                          'to the device %s (tenant %s)'
+                          % (routerid, tenantid))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if srv6_sdn_controller_state.release_vtep_ipv6(
+                routerid, tenantid) is None:
+            logging.error('Error while releasing VTEP IPv6 address associated '
+                          'to the device %s (tenant %s)'
+                          % (routerid, tenantid))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -822,7 +839,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
         # Get VTEP IP address
-        vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip = srv6_sdn_controller_state.get_vtep_ipv4(
             deviceid, tenantid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
