@@ -147,7 +147,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
                 overlay_name, tenantid, id_local_site)
             if vni is None:
                 logging.error('Error while getting VNI assigned to the '
-                            'overlay %s' % overlayid)
+                              'overlay %s' % overlayid)
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
@@ -184,7 +184,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
                 overlay_name, tenantid, id_remote_site)
             if vni is None:
                 logging.error('Error while getting VNI assigned to the '
-                            'overlay %s' % overlayid)
+                              'overlay %s' % overlayid)
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
@@ -582,7 +582,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
                     overlay_name, tenantid, id_remote_site)
                 if vni is None:
                     logging.error('Error while getting VNI assigned to the '
-                                'overlay %s' % overlayid)
+                                  'overlay %s' % overlayid)
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # get VTEP name
                 vtep_name = 'vxlan-%s' % (vni)
@@ -624,8 +624,8 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
                     vni = srv6_sdn_controller_state.get_vni(
                         overlay_name, tenantid, id_local_site)
                     if vni is None:
-                        logging.error('Error while getting VNI assigned to the '
-                                    'overlay %s' % overlayid)
+                        logging.error('Error while getting VNI assigned to '
+                                      'the overlay %s' % overlayid)
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # get VTEP name
                     vtep_name = 'vxlan-%s' % (vni)

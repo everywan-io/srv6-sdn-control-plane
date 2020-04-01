@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel
-from srv6_sdn_control_plane.northbound.grpc import gre_tunnel
+#from srv6_sdn_control_plane.northbound.grpc import gre_tunnel
 from srv6_sdn_control_plane.northbound.grpc import vxlan_tunnel
 
 tunnel = dict()

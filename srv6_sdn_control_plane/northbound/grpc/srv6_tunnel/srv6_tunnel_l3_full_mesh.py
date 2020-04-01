@@ -31,7 +31,6 @@ from socket import AF_INET6
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc.srv6_tunnel import srv6_tunnel_utils
-from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane import srv6_controller_utils as utils
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
 from srv6_sdn_controller_state import srv6_sdn_controller_state
@@ -77,7 +76,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
     def get_family(self):
         pass
 
-    def _create_tunnel_uni(self, overlayid, overlay_name, overlay_type,
+    def _create_tunnel_uni(self, overlayid, overlay_name,
                            l_slice, r_slice, tenantid, overlay_info):
         logging.debug('Attempting to create unidirectional tunnel '
                       'from %s to %s' % (l_slice['interface_name'],
@@ -161,7 +160,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         logging.debug('Remote interface assigned to VPN successfully')
         return NbStatusCode.STATUS_OK
 
-    def _remove_tunnel_uni(self, overlayid, overlay_name, overlay_type,
+    def _remove_tunnel_uni(self, overlayid, overlay_name,
                            l_slice, r_slice, tenantid, overlay_info):
         # Decrease the number of tunnels
         num_tunnels = srv6_sdn_controller_state.dec_and_get_tunnels_counter(
@@ -219,7 +218,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         logging.debug('New table ID assigned to the VPN: %s', tableid)
         logging.debug('Validating the table ID: %s' % tableid)
         # Validate the table ID
-        if not srv6_controller_utils.validate_table_id(tableid):
+        if not utils.validate_table_id(tableid):
             logging.warning('Invalid table ID: %s' % tableid)
             # If the table ID is not valid, return an error message
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -421,7 +420,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel(self, overlayid, overlay_name,
-                      local_site, remote_site, tenantid, overlay_info):
+                      l_slice, r_slice, tenantid, overlay_info):
         logging.debug(
             'Attempting to create a tunnel %s between the interfaces %s and %s'
             % (overlay_name, l_slice['interface_name'],
@@ -431,7 +430,6 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         res = self._create_tunnel_uni(
             overlayid,
             overlay_name,
-            overlay_type,
             l_slice,
             r_slice,
             tenantid,
@@ -441,7 +439,6 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         # Tunnel from r_slice to l_slice
         res = self._create_tunnel_uni(
             overlayid, overlay_name,
-            overlay_type,
             r_slice, l_slice,
             tenantid,
             overlay_info)
@@ -538,7 +535,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         # route)
         response = self.srv6_manager.remove_srv6_local_processing_function(
             deviceip, self.grpc_client_port, segment=sid,
-            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
+            localsid_table=utils.LOCAL_SID_TABLE
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, return an error message
@@ -638,7 +635,7 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name,
-                      local_site, remote_site, tenantid, overlay_info):
+                      l_slice, r_slice, tenantid, overlay_info):
         logging.debug(
             'Attempting to remove the tunnel %s between the interfaces '
             '%s and %s' % (overlay_name,
@@ -648,7 +645,6 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         # Tunnel from l_slice to r_slice
         res = self._remove_tunnel_uni(
             overlayid, overlay_name,
-            overlay_type,
             l_slice,
             r_slice,
             tenantid,
@@ -658,7 +654,6 @@ class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
         # Tunnel from r_slice to l_slice
         res = self._remove_tunnel_uni(
             overlayid, overlay_name,
-            overlay_type,
             r_slice,
             l_slice,
             tenantid,

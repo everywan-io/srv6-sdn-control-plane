@@ -106,7 +106,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
                 overlay_name, tenantid)
             if vni is None:
                 logging.error('Error while getting VNI assigned to the '
-                            'overlay %s' % overlayid)
+                              'overlay %s' % overlayid)
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
@@ -254,7 +254,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
                 overlay_name, tenantid)
             if vni is None:
                 logging.error('Error while getting VNI assigned to the '
-                            'overlay %s' % overlayid)
+                              'overlay %s' % overlayid)
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
@@ -589,7 +589,7 @@ class L3VXLANTunnelHS(tunnel_mode.TunnelMode):
                 overlay_name, tenantid)
             if vni is None:
                 logging.error('Error while getting VNI assigned to the '
-                            'overlay %s' % overlayid)
+                              'overlay %s' % overlayid)
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
@@ -1018,15 +1018,15 @@ class IPv4VXLANTunnelHS(L3VXLANTunnelHS):
 
     def get_new_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.get_new_vtep_ipv4(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def get_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.get_vtep_ipv4(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def release_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.release_vtep_ipv4(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def get_subnets(self, deviceid, tenantid, interface_name):
         return srv6_sdn_controller_state.get_ipv4_subnets(
@@ -1048,15 +1048,15 @@ class IPv6VXLANTunnelHS(L3VXLANTunnelHS):
 
     def get_new_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.get_new_vtep_ipv6(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def get_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.get_vtep_ipv6(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def release_vtep_ip(self, deviceid, tenantid):
         return srv6_sdn_controller_state.release_vtep_ipv6(
-                deviceid, tenantid)
+            deviceid, tenantid)
 
     def get_subnets(self, deviceid, tenantid, interface_name):
         return srv6_sdn_controller_state.get_ipv6_subnets(
