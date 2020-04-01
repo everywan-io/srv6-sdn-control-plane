@@ -90,11 +90,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
-        # get VNI
-        vni = srv6_sdn_controller_state.get_vni(
-            overlay_name, tenantid, id_local_site)
-        # get VTEP name
-        vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
         wan_intf_local_site = srv6_sdn_controller_state.get_wan_interfaces(
             id_local_site, tenantid)[0]
@@ -147,6 +142,15 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             # If it's a hub-and-spoke topology,
             # the traffic is steered through the hub
             #
+            # get VNI
+            vni = srv6_sdn_controller_state.get_vni(
+                overlay_name, tenantid, id_local_site)
+            if vni is None:
+                logging.error('Error while getting VNI assigned to the '
+                            'overlay %s' % overlayid)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # get VTEP name
+            vtep_name = 'vxlan-%s' % (vni)
             # add FDB entry in local site
             response = self.srv6_manager.addfdbentries(
                 mgmt_ip_local_site, self.grpc_client_port,
@@ -163,12 +167,12 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             response = self.srv6_manager.addfdbentries(
                 hub, self.grpc_client_port,
                 ifindex=vtep_name,
-                dst=wan_ip_local_site
+                dst=wan_ip_remote_site
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
-                               % (wan_ip_local_site,
+                               % (wan_ip_remote_site,
                                   vtep_name, hub_ip))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
@@ -178,6 +182,10 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             # get VNI
             vni = srv6_sdn_controller_state.get_vni(
                 overlay_name, tenantid, id_remote_site)
+            if vni is None:
+                logging.error('Error while getting VNI assigned to the '
+                            'overlay %s' % overlayid)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # get VTEP name
             vtep_name = 'vxlan-%s' % (vni)
             # If it's a hub-and-spoke topology,
@@ -199,12 +207,12 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             response = self.srv6_manager.addfdbentries(
                 hub, self.grpc_client_port,
                 ifindex=vtep_name,
-                dst=wan_ip_remote_site
+                dst=wan_ip_local_site
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning('Cannot add FDB entry %s for VTEP %s in %s'
-                               % (wan_ip_remote_site,
+                               % (wan_ip_local_site,
                                   vtep_name, hub_ip))
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
@@ -285,6 +293,10 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         # get VNI for the overlay
         vni = srv6_sdn_controller_state.get_new_vni(
             overlay_name, tenantid, routerid)
+        if vni is None:
+            logging.error('Error while getting a new VNI for the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
@@ -303,8 +315,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logger.warning('Cannot create VTEP %s in %s'
                            % (vtep_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Enslave the VTEP in VRF
-        devices_in_vrf = [vtep_name]
         # set VTEP IP address
         response = self.srv6_manager.create_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
@@ -327,12 +337,10 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logger.warning('Cannot create bridge %s in %s'
                            % (br_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Enslave bridge in VRF
-        devices_in_vrf = [br_name]
         # create VRF and add the VTEP interface
         response = self.srv6_manager.create_vrf_device(
             mgmt_ip_site, self.grpc_client_port,
-            name=vrf_name, table=tableid, interfaces=devices_in_vrf
+            name=vrf_name, table=tableid, interfaces=[br_name]
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
@@ -416,7 +424,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             deviceid, tenantid)
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
-        devices_in_vrf = []
         # get bridge name
         br_name = 'br-%s' % tableid
         # create bridge and add the VTEP interface
@@ -429,7 +436,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logger.warning('Cannot create bridge %s in %s'
                            % (br_name, device_ip))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        devices_in_vrf.append(br_name)
         # Set VTEP IP address
         # The tunnel endpoint IP address is assigned to the bridge,
         # not to the VTEP device. This trick allows to have fewer
@@ -445,7 +451,7 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         # create VRF and add the VTEP interface
         response = self.srv6_manager.create_vrf_device(
             device_ip, self.grpc_client_port,
-            name=vrf_name, table=tableid, interfaces=devices_in_vrf
+            name=vrf_name, table=tableid, interfaces=[br_name]
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
@@ -466,58 +472,40 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
-        # Remove IP routes from the VRF
-        # This step is optional, because the routes are
-        # automatically removed when the interfaces is removed
-        # from the VRF. We do it just for symmetry with respect
-        # to the add_slice_to_overlay function
-        #
-        # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
-            routerid, tenantid, interface_name)
-        for subnet in subnets:
-            gateway = subnet['gateway']
-            subnet = subnet['subnet']
-            if gateway is not None and gateway != '':
-                response = self.srv6_manager.remove_iproute(
-                    mgmt_ip_site, self.grpc_client_port,
-                    destination=subnet, gateway=gateway,
-                    table=tableid
-                )
-                if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning('Cannot remove route for %s (gateway %s) '
-                                   'in %s ' % (subnet, gateway, mgmt_ip_site))
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # retrive VRF name
-        vrf_name = 'vrf-%s' % (tableid)
-        # Remove slice from VRF
-        response = self.srv6_manager.update_vrf_device(
+        # retrive bridge name
+        br_name = 'br-%s' % (tableid)
+        # Remove slice from bridge
+        response = self.srv6_manager.update_bridge_device(
             mgmt_ip_site, self.grpc_client_port,
-            name=vrf_name,
+            name=br_name,
             interfaces=[interface_name],
             op='del_interfaces'
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
-            logger.warning('Cannot remove interface %s from VRF %s in %s'
-                           % (interface_name, vrf_name, mgmt_ip_site))
+            logger.warning('Cannot remove interface %s from bridge %s in %s'
+                           % (interface_name, br_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name,
                       local_site, remote_site, tenantid, overlay_info):
+        # Get hub
+        overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
+        hub = overlay['hub']
         # get devices ID
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
-        # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get management IP local and remote site
         mgmt_ip_remote_site = srv6_sdn_controller_state.get_device_hostname(
             id_remote_site, tenantid)
         mgmt_ip_local_site = srv6_sdn_controller_state.get_device_hostname(
             id_local_site, tenantid)
+        wan_hub = (srv6_sdn_controller_state
+                   .get_wan_interfaces(hub, tenantid)[0])
+        hub_ip = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            hub, tenantid, wan_hub)[0]
         # get WAN interface name for local site and remote site
         wan_intf_local_site = srv6_sdn_controller_state.get_wan_interfaces(
             id_local_site, tenantid)[0]
@@ -539,8 +527,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
-        # get VTEP name
-        vtep_name = 'vxlan-%s' % (vni)
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
@@ -567,18 +553,6 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             for lan_sub_local_site in lan_sub_local_sites:
                 lan_sub_local_site = lan_sub_local_site['subnet']
                 if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
-                    # remove route in remote site
-                    response = self.srv6_manager.remove_iproute(
-                        mgmt_ip_remote_site, self.grpc_client_port,
-                        destination=lan_sub_local_site,
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot remove route to %s in %s'
-                                       % (lan_sub_local_site,
-                                          mgmt_ip_remote_site))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
                     tunnel_remote.get('reach_subnets').remove(
                         lan_sub_local_site)
@@ -589,33 +563,46 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             for lan_sub_remote_site in lan_sub_remote_sites:
                 lan_sub_remote_site = lan_sub_remote_site['subnet']
                 if lan_sub_remote_site in tunnel_local.get('reach_subnets'):
-                    # remove route in local site
-                    response = self.srv6_manager.remove_iproute(
-                        mgmt_ip_local_site, self.grpc_client_port,
-                        destination=lan_sub_remote_site,
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot remove route to %s in %s'
-                                       % (lan_sub_remote_site,
-                                          mgmt_ip_local_site))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
                     tunnel_local.get('reach_subnets').remove(
                         lan_sub_remote_site)
             # Check if there is the fdb entry in remote site for local site
             if tunnel_remote.get('fdb_entry_config') is True:
-                # remove FDB entry in remote site
+                # In a hub-and-spoke topology,
+                # the traffic is steered through the hub
+                #
+                # get VNI
+                vni = srv6_sdn_controller_state.get_vni(
+                    overlay_name, tenantid, id_remote_site)
+                if vni is None:
+                    logging.error('Error while getting VNI assigned to the '
+                                'overlay %s' % overlayid)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # get VTEP name
+                vtep_name = 'vxlan-%s' % (vni)
+                # remove FDB entry from remote site
                 response = self.srv6_manager.delfdbentries(
                     mgmt_ip_remote_site, self.grpc_client_port,
+                    ifindex=vtep_name,
+                    dst=hub_ip
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot remove FDB entry %s for VTEP %s '
+                                   'from %s' % (hub_ip, vtep_name,
+                                                mgmt_ip_remote_site))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                # remove FDB entry from hub node
+                response = self.srv6_manager.delfdbentries(
+                    hub, self.grpc_client_port,
                     ifindex=vtep_name,
                     dst=wan_ip_local_site
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
-                    logger.warning('Cannot remove FDB entry %s in %s'
-                                   % (wan_ip_local_site, mgmt_ip_remote_site))
+                    logger.warning('Cannot remove FDB entry %s for VTEP %s '
+                                   'from %s' % (wan_ip_local_site,
+                                                vtep_name, hub))
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary
                 tunnel_remote['fdb_entry_config'] = False
@@ -624,17 +611,41 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             if len(tunnel_local.get('reach_subnets')) == 0:
                 # Check if there is the fdb entry in local site for remote site
                 if tunnel_local.get('fdb_entry_config') is True:
-                    # remove FDB entry in local site
+                    # In a hub-and-spoke topology,
+                    # the traffic is steered through the hub
+                    #
+                    # get VNI
+                    vni = srv6_sdn_controller_state.get_vni(
+                        overlay_name, tenantid, id_local_site)
+                    if vni is None:
+                        logging.error('Error while getting VNI assigned to the '
+                                    'overlay %s' % overlayid)
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    # get VTEP name
+                    vtep_name = 'vxlan-%s' % (vni)
+                    # remove FDB entry from local site
                     response = self.srv6_manager.delfdbentries(
                         mgmt_ip_local_site, self.grpc_client_port,
+                        ifindex=vtep_name,
+                        dst=hub_ip
+                    )
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning('Cannot remove FDB entry %s for VTEP %s'
+                                       ' from %s' % (hub_ip, vtep_name,
+                                                     mgmt_ip_local_site))
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    # remove FDB entry from hub node
+                    response = self.srv6_manager.delfdbentries(
+                        hub, self.grpc_client_port,
                         ifindex=vtep_name,
                         dst=wan_ip_remote_site
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
-                        logger.warning('Cannot remove FDB entry %s in %s'
-                                       % (wan_ip_remote_site,
-                                          mgmt_ip_local_site))
+                        logger.warning('Cannot remove FDB entry %s for VTEP %s'
+                                       ' from %s' % (wan_ip_remote_site,
+                                                     vtep_name, hub))
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
                     tunnel_local['fdb_entry_config'] = False
@@ -682,17 +693,24 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
                     'created_tunnel.$.fdb_entry_config': tunnel_remote.get(
                         'fdb_entry_config')}}
             )
-
         # Success
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
                         tenantid, routerid, overlay_info):
+        # Get hub
+        overlay = srv6_sdn_controller_state.get_overlay(overlayid, tenantid)
+        hub = overlay['hub']
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_device_hostname(
             routerid, tenantid)
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = srv6_sdn_controller_state.get_vni(
+            overlay_name, tenantid, routerid)
+        if vni is None:
+            logging.error('Error while getting VNI assigned to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -727,6 +745,24 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove VTEP %s in %s'
                            % (vtep_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # release VNI
+        if srv6_sdn_controller_state.release_vni(
+                overlay_name, tenantid, routerid) is None:
+            logging.error('Error while releasing the VNI associated to the '
+                          'overlay %s and device %s' % overlayid, routerid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # get bridge name
+        br_name = 'br-%s' % tableid
+        # remove bridge
+        response = self.srv6_manager.remove_bridge_device(
+            mgmt_ip_site, self.grpc_client_port,
+            name=br_name
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove bridge %s in %s'
+                           % (br_name, mgmt_ip_site))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # remove VRF device
         response = self.srv6_manager.remove_vrf_device(
             mgmt_ip_site, self.grpc_client_port,
@@ -737,13 +773,27 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
             logger.warning('Cannot remove VRF %s in %s'
                            % (vrf_name, mgmt_ip_site))
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If it's hub-and-spoke topology, we need to remove the
+        # VTEPs on the hub
+        #
+        # Get the IP address of the hub
+        hub = srv6_sdn_controller_state.get_device_hostname(
+            hub, tenantid)
+        # crete VTEP interface
+        response = self.srv6_manager.delVxLAN(
+            hub, self.grpc_client_port,
+            ifname=vtep_name
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove VTEP %s in %s'
+                           % (vtep_name, hub))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay_data(self, overlayid,
                              overlay_name, tenantid, overlay_info):
-        # release VNI
-        srv6_sdn_controller_state.release_vni(overlay_name, tenantid)
         # release tableid
         success = srv6_sdn_controller_state.release_tableid(
             overlayid, tenantid)
@@ -757,6 +807,56 @@ class L2VXLANTunnelHS(tunnel_mode.TunnelMode):
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device
         srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
+        # Success
+        return NbStatusCode.STATUS_OK
+
+    def destroy_hub(self, overlayid, overlay_name,
+                    tenantid, deviceid, overlay_info):
+        # Get IP address
+        device_ip = srv6_sdn_controller_state.get_device_hostname(
+            deviceid, tenantid)
+        # get table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logging.error('Error while getting table ID assigned to the '
+                          'overlay %s' % overlayid)
+        # Get VTEP IP address
+        vtep_ip = srv6_sdn_controller_state.get_vtep_ip(
+            deviceid, tenantid)
+        # get VRF name
+        vrf_name = 'vrf-%s' % (tableid)
+        # get bridge name
+        br_name = 'br-%s' % tableid
+        # Remove VTEP IP address
+        response = self.srv6_manager.remove_ipaddr(
+            device_ip, self.grpc_client_port,
+            ip_addr=vtep_ip, device=br_name)
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove IP %s for VTEP %s in %s'
+                           % (vtep_ip, br_name, device_ip))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # remove bridge
+        response = self.srv6_manager.remove_bridge_device(
+            device_ip, self.grpc_client_port,
+            name=br_name
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove bridge %s in %s'
+                           % (br_name, device_ip))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Remove VRF
+        response = self.srv6_manager.remove_vrf_device(
+            device_ip, self.grpc_client_port,
+            name=vrf_name
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot remove VRF %s in %s'
+                           % (vrf_name, device_ip))
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 

@@ -114,6 +114,10 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
             id_local_site, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if vni is None:
+            logging.error('Error while getting VNI assigned to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
@@ -309,6 +313,10 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
             routerid, tenantid)[0]
         # get VNI for the overlay
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if vni is None:
+            logging.error('Error while getting VNI assigned to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
@@ -354,8 +362,11 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
     def init_overlay_data(self, overlayid, overlay_name,
                           tenantid, overlay_info):
         # get VNI
-        srv6_sdn_controller_state.get_new_vni(
-            overlay_name, tenantid)
+        if srv6_sdn_controller_state.get_new_vni(
+                overlay_name, tenantid) is None:
+            logging.error('Error while getting a new VNI for the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get table ID
         tableid = srv6_sdn_controller_state.get_new_tableid(
             overlayid, tenantid)
@@ -434,6 +445,10 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
         id_remote_site = remote_site['deviceid']
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if vni is None:
+            logging.error('Error while getting VNI assigned to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get management IP local and remote site
         mgmt_ip_remote_site = srv6_sdn_controller_state.get_device_hostname(
             id_remote_site, tenantid)
@@ -614,6 +629,10 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
             routerid, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        if vni is None:
+            logging.error('Error while getting VNI assigned to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -664,7 +683,11 @@ class L3VXLANTunnelFM(tunnel_mode.TunnelMode):
     def destroy_overlay_data(self, overlayid,
                              overlay_name, tenantid, overlay_info):
         # release VNI
-        srv6_sdn_controller_state.release_vni(overlay_name, tenantid)
+        if srv6_sdn_controller_state.release_vni(
+                overlay_name, tenantid) is None:
+            logging.error('Error while releasing the VNI associated to the '
+                          'overlay %s' % overlayid)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # release tableid
         success = srv6_sdn_controller_state.release_tableid(
             overlayid, tenantid)

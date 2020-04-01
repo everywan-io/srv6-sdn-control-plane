@@ -1171,8 +1171,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                                tenantid, hub_id, tunnel_info)
             if status_code != STATUS_OK:
                 err = ('Cannot initialize hub (overlay %s '
-                        'hub %s, tenant %s)'
-                        % (overlay_name, hub_id, tenantid))
+                       'hub %s, tenant %s)'
+                       % (overlay_name, hub_id, tenantid))
                 logging.warning(err)
                 # Remove overlay DB status
                 if srv6_sdn_controller_state.remove_overlay(
@@ -1365,6 +1365,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         overlay_type = overlay['type']
         # Get the overlay type
         topo_type = overlay['topo_type']
+        # ID of the hub node (only for HubAndSpoke topology type)
+        hub_id = overlay.get('hub')
         # Get the tunnel mode
         tunnel_name = overlay['tunnel_mode']
         tunnel_mode = self.tunnel_modes[tunnel_name][overlay_type][topo_type]
@@ -1437,6 +1439,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 err = 'Cannot decrease tunnel mode counter'
                 logging.error(err)
                 return STATUS_INTERNAL_SERVER_ERROR, err
+        # Destroy hub, if the topology type is hub and spoke
+        # If the topology is not hub and spoke, nothing is done
+        status_code = tunnel_mode.destroy_hub(overlayid, overlay_name,
+                                              tenantid, hub_id, tunnel_info)
+        if status_code != STATUS_OK:
+            err = ('Cannot destroy hub (overlay %s '
+                   'hub %s, tenant %s)'
+                   % (overlay_name, hub_id, tenantid))
+            logging.warning(err)
+            return OverlayServiceReply(
+                status=Status(code=status_code, reason=err))
         # Destroy overlay data structure
         status_code = tunnel_mode.destroy_overlay_data(
             overlayid, overlay_name, tenantid, tunnel_info)
@@ -1926,7 +1939,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             overlayid, overlay_name, site1,
                             site2, tenantid, tunnel_info)
                         if status_code != STATUS_OK:
-                            err = ('Cannot create tunnel (overlay %s site1 %s '
+                            err = ('Cannot remove tunnel (overlay %s site1 %s '
                                    'site2 %s, tenant %s)'
                                    % (overlay_name, site1, site2, tenantid))
                             logging.warning(err)

@@ -63,5 +63,9 @@ class TunnelMode(object):
                       local_site, remote_site, tenantid, overlay_info):
         pass
 
+    def destroy_hub(self, overlayid, overlay_name,
+                    tenantid, deviceid, overlay_info):
+        return NbStatusCode.STATUS_OK
+
     def get_overlays(self):
         raise NotImplementedError
