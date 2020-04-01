@@ -225,8 +225,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logging.debug('Remove unidirectional tunnel completed')
         return NbStatusCode.STATUS_OK
 
-    def init_overlay_data(self, overlayid,
-                          overlay_name, tenantid, overlay_info):
+    def init_overlay_data(self, overlayid, overlay_name,
+                          tenantid, overlay_info):
         logging.debug('Initiating overlay data for the overlay %s'
                       % overlay_name)
         # Initialize the overlay data structure
@@ -302,7 +302,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def init_overlay(self, overlayid, overlay_name,
-                     overlay_type, tenantid, deviceid, overlay_info):
+                     tenantid, deviceid, overlay_info):
         logging.debug('Initiating overlay %s on the device %s'
                       % (overlay_name, deviceid))
         # Get the router address
@@ -409,8 +409,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                       'deviceid %s' % (overlay_name, deviceid))
         return NbStatusCode.STATUS_OK
 
-    def add_slice_to_overlay(self, overlayid, overlay_name, overlay_type,
-                             deviceid, interface_name, tenantid, overlay_info):
+    def add_slice_to_overlay(self, overlayid, overlay_name, deviceid,
+                             interface_name, tenantid, overlay_info):
         logging.debug('Attempting to add the slice %s from the router %s '
                       'to the overlay %s'
                       % (interface_name, deviceid, overlay_name))
@@ -494,8 +494,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logging.debug('Add slice to overlay completed')
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel(self, overlayid, overlay_name, overlay_type,
-                      l_slice, r_slice, tenantid, overlay_info):
+    def create_tunnel(self, overlayid, overlay_name,
+                      local_site, remote_site, tenantid, overlay_info):
         logging.debug(
             'Attempting to create a tunnel %s between the interfaces %s and %s'
             % (overlay_name, l_slice['interface_name'],
@@ -584,7 +584,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, deviceid, overlay_info):
+                        tenantid, deviceid, overlay_info):
         logging.debug('Tryingto destroy the overlay %s on device %s'
                       % (overlay_name, deviceid))
         # Get the router address
@@ -716,8 +716,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logging.debug('Remove slice from overlay completed')
         return NbStatusCode.STATUS_OK
 
-    def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      l_slice, r_slice, tenantid, overlay_info):
+    def remove_tunnel(self, overlayid, overlay_name,
+                      local_site, remote_site, tenantid, overlay_info):
         logging.debug(
             'Attempting to remove the tunnel %s between the interfaces '
             '%s and %s' % (overlay_name,
@@ -767,7 +767,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
     #                 # Add a new interface to the VPN
     #                 _interface = vpn.interfaces.add()
     #                 # Add router ID
-    #                 _interface.routerid = interface.routerid
+    #                 _interface.deviceid = interface.deviceid
     #                 # Add interface name
     #                 _interface.interface_name = interface.interface_name
     #                 # Add interface IP
