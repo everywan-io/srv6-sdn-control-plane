@@ -24,15 +24,15 @@
 
 # General imports
 from __future__ import absolute_import, division, print_function
+from abc import abstractmethod
 import logging
 from socket import AF_INET
 from socket import AF_INET6
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
-from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel_utils
+from srv6_sdn_control_plane.northbound.grpc.srv6_tunnel import srv6_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
-from srv6_sdn_control_plane import srv6_controller_utils
-from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
+from srv6_sdn_control_plane import srv6_controller_utils as utils
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
@@ -46,25 +46,36 @@ DEFAULT_VERBOSE = False
 logger = logging.getLogger(__name__)
 
 
-class SRv6Tunnel(tunnel_mode.TunnelMode):
+class L3SRv6TunnelFM(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
-    def __init__(self, srv6_manager,
+    def __init__(self, overlay_type, srv6_manager,
                  grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  controller_state=None, verbose=DEFAULT_VERBOSE):
-        # Name of the tunnel mode
-        self.name = 'SRv6'
-        # Port of the gRPC client
-        self.grpc_client_port = grpc_client_port
-        # Verbose mode
-        self.verbose = verbose
-        # VPN dict
-        self.vpn_dict = None
-        # Create SRv6 Manager
-        self.srv6_manager = srv6_manager
         # Initialize controller state
         self.controller_state_srv6 = \
             srv6_tunnel_utils.ControllerStateSRv6(controller_state)
+        # Initialize parent class TunnelMode
+        super().__init__(
+            name='SRv6',
+            topo_type=utils.TopologyType.FullMesh,
+            overlay_type=overlay_type,
+            grpc_client_port=grpc_client_port,
+            srv6_manager=srv6_manager,
+            verbose=verbose
+        )
+
+    @abstractmethod
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        pass
+
+    @abstractmethod
+    def get_seg6local_action(self):
+        pass
+
+    @abstractmethod
+    def get_family(self):
+        pass
 
     def _create_tunnel_uni(self, overlayid, overlay_name, overlay_type,
                            l_slice, r_slice, tenantid, overlay_info):
@@ -118,18 +129,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             r_slice['deviceid'], tenantid, tableid
         )
         # Get the subnets
-        subnets = list()
-        if overlay_type == OverlayType.IPv6Overlay:
-            subnets = srv6_sdn_controller_state.get_ipv6_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
-        elif overlay_type == OverlayType.IPv4Overlay:
-            subnets = srv6_sdn_controller_state.get_ipv4_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
-        elif overlay_type == OverlayType.L2Overlay:
-            pass
-        else:
-            logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        subnets = self.get_subnets(r_slice['deviceid'],
+                                   tenantid, r_slice['interface_name'])
         # Get a WAN interface from the destination device
         wan_intf = (srv6_sdn_controller_state
                     .get_wan_interfaces(r_slice['deviceid'], tenantid))[0]
@@ -143,24 +144,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Build SID list used for the outgoing packets
         wan_ip_addr = wan_ip_addrs[0]
         sid_list = [sid, wan_ip_addr]
-        # Get SEG6 encap mode
-        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
-            # L2 encapsulation
-            encapmode = 'l2encap'
-        elif overlay_type in [srv6_controller_utils.OverlayType.IPv4Overlay,
-                              srv6_controller_utils.OverlayType.IPv6Overlay]:
-            # L3 encapsulation
-            encapmode = 'encap'
-        else:
-            logger.error('Unrecognized overlay type: %s' % overlay_type)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
             response = self.srv6_manager.create_srv6_explicit_path(
                 l_deviceip, self.grpc_client_port,
                 destination=subnet, table=tableid, device=dev,
-                segments=sid_list, encapmode=encapmode
+                segments=sid_list, encapmode='encap'
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
@@ -197,18 +187,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logging.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the subnets
-        subnets = list()
-        if overlay_type == OverlayType.IPv6Overlay:
-            subnets = srv6_sdn_controller_state.get_ipv6_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
-        elif overlay_type == OverlayType.IPv4Overlay:
-            subnets = srv6_sdn_controller_state.get_ipv4_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
-        elif overlay_type == OverlayType.L2Overlay:
-            pass
-        else:
-            logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        subnets = self.get_subnets(r_slice['deviceid'],
+                                   tenantid, r_slice['interface_name'])
         # Remove the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
@@ -276,7 +256,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add the rule to steer the SIDs through the local SID table
         response = self.srv6_manager.create_iprule(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            table=srv6_controller_utils.LOCAL_SID_TABLE, destination=sid_family
+            table=utils.LOCAL_SID_TABLE, destination=sid_family
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -288,7 +268,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add a blackhole route to drop all unknown active segments
         response = self.srv6_manager.create_iproute(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            type='blackhole', table=srv6_controller_utils.LOCAL_SID_TABLE
+            type='blackhole', table=utils.LOCAL_SID_TABLE
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -323,44 +303,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logging.debug('Cannot get table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         logging.debug('Received table ID:%s', tableid)
-        # If this is a L2 Overlay, we need a bridge
-        devices_in_vrf = []
-        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
-            # get bridge name
-            br_name = 'br-%s' % tableid
-            # create bridge and add the VTEP interface
-            response = self.srv6_manager.create_bridge_device(
-                deviceip, self.grpc_client_port,
-                name=br_name
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot create bridge %s in %s'
-                               % (br_name, deviceip))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # Enslave bridge in VRF
-            devices_in_vrf = [br_name]
         # Second step is the creation of the decapsulation and lookup route
-        oif = ''
-        table = -1
-        if overlay_type == OverlayType.L2Overlay:
-            # For L2 VPN we have to perform decap and forward to the VPN bridge
-            # This behavior is realized by End.DX2 SRv6 action
-            action = 'End.DX2'
-            oif = 'br-%s' % tableid
-        elif overlay_type == OverlayType.IPv6Overlay:
-            # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
-            # table. This behavior is realized by End.DT6 SRv6 action
-            action = 'End.DT6'
-            table = tableid
-        elif overlay_type == OverlayType.IPv4Overlay:
-            # For IPv4 VPN we have to perform decap and lookup in IPv6 routing
-            # table. This behavior is realized by End.DT4 SRv6 action
-            action = 'End.DT4'
-            table = tableid
-        else:
-            logging.warning('Error: Unsupported VPN type: %s' % overlay_type)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        action = self.get_seg6local_action()
         # Get a WAN interface
         # We use the WAN interface
         # in order to solve an issue of routes getting deleted when the
@@ -383,8 +327,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Add the End.DT4 / End.DT6 route
         response = self.srv6_manager.create_srv6_local_processing_function(
             deviceip, self.grpc_client_port, segment=sid,
-            action=action, device=dev, interface=oif, table=table,
-            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
+            action=action, device=dev, table=tableid,
+            localsid_table=utils.LOCAL_SID_TABLE
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -396,7 +340,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
             deviceip, self.grpc_client_port, name=overlay_name,
-            table=tableid, interfaces=devices_in_vrf
+            table=tableid
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             logging.warning(
@@ -440,56 +384,38 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # If the operation has failed, report an error message
             logging.warning('Cannot disable OSPF advertisements')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        if overlay_type == srv6_controller_utils.OverlayType.L2Overlay:
-            # get bridge name
-            br_name = 'br-%s' % tableid
-            # add slice to the VRF
-            response = self.srv6_manager.update_bridge_device(
-                deviceip, self.grpc_client_port,
-                name=br_name,
-                interfaces=[interface_name],
-                op='add_interfaces'
+        # Add the interface to the VRF
+        response = self.srv6_manager.update_vrf_device(
+            deviceip, self.grpc_client_port, name=overlay_name,
+            interfaces=[interface_name],
+            op='add_interfaces'
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logging.warning(
+                'Cannot assign the interface to the VRF: %s' % response
             )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logger.warning('Cannot add interface %s to the bridge %s in %s'
-                               % (interface_name, br_name, deviceip))
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        elif overlay_type in [srv6_controller_utils.OverlayType.IPv4Overlay,
-                              srv6_controller_utils.OverlayType.IPv6Overlay]:
-            # Add the interface to the VRF
-            response = self.srv6_manager.update_vrf_device(
-                deviceip, self.grpc_client_port, name=overlay_name,
-                interfaces=[interface_name],
-                op='add_interfaces'
-            )
-            if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, report an error message
-                logging.warning(
-                    'Cannot assign the interface to the VRF: %s' % response
-                )
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-            # Create the routes for the subnets
-            subnets = srv6_sdn_controller_state.get_ip_subnets(
-                deviceid, tenantid, interface_name)
-            for subnet in subnets:
-                gateway = subnet['gateway']
-                subnet = subnet['subnet']
-                if gateway is not None and gateway != '':
-                    response = self.srv6_manager.create_iproute(
-                        deviceip, self.grpc_client_port,
-                        destination=subnet, gateway=gateway,
-                        out_interface=interface_name,
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logging.warning('Cannot set route for %s (gateway %s) '
-                                        'in %s ' % (subnet, gateway, deviceip))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        else:
-            logger.error('Unrecognized overlay type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get family
+        family = self.get_family
+        # Create the routes for the subnets
+        subnets = self.get_subnets(
+            deviceid, tenantid, interface_name)
+        for subnet in subnets:
+            gateway = subnet['gateway']
+            subnet = subnet['subnet']
+            if gateway is not None and gateway != '':
+                response = self.srv6_manager.create_iproute(
+                    deviceip, self.grpc_client_port,
+                    destination=subnet, gateway=gateway,
+                    out_interface=interface_name,
+                    table=tableid, family=family
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logging.warning('Cannot set route for %s (gateway %s) '
+                                    'in %s ' % (subnet, gateway, deviceip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logging.debug('Add slice to overlay completed')
         return NbStatusCode.STATUS_OK
@@ -559,7 +485,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Remove rule for SIDs
         response = self.srv6_manager.remove_iprule(
             deviceip, self.grpc_client_port, family=AF_INET6,
-            table=srv6_controller_utils.LOCAL_SID_TABLE,
+            table=utils.LOCAL_SID_TABLE,
             destination=sid_family
         )
         if response != SbStatusCode.STATUS_SUCCESS:
@@ -571,7 +497,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Remove blackhole route
         response = self.srv6_manager.remove_iproute(
             deviceip, self.grpc_client_port, family=AF_INET6, type='blackhole',
-            table=srv6_controller_utils.LOCAL_SID_TABLE
+            table=utils.LOCAL_SID_TABLE
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, return an error message
@@ -630,20 +556,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Delete all remaining IPv6 routes associated to the VPN
+        family = self.get_family()
         response = self.srv6_manager.remove_iproute(
-            deviceip, self.grpc_client_port, family=AF_INET6, table=tableid
+            deviceip, self.grpc_client_port, family=family, table=tableid
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, return an error message
-            logging.warning('Cannot remove the IPv6 route: %s' % response)
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Delete all remaining IPv4 routes associated to the VPN
-        response = self.srv6_manager.remove_iproute(
-            deviceip, self.grpc_client_port, family=AF_INET, table=tableid
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            # If the operation has failed, return an error message
-            logging.warning('Cannot remove IPv4 routes: %s' % response)
+            logging.warning('Cannot remove the IP route: %s' % response)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logging.debug('Destroy overlay completed')
@@ -668,12 +587,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         if tableid is None:
             logging.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get family
+        family = self.get_family
         # Remove IP routes from the VRF
         # This step is optional, because the routes are
         # automatically removed when the interfaces is removed
         # from the VRF. We do it just for symmetry with respect
         # to the add_slice_to_overlay function
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = self.get_subnets(
             deviceid, tenantid, interface_name)
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -682,7 +603,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 response = self.srv6_manager.remove_iproute(
                     deviceip, self.grpc_client_port,
                     destination=subnet, gateway=gateway,
-                    table=tableid
+                    table=tableid, family=family
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
@@ -777,3 +698,51 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
     #     # Return the VPNs list
     #     logging.debug('Sending response:\n%s' % response)
     #     return response
+
+
+class IPv4SRv6TunnelFM(L3SRv6TunnelFM):
+
+    def __init__(self, srv6_manager,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 verbose=DEFAULT_VERBOSE):
+        # Initialize parent class L3SRv4TunnelFM
+        super().__init__(
+            overlay_type=utils.OverlayType.IPv4Overlay,
+            grpc_client_port=grpc_client_port,
+            srv6_manager=srv6_manager,
+            verbose=verbose
+        )
+
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        return srv6_sdn_controller_state.get_ipv4_subnets(
+            deviceid, tenantid, interface_name)
+
+    def get_seg6local_action(self):
+        return 'End.DT4'
+
+    def get_family(self):
+        return AF_INET
+
+
+class IPv6SRv6TunnelFM(L3SRv6TunnelFM):
+
+    def __init__(self, srv6_manager,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 verbose=DEFAULT_VERBOSE):
+        # Initialize parent class L3SRv6TunnelFM
+        super().__init__(
+            overlay_type=utils.OverlayType.IPv6Overlay,
+            grpc_client_port=grpc_client_port,
+            srv6_manager=srv6_manager,
+            verbose=verbose
+        )
+
+    def get_subnets(self, deviceid, tenantid, interface_name):
+        return srv6_sdn_controller_state.get_ipv6_subnets(
+            deviceid, tenantid, interface_name)
+
+    def get_seg6local_action(self):
+        return 'End.DT6'
+
+    def get_family(self):
+        return AF_INET6

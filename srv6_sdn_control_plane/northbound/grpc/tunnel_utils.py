@@ -31,11 +31,16 @@ class TunnelState:
         del self.tunnel_modes[name]
 
     def init_tunnel_modes(self, grpc_client_port, verbose):
-        # self.register_tunnel_mode(srv6_tunnel.SRv6Tunnel(
-        #     srv6_manager=self.srv6_manager,
-        #     grpc_client_port=grpc_client_port,
-        #     verbose=verbose)
-        # )
+        self.register_tunnel_mode(srv6_tunnel.IPv4SRv6TunnelFM(
+            srv6_manager=self.srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose)
+        )
+        self.register_tunnel_mode(srv6_tunnel.IPv6SRv6TunnelFM(
+            srv6_manager=self.srv6_manager,
+            grpc_client_port=grpc_client_port,
+            verbose=verbose)
+        )
         # self.register_tunnel_mode(gre_tunnel.GRETunnel(
         #     srv6_manager=self.srv6_manager,
         #     grpc_client_port=grpc_client_port,
