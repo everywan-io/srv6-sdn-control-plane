@@ -25,6 +25,8 @@ setup(
               'srv6_sdn_control_plane.topology',
               'srv6_sdn_control_plane.northbound',
               'srv6_sdn_control_plane.northbound.grpc',
+              'srv6_sdn_control_plane.northbound.grpc.vxlan_tunnel',
+              'srv6_sdn_control_plane.northbound.grpc.srv6_tunnel',
               'srv6_sdn_control_plane.southbound',
               'srv6_sdn_control_plane.southbound.grpc',
               'srv6_sdn_control_plane.southbound.netconf',

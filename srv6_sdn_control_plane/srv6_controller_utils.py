@@ -54,6 +54,19 @@ logger = logging.getLogger(__name__)
 random.seed(time.time())
 
 
+class TopologyType:
+    HubAndSpoke = 'HubAndSpoke'
+    FullMesh = 'FullMesh'
+
+
+supported_topology_types = [TopologyType.HubAndSpoke, TopologyType.FullMesh]
+
+
+# Utiliy function to check if the provided topology type is valid
+def validate_topology_type(topo_type):
+    return topo_type in supported_topology_types
+
+
 class InterfaceType:
     UNKNOWN = 'unknown'
     WAN = 'wan'
@@ -346,11 +359,12 @@ def getAddressFamily(ip):
 
 
 class OverlayType:
-    IPv6Overlay = 'IPv6Overlay'
+    L2Overlay = 'L2Overlay'
     IPv4Overlay = 'IPv4Overlay'
+    IPv6Overlay = 'IPv6Overlay'
 
 
-supported_overlay_types = [OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
+supported_overlay_types = [OverlayType.L2Overlay, OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
 
 '''
 class VPN:

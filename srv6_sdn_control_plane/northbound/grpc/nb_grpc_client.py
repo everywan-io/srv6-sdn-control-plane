@@ -416,6 +416,8 @@ class NorthboundInterface:
                     name = tunnel.overlay_name
                     type = tunnel.overlay_type
                     tunnel_mode = tunnel.tunnel_mode
+                    topo_type = tunnel.topo_type
+                    hub = tunnel.hub
                     tenantid = tunnel.tenantid
                     tunnel_interfaces = list()
                     for interface in tunnel.slices:
@@ -436,6 +438,8 @@ class NorthboundInterface:
                         'type': type,
                         'interfaces': tunnel_interfaces,
                         'mode': tunnel_mode,
+                        'topo_type': topo_type,
+                        'hub': hub,
                         'tenantid': tenantid
                     })
             else:
@@ -448,7 +452,9 @@ class NorthboundInterface:
         # Return the response
         return response
 
-    def create_overlay(self, name, type, interfaces, tenantid, tunnel_mode):
+    def create_overlay(self, name, type, interfaces, tenantid, tunnel_mode,
+                       topo_type=srv6_controller_utils.TopologyType.FullMesh,
+                       hub_id=None):
         # Create the request
         request = srv6_vpn_pb2.OverlayServiceRequest()
         intent = request.intents.add()
@@ -456,6 +462,9 @@ class NorthboundInterface:
         intent.overlay_type = type
         intent.tenantid = tenantid
         intent.tunnel_mode = tunnel_mode
+        intent.topo_type = topo_type
+        if hub_id is not None:
+            intent.hub_id = hub_id
         for intf in interfaces:
             interface = intent.slices.add()
             interface.deviceid = text_type(intf[0])
@@ -554,9 +563,15 @@ class NorthboundInterface:
                 print("Overlay ID:", overlay['id'])
                 print("Name:", overlay['name'])
                 print("Tenant ID:", overlay["tenantid"])
-                print("Interfaces:")
+                print("Overlay Type: %s" % overlay['type'])
+                print("Topology Type: %s" % overlay['topo_type'])
+                if overlay['hub'] != '':
+                    print("HUB node: %s" % overlay['hub'])
+                print("Slices: [")
                 for intf in overlay["interfaces"]:
-                    print(intf['deviceid'], intf['interface_name'])
+                    print("   (%s, %s)"
+                          % (intf['deviceid'], intf['interface_name']))
+                print("]")
                 print()
                 i += 1
         else:

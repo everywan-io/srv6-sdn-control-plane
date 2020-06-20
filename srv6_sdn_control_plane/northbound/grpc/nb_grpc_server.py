@@ -887,6 +887,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             #
             # Extract the overlay tenant ID from the intent
             tenantid = intent.tenantid
+            # Extract the topology
+            topo_type = intent.topo_type
+            # Extract the hub node ID
+            hub_id = intent.hub_id
             # Extract the overlay type from the intent
             overlay_type = intent.overlay_type
             # Extract the overlay name from the intent
@@ -908,6 +912,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             tunnel_info = intent.tunnel_info
             # Parameters validation
             #
+            # Validate the topology type
+            logging.debug('Validating the topology type: %s' % topo_type)
+            if not srv6_controller_utils.validate_topology_type(topo_type):
+                # If topology type is invalid, return an error message
+                err = 'Invalid topology type: %s' % topo_type
+                logging.warning(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Validate the tenant ID
             logging.debug('Validating the tenant ID: %s' % tenantid)
             if not srv6_controller_utils.validate_tenantid(tenantid):
@@ -1093,12 +1105,21 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Slices on the hub node are not permitted
+            if topo_type == srv6_controller_utils.TopologyType.HubAndSpoke:
+                if hub_id in _devices:
+                    err = ('Error while processing the intent: '
+                           'Slices cannot belong to the hub')
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
             logging.info('All checks passed')
             # All checks passed
             #
             # Save the overlay to the controller state
             overlayid = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name)
+                overlay_name, overlay_type, slices,
+                tenantid, tunnel_name, topo_type, hub_id)
             if overlayid is None:
                 err = 'Cannot save the overlay to the controller state'
                 logging.error(err)
@@ -1106,7 +1127,30 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
                                   reason=err))
             # Get tunnel mode
-            tunnel_mode = self.tunnel_modes[tunnel_name]
+            if self.tunnel_modes.get(tunnel_name) is None:
+                err = ('Error in CreateOverlay: unsupported tunnel mode %s'
+                       % tunnel_name)
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            if self.tunnel_modes[tunnel_name].get(overlay_type) is None:
+                err = ('Error in CreateOverlay: unsupported overlay type %s '
+                       'for the tunnel mode %s' % (overlay_type, tunnel_name))
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
+            tunnel_mode = self.tunnel_modes[tunnel_name][overlay_type].get(
+                topo_type)
+            if tunnel_mode is None:
+                err = ('Error in CreateOverlay: unsupported topology type for '
+                       'the overlay type %s and the tunnel mode %s'
+                       % (overlay_type, tunnel_name))
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                  reason=err))
             # Let's create the overlay
             # Create overlay data structure
             status_code = tunnel_mode.init_overlay_data(
@@ -1119,6 +1163,22 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 if srv6_sdn_controller_state.remove_overlay(
                         overlayid, tenantid) is not True:
                     logging.error('Cannot remove overlay. Inconsistent data')
+                return OverlayServiceReply(
+                    status=Status(code=status_code, reason=err))
+            # Initialize hub, if the topology type is hub and spoke
+            # If the topology is not hub and spoke, nothing is done
+            status_code = tunnel_mode.init_hub(overlayid, overlay_name,
+                                               tenantid, hub_id, tunnel_info)
+            if status_code != STATUS_OK:
+                err = ('Cannot initialize hub (overlay %s '
+                       'hub %s, tenant %s)'
+                       % (overlay_name, hub_id, tenantid))
+                logging.warning(err)
+                # Remove overlay DB status
+                if srv6_sdn_controller_state.remove_overlay(
+                        overlayid, tenantid) is not True:
+                    logging.error(
+                        'Cannot remove overlay. Inconsistent data')
                 return OverlayServiceReply(
                     status=Status(code=status_code, reason=err))
             # Iterate on slices and add to the overlay
@@ -1161,7 +1221,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # Init overlay on the devices
                     status_code = tunnel_mode.init_overlay(overlayid,
                                                            overlay_name,
-                                                           overlay_type,
                                                            tenantid, deviceid,
                                                            tunnel_info)
                     if status_code != STATUS_OK:
@@ -1181,7 +1240,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Add the interface to the overlay
                 status_code = (tunnel_mode
                                .add_slice_to_overlay(overlayid,
-                                                     overlay_name, deviceid,
+                                                     overlay_name,
+                                                     deviceid,
                                                      interface_name, tenantid,
                                                      tunnel_info))
                 if status_code != STATUS_OK:
@@ -1202,7 +1262,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if site1['deviceid'] != site2['deviceid']:
                         status_code = tunnel_mode.create_tunnel(overlayid,
                                                                 overlay_name,
-                                                                overlay_type,
                                                                 site1, site2,
                                                                 tenantid,
                                                                 tunnel_info)
@@ -1304,9 +1363,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         overlay_name = overlay['name']
         # Get the overlay type
         overlay_type = overlay['type']
+        # Get the overlay type
+        topo_type = overlay['topo_type']
+        # ID of the hub node (only for HubAndSpoke topology type)
+        hub_id = overlay.get('hub')
         # Get the tunnel mode
         tunnel_name = overlay['tunnel_mode']
-        tunnel_mode = self.tunnel_modes[tunnel_name]
+        tunnel_mode = self.tunnel_modes[tunnel_name][overlay_type][topo_type]
         # Get the slices belonging to the overlay
         slices = overlay['slices']
         # All checks passed
@@ -1321,7 +1384,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             for site2 in configured_slices:
                 if site1['deviceid'] != site2['deviceid']:
                     status_code = tunnel_mode.remove_tunnel(
-                        overlayid, overlay_name, overlay_type, site1,
+                        overlayid, overlay_name, site1,
                         site2, tenantid, tunnel_info)
                     if status_code != STATUS_OK:
                         err = ('Cannot create tunnel (overlay %s site1 %s '
@@ -1351,7 +1414,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Destroy overlay on the devices
                 status_code = tunnel_mode.destroy_overlay(overlayid,
                                                           overlay_name,
-                                                          overlay_type,
                                                           tenantid,
                                                           deviceid,
                                                           tunnel_info)
@@ -1377,6 +1439,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 err = 'Cannot decrease tunnel mode counter'
                 logging.error(err)
                 return STATUS_INTERNAL_SERVER_ERROR, err
+        # Destroy hub, if the topology type is hub and spoke
+        # If the topology is not hub and spoke, nothing is done
+        status_code = tunnel_mode.destroy_hub(overlayid, overlay_name,
+                                              tenantid, hub_id, tunnel_info)
+        if status_code != STATUS_OK:
+            err = ('Cannot destroy hub (overlay %s '
+                   'hub %s, tenant %s)'
+                   % (overlay_name, hub_id, tenantid))
+            logging.warning(err)
+            return OverlayServiceReply(
+                status=Status(code=status_code, reason=err))
         # Destroy overlay data structure
         status_code = tunnel_mode.destroy_overlay_data(
             overlayid, overlay_name, tenantid, tunnel_info)
@@ -1461,9 +1534,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             overlay_name = overlay['name']
             # Get the overlay type
             overlay_type = overlay['type']
+            # Get the overlay type
+            topo_type = overlay['topo_type']
+            # ID of the hub node (only for HubAndSpoke topology type)
+            hub_id = overlay.get('hub')
             # Get the tunnel mode
             tunnel_name = overlay['tunnel_mode']
-            tunnel_mode = self.tunnel_modes[tunnel_name]
+            tunnel_mode = self.tunnel_modes[tunnel_name][overlay_type][topo_type]
             # Get the slices belonging to the overlay
             slices = overlay['slices']
             # Get the devices on which the overlay has been configured
@@ -1584,6 +1661,14 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Slices on the hub node are not permitted
+            if topo_type == srv6_controller_utils.TopologyType.HubAndSpoke:
+                if hub_id in incoming_devices:
+                    err = ('Error while processing the intent: '
+                           'Slices cannot belong to the hub')
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
             logging.info('All checks passed')
             # All checks passed
             #
@@ -1617,7 +1702,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # Init overlay on the devices
                     status_code = tunnel_mode.init_overlay(overlayid,
                                                            overlay_name,
-                                                           overlay_type,
                                                            tenantid, deviceid,
                                                            tunnel_info)
                     if status_code != STATUS_OK:
@@ -1649,7 +1733,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if site1['deviceid'] != site2['deviceid']:
                         status_code = tunnel_mode.create_tunnel(overlayid,
                                                                 overlay_name,
-                                                                overlay_type,
                                                                 site1, site2,
                                                                 tenantid,
                                                                 tunnel_info)
@@ -1744,9 +1827,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             overlay_name = overlay['name']
             # Get the overlay type
             overlay_type = overlay['type']
+            # Get the overlay type
+            topo_type = overlay['topo_type']
             # Get the tunnel mode
             tunnel_name = overlay['tunnel_mode']
-            tunnel_mode = self.tunnel_modes[tunnel_name]
+            tunnel_mode = self.tunnel_modes[tunnel_name][overlay_type][topo_type]
             # Get the slices belonging to the overlay
             slices = overlay['slices']
             # Extract the interfaces
@@ -1851,10 +1936,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 for site2 in configured_slices:
                     if site1['deviceid'] != site2['deviceid']:
                         status_code = tunnel_mode.remove_tunnel(
-                            overlayid, overlay_name, overlay_type, site1,
+                            overlayid, overlay_name, site1,
                             site2, tenantid, tunnel_info)
                         if status_code != STATUS_OK:
-                            err = ('Cannot create tunnel (overlay %s site1 %s '
+                            err = ('Cannot remove tunnel (overlay %s site1 %s '
                                    'site2 %s, tenant %s)'
                                    % (overlay_name, site1, site2, tenantid))
                             logging.warning(err)
@@ -1881,7 +1966,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # Destroy overlay on the devices
                     status_code = tunnel_mode.destroy_overlay(overlayid,
                                                               overlay_name,
-                                                              overlay_type,
                                                               tenantid,
                                                               deviceid,
                                                               tunnel_info)
@@ -1974,12 +2058,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             overlay.overlayid = str(_overlay['_id'])
             # Set overlay name
             overlay.overlay_name = _overlay['name']
-            # Set overlaty type
+            # Set overlay type
             overlay.overlay_type = _overlay['type']
             # Set tenant ID
             overlay.tenantid = _overlay['tenantid']
             # Set tunnel mode
             overlay.tunnel_mode = _overlay['tunnel_mode']
+            # Set topology type
+            overlay.topo_type = _overlay['topo_type']
+            # Set topology type
+            if _overlay.get('hub') is not None:
+                overlay.hub = _overlay['hub']
             # Set slices
             # Iterate on all slices
             for _slice in _overlay['slices']:
