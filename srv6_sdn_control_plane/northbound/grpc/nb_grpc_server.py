@@ -50,6 +50,14 @@ from srv6_sdn_proto.status_codes_pb2 import Status, NbStatusCode, SbStatusCode
 from srv6_sdn_proto.srv6_vpn_pb2 import TenantReply, OverlayServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import InventoryServiceReply
 
+# STAMP Support
+ENABLE_STAMP_SUPPORT = True
+
+# Import modules required by STAMP
+if ENABLE_STAMP_SUPPORT:
+    from srv6_delay_measurement import controller as stamp_controller_module
+    from srv6_delay_measurement.exceptions import NodeIdNotFoundError
+
 # Topology file
 DEFAULT_TOPOLOGY_FILE = '/tmp/topology.json'
 # VPN file
@@ -96,7 +104,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
                  srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
-                 verbose=DEFAULT_VERBOSE):
+                 verbose=DEFAULT_VERBOSE,
+                 stamp_controller=None):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
         # Verbose mode
@@ -105,6 +114,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         self.southbound_interface = southbound_interface
         # SRv6 Manager
         self.srv6_manager = srv6_manager
+        # Store the reference to the STAMP controller
+        self.stamp_controller = stamp_controller
         # Initialize tunnel state
         self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port,
                                                      verbose).tunnel_modes
@@ -499,6 +510,20 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
         # All checks passed
         #
+        # Remove curent STAMP information
+        if ENABLE_STAMP_SUPPORT:
+            logging.info('Removing current STAMP information\n\n')
+            for device in request.configuration.devices:
+                # Extract the device ID from the configuration
+                deviceid = device.id
+                # Configure information
+                try:
+                    self.stamp_controller.remove_stamp_node(
+                        node_id=deviceid,
+                    )
+                except NodeIdNotFoundError:
+                    logging.debug(f'STAMP Node {deviceid} does not exist. '
+                                  'Nothing to do.')
         # Extract the configurations from the request message
         new_devices = list()
         for device in request.configuration.devices:
@@ -639,6 +664,47 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             return OverlayServiceReply(
                 status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err))
         logging.info('The device configuration has been saved\n\n')
+        # Setup STAMP information
+        if ENABLE_STAMP_SUPPORT:
+            logging.info('Configuring STAMP information\n\n')
+            for device in request.configuration.devices:
+                # Extract the device ID from the configuration
+                deviceid = device.id
+                # Extract the tenant ID
+                tenantid = device.tenantid
+                # Retrieve device information
+                device = srv6_sdn_controller_state.get_device(
+                    deviceid=deviceid, tenantid=tenantid)
+                if device is None:
+                    logging.error('Error getting device')
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                      reason='Error getting device'))
+                # Lookup the WAN interfaces
+                # TODO currently we only support a single WAN interface,
+                # so we look for the address of the first WAN interface
+                # In the future we should support multiple interfaces
+                wan_ip = None
+                wan_ifaces = None
+                for interface in device['interfaces']:
+                    if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
+                            len(interface['ipv6_addrs']) > 0:
+                        wan_ip = interface['ipv6_addrs'][0].split('/')[0]
+                        wan_ifaces = [interface['name']]
+                        break
+                # Configure information
+                self.stamp_controller.add_stamp_node(
+                    node_id=device['deviceid'],
+                    grpc_ip=device['mgmtip'],
+                    grpc_port=self.grpc_client_port,
+                    ip=wan_ip,
+                    sender_port=50051,
+                    reflector_port=50052,
+                    interfaces=wan_ifaces,
+                    stamp_source_ipv6_address=wan_ip,
+                    is_sender=True,
+                    is_reflector=True,
+                )
         # Create the response
         return OverlayServiceReply(
             status=Status(code=STATUS_OK, reason='OK'))
@@ -2003,9 +2069,15 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     #
     # Create the server and add the handler
     grpc_server = grpc.server(futures.ThreadPoolExecutor())
+    # Add the STAMP controller
+    stamp_controller = None
+    if ENABLE_STAMP_SUPPORT:
+        stamp_controller = \
+            stamp_controller_module.run_grpc_server(server=grpc_server)
+    # Initialize the Northbound Interface    
     service = NorthboundInterface(
         grpc_client_port, srv6_manager,
-        southbound_interface, verbose
+        southbound_interface, verbose, stamp_controller
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server
