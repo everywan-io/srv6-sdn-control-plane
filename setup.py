@@ -40,6 +40,11 @@ setup(
         'pygraphviz>=1.5',
         'six>=1.12.0',
         'sshutil>=1.5.0',
-        'filelock>=3.0.12'
+        'filelock>=3.0.12',
+        'cffi>=1.14.1',
+        'cryptography>=3.0',
+        'pycparser>=2.20',
+        'bcrypt>=3.1.7',
+        'pynacl>=1.4.0'
     ]
 )
