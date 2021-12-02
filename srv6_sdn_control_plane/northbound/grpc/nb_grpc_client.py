@@ -49,6 +49,13 @@ DEFAULT_SECURE = False
 # SSL cerificate for server validation
 DEFAULT_CERTIFICATE = 'cert_client.pem'
 
+# Enable STAMP support
+ENABLE_STAMP_SUPPORT = True
+
+if ENABLE_STAMP_SUPPORT:
+    from srv6_delay_measurement import nb_controller_api
+    from srv6_delay_measurement.nb_controller_api import STAMPError
+
 
 # ENCAP = {
 #    'SRv6': srv6_vpn_pb2.SRv6,
@@ -92,6 +99,13 @@ class NorthboundInterface:
                               'in secure mode')
                 sys.exit(-2)
             self.certificate = certificate
+        if ENABLE_STAMP_SUPPORT:
+            self.stamp_nb_interface = nb_controller_api.NorthboundInterface(
+                server_ip=server_ip,
+                server_port=server_port,
+                secure=secure,
+                certificate=certificate
+            )
 
     # Build a grpc stub
     def get_grpc_session(self, ip_address, port, secure):
@@ -598,6 +612,61 @@ class NorthboundInterface:
         channel.close()
         # Return the response
         return response
+
+    def register_stamp_sender(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.register_stamp_sender(*args, **kwargs)
+
+    def register_stamp_reflector(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.register_stamp_reflector(*args, **kwargs)
+
+    def unregister_stamp_node(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.unregister_stamp_node(*args, **kwargs)
+
+    def init_stamp_node(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.init_stamp_node(*args, **kwargs)
+
+    def reset_stamp_node(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.reset_stamp_node(*args, **kwargs)
+
+    def create_stamp_session(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.create_stamp_session(*args, **kwargs)
+
+    def start_stamp_session(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.start_stamp_session(*args, **kwargs)
+
+    def stop_stamp_session(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.stop_stamp_session(*args, **kwargs)
+
+    def destroy_stamp_session(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.destroy_stamp_session(*args, **kwargs)
+
+    def get_stamp_results(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.get_stamp_results(*args, **kwargs)
+
+    def get_stamp_sessions(self, *args, **kwargs):
+        if self.stamp_nb_interface is None:
+            raise NotImplementedError("STAMP Support not enabled")
+        return self.stamp_nb_interface.get_stamp_sessions(*args, **kwargs)
 
 
 if __name__ == '__main__':
