@@ -56,7 +56,10 @@ ENABLE_STAMP_SUPPORT = True
 # Import modules required by STAMP
 if ENABLE_STAMP_SUPPORT:
     from srv6_delay_measurement import controller as stamp_controller_module
-    from srv6_delay_measurement.exceptions import NodeIdNotFoundError
+    from srv6_delay_measurement.exceptions import (
+        NodeIdNotFoundError,
+        STAMPSessionsExistError
+    )
 
 # Topology file
 DEFAULT_TOPOLOGY_FILE = '/tmp/topology.json'
@@ -524,6 +527,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 except NodeIdNotFoundError:
                     logging.debug(f'STAMP Node {deviceid} does not exist. '
                                   'Nothing to do.')
+                except STAMPSessionsExistError:
+                    err = (f'STAMP Node {deviceid} is participating in one '
+                           'or more STAMP sessions. Delete all existing '
+                           'sessions before changing device configuration.')
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
         # Extract the configurations from the request message
         new_devices = list()
         for device in request.configuration.devices:
