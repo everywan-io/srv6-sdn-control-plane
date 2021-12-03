@@ -695,6 +695,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Configure information
                 self.stamp_controller.add_stamp_node(
                     node_id=device['deviceid'],
+                    node_name=device['name'],
                     grpc_ip=device['mgmtip'],
                     grpc_port=self.grpc_client_port,
                     ip=wan_ip,
