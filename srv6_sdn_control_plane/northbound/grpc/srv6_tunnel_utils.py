@@ -45,11 +45,13 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
 WAIT_TOPOLOGY_INTERVAL = 1
 
+DEFAULT_SID_PREFIX = 'fc00::/64'
+
 # Logger reference
 logger = logging.getLogger(__name__)
 
 
-class SIDAllocator(object):
+class SIDAllocatorLoopback(object):
 
     # Address space for SIDs: fcff:xxxx:2:0/64
     # (e.g. fcff:xxxx:0002:0000:0000:0002:0000:tttt)
@@ -78,14 +80,43 @@ class SIDAllocator(object):
         return sidFamily
 
 
-class ControllerStateSRv6:
+class SIDAllocator(object):
+
+    # Address space for SIDs: fcff:xxxx:2:0/64
+    # (e.g. fcff:xxxx:0002:0000:0000:0002:0000:tttt)
+    # where 'xxxx' is the router id and tttt the vpn id
+
+    prefix = 64
+
+    def getSID(self, sid_prefix, vpn_id):
+        # Generate the SID
+        prefix = int(IPv6Interface(sid_prefix).ip)
+        sid = IPv6Network(prefix | vpn_id)
+        # Remove /128 mask and convert to string
+        sid = IPv6Interface(sid).ip.__str__()
+        # Return the SID
+        return sid
+
+    def getSIDFamily(self, sid_prefix):
+        # Generate the SID
+        prefix = int(IPv6Interface(sid_prefix).ip)
+        sidFamily = IPv6Network(prefix)
+        # Append prefix /64
+        sidFamily = sidFamily.supernet(new_prefix=SIDAllocator.prefix)
+        # Convert to string
+        sidFamily = IPv6Interface(sidFamily).__str__()
+        # Return the SID
+        return sidFamily
+
+
+class ControllerStateSRv6Loopback:
     """This class maintains the state of the SRv6 controller and provides some
        methods to handle it
     """
 
     def __init__(self, controller_state):
         # Create SIDs allocator
-        self.sid_allocator = SIDAllocator()
+        self.sid_allocator = SIDAllocatorLoopback()
 
     # Return SID
     def get_sid(self, deviceid, tenantid, tableid):
@@ -98,3 +129,37 @@ class ControllerStateSRv6:
         loopbacknet = srv6_sdn_controller_state.get_loopbacknet_ipv6(
             deviceid, tenantid)
         return self.sid_allocator.getSIDFamily(loopbacknet)
+
+
+class ControllerStateSRv6:
+    """This class maintains the state of the SRv6 controller and provides some
+       methods to handle it
+    """
+
+    def __init__(self, controller_state):
+        # Create SIDs allocator
+        self.sid_allocator = SIDAllocator()
+
+    # Return SID
+    def get_sid(self, deviceid, tenantid, tableid):
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        if sid_prefix is None:
+            sid_prefix = DEFAULT_SID_PREFIX
+        return self.sid_allocator.getSID(sid_prefix, tableid)
+
+    # Return SID
+    def get_sid_family(self, deviceid, tenantid):
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        if sid_prefix is None:
+            sid_prefix = DEFAULT_SID_PREFIX
+        return self.sid_allocator.getSIDFamily(sid_prefix)
+
+    def get_sid_list(self, deviceid, tenantid, tableid):
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        if sid_prefix is None:
+            wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
+                deviceid, tenantid)[0]
+            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)[0]
+            return [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
+        return [self.get_sid(deviceid, tenantid, tableid)]

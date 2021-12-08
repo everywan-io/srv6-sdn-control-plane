@@ -113,7 +113,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the SID
-        sid = self.controller_state_srv6.get_sid(
+        sid_list = self.controller_state_srv6.get_sid_list(
             r_slice['deviceid'], tenantid, tableid
         )
         # Get the subnets
@@ -131,7 +131,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             subnet = subnet['subnet']
             response = self.srv6_manager.create_srv6_explicit_path(
                 l_deviceip, self.grpc_client_port, destination=subnet,
-                table=tableid, device=dev, segments=[sid], encapmode='encap'
+                table=tableid, device=dev, segments=sid_list, encapmode='encap'
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
