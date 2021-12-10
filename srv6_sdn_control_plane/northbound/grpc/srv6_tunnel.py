@@ -446,7 +446,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay_data(self, overlayid, overlay_name,
-                             overlay_type, tenantid, overlay_info):
+                             tenantid, overlay_info):
         logger.debug('Trying to destroy the overlay data structure')
         # Release the table ID
         res = srv6_sdn_controller_state.release_tableid(overlayid, tenantid)
