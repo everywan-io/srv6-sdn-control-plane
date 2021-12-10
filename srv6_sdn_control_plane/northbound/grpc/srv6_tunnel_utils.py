@@ -160,6 +160,6 @@ class ControllerStateSRv6:
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid, tenantid)[0]
             ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
-                deviceid, tenantid, wan_interface)[0]
+                deviceid, tenantid, wan_interface)[0].split('/')[0]
             return [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
         return [self.get_sid(deviceid, tenantid, tableid)]
