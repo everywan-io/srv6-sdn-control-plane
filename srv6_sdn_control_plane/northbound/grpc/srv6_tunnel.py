@@ -116,6 +116,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         sid_list = self.controller_state_srv6.get_sid_list(
             r_slice['deviceid'], tenantid, tableid
         )
+        # pyroute2 requires SID list in reverse order
+        sid_list = sid_list[::-1]
         # Get the subnets
         if overlay_type == OverlayType.IPv6Overlay:
             subnets = srv6_sdn_controller_state.get_ipv6_subnets(
