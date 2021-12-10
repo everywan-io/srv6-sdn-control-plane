@@ -302,6 +302,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.debug('Cannot get table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         logger.debug('Received table ID:%s', tableid)
+        # Third step is the creation of the VRF assigned to the VPN
+        response = self.srv6_manager.create_vrf_device(
+            deviceip, self.grpc_client_port, name=overlay_name, table=tableid
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            logger.warning(
+                'Cannot create the VRF %s: %s' % (overlay_name, response)
+            )
+            # If the operation has failed, return an error message
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get a WAN interface
         # We use the WAN interface
         # in order to solve an issue of routes getting deleted when the
@@ -333,16 +343,6 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 % response
             )
             # The operation has failed, return an error message
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Third step is the creation of the VRF assigned to the VPN
-        response = self.srv6_manager.create_vrf_device(
-            deviceip, self.grpc_client_port, name=overlay_name, table=tableid
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            logger.warning(
-                'Cannot create the VRF %s: %s' % (overlay_name, response)
-            )
-            # If the operation has failed, return an error message
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Init overlay completed for the overlay %s and the '
