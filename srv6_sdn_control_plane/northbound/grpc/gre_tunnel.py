@@ -64,7 +64,8 @@ class GRETunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
-                 controller_state=None, verbose=DEFAULT_VERBOSE):
+                 controller_state=None, verbose=DEFAULT_VERBOSE,
+                 mongodb_client=None):
         # Name of the tunnel mode
         self.name = 'GRE'
         # Port of the gRPC client

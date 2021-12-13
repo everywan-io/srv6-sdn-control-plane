@@ -108,7 +108,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                  srv6_manager=None,
                  southbound_interface=DEFAULT_SB_INTERFACE,
                  verbose=DEFAULT_VERBOSE,
-                 stamp_controller=None):
+                 stamp_controller=None,
+                 mongodb_client=None):
         # Port of the gRPC client
         self.grpc_client_port = grpc_client_port
         # Verbose mode
@@ -119,9 +120,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         self.srv6_manager = srv6_manager
         # Store the reference to the STAMP controller
         self.stamp_controller = stamp_controller
+        # Reference to MongoDB client
+        self.mongodb_client = mongodb_client
         # Initialize tunnel state
         self.tunnel_modes = tunnel_utils.TunnelState(grpc_client_port,
-                                                     verbose).tunnel_modes
+                                                     verbose,
+                                                     mongodb_client=self.mongodb_client).tunnel_modes
         self.supported_tunnel_modes = [t_mode for t_mode in self.tunnel_modes]
         logging.info('*** Supported tunnel modes: %s'
                      % self.supported_tunnel_modes)
@@ -157,7 +161,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             return OverlayServiceReply(
                 status=Status(code=STATUS_BAD_REQUEST, reason=err))
         # Check if the tenant is configured
-        is_config = srv6_sdn_controller_state.is_tenant_configured(tenantid)
+        is_config = srv6_sdn_controller_state.is_tenant_configured(
+            tenantid=tenantid, client=self.mongodb_client)
         if is_config and vxlan_port is not None:
             err = 'Cannot change the VXLAN port for a configured tenant'
             logging.error(err)
@@ -166,7 +171,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Configure the tenant
         vxlan_port = vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
         srv6_sdn_controller_state.configure_tenant(
-            tenantid, tenant_info, vxlan_port)
+            tenantid=tenantid, tenant_info=tenant_info, vxlan_port=vxlan_port,
+            client=self.mongodb_client)
         # Response
         return TenantReply(status=Status(code=STATUS_OK, reason='OK'))
 
@@ -189,7 +195,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Remove the tenant
         #
         # Get all the overlays associated to the tenant ID
-        overlays = srv6_sdn_controller_state.get_overlays(tenantid=tenantid)
+        overlays = srv6_sdn_controller_state.get_overlays(
+            tenantid=tenantid, client=self.mongodb_client)
         if overlays is None:
             err = 'Error getting overlays'
             logging.error(err)
@@ -201,7 +208,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             self._RemoveOverlay(
                 overlayid, tenantid, tunnel_info=None)
         # Get all the devices of the tenant ID
-        devices = srv6_sdn_controller_state.get_devices(tenantid=tenantid)
+        devices = srv6_sdn_controller_state.get_devices(
+            tenantid=tenantid, client=self.mongodb_client)
         if devices is None:
             err = 'Error getting devices'
             logging.error(err)
@@ -221,7 +229,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     def enable_disable_device(self, deviceid, tenantid, enabled):
         # Enable/Disable the device
         res = srv6_sdn_controller_state.set_device_enabled_flag(
-            deviceid=deviceid, tenantid=tenantid, enabled=enabled)
+            deviceid=deviceid, tenantid=tenantid, enabled=enabled,
+            client=self.mongodb_client)
         if res is None:
             err = ('Error while changing the enabled flag for the device %s: '
                    'Unable to update the controller state' % deviceid)
@@ -270,7 +279,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Check tunnels stats
             # If the tenant has some overlays configured
             # it is not possible to unregister it
-            num = srv6_sdn_controller_state.get_num_tunnels(deviceid, tenantid)
+            num = srv6_sdn_controller_state.get_num_tunnels(
+                deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
             if num is None:
                 err = ('Error getting tunnels stats. Device not found '
                        'or error during the connection to the db')
@@ -304,7 +314,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Get the devices
         devices = [device.id for device in request.configuration.devices]
         devices = srv6_sdn_controller_state.get_devices(
-            deviceids=devices, return_dict=True)
+            deviceids=devices, return_dict=True, client=self.mongodb_client)
         if devices is None:
             logging.error('Error getting devices')
             return OverlayServiceReply(
@@ -334,7 +344,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # If the device is partecipating to some overlay
             # we cannot configure it
             overlay = srv6_sdn_controller_state.get_overlay_containing_device(
-                deviceid, tenantid)
+                deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
             if overlay is not None:
                 err = ('Cannot configure device %s: the device '
                        'is partecipating to the overlay %s'
@@ -667,7 +677,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.error(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        success = srv6_sdn_controller_state.configure_devices(new_devices)
+        success = srv6_sdn_controller_state.configure_devices(
+            devices=new_devices, client=self.mongodb_client)
         if success is False or success is None:
             err = 'Error configuring the devices'
             logging.error(err)
@@ -684,7 +695,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 tenantid = device.tenantid
                 # Retrieve device information
                 device = srv6_sdn_controller_state.get_device(
-                    deviceid=deviceid, tenantid=tenantid)
+                    deviceid=deviceid, tenantid=tenantid,
+                    client=self.mongodb_client)
                 if device is None:
                     logging.error('Error getting device')
                     return OverlayServiceReply(
@@ -755,7 +767,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response = srv6_vpn_pb2.InventoryServiceReply()
         # Iterate on devices and fill the response message
         devices = srv6_sdn_controller_state.get_devices(
-            deviceids=deviceids, tenantid=tenantid)
+            deviceids=deviceids, tenantid=tenantid,
+            client=self.mongodb_client)
         if devices is None:
             err = 'Error getting devices'
             logging.error(err)
@@ -813,7 +826,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Create the response
         response = srv6_vpn_pb2.InventoryServiceReply()
         # Build the topology
-        topology = srv6_sdn_controller_state.get_topology()
+        topology = srv6_sdn_controller_state.get_topology(
+            client=self.mongodb_client)
         if topology is None:
             err = 'Error getting the topology'
             logging.error(err)
@@ -847,7 +861,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         #
         # Validate the tenant ID
         logging.debug('Validating the tenant ID: %s' % tenantid)
-        tenant_exists = srv6_sdn_controller_state.tenant_exists(tenantid)
+        tenant_exists = srv6_sdn_controller_state.tenant_exists(
+            tenantid=tenantid, client=self.mongodb_client)
         if tenant_exists is None:
             err = 'Error while connecting to the controller state'
             logging.error(err)
@@ -861,7 +876,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Validate the device ID
         logging.debug('Validating the device ID: %s' % tenantid)
         devices = srv6_sdn_controller_state.get_devices(
-            deviceids=[deviceid])
+            deviceids=[deviceid], client=self.mongodb_client)
         if devices is None:
             err = 'Error getting devices'
             logging.error(err)
@@ -882,7 +897,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Check tunnels stats
         # If the tenant has some overlays configured
         # it is not possible to unregister it
-        num = srv6_sdn_controller_state.get_num_tunnels(deviceid, tenantid)
+        num = srv6_sdn_controller_state.get_num_tunnels(
+            deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
         if num is None:
             err = 'Error getting tunnels stats'
             logging.error(err)
@@ -906,7 +922,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             return STATUS_INTERNAL_SERVER_ERROR, err
         # Remove device from controller state
         success = srv6_sdn_controller_state.unregister_device(
-            deviceid, tenantid)
+            deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
         if success is None or success is False:
             err = ('Cannot unregister the device. '
                    'Error while updating the controller state')
@@ -974,7 +990,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the tenant is configured
             is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
+                         .is_tenant_configured(tenantid=tenantid,
+                                               client=self.mongodb_client))
             if is_config is None:
                 err = 'Error while checking tenant configuration'
                 logging.error(err)
@@ -1016,8 +1033,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's check if the overlay does not exist
             logging.debug('Checking if the overlay name is available: %s'
                           % overlay_name)
-            exists = srv6_sdn_controller_state.overlay_exists(overlay_name,
-                                                              tenantid)
+            exists = srv6_sdn_controller_state.overlay_exists(
+                name=overlay_name, tenantid=tenantid,
+                client=self.mongodb_client)
             if exists is True:
                 # If the overlay already exists, return an error message
                 err = ('Overlay name %s is already in use for tenant %s'
@@ -1033,7 +1051,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                   reason=err))
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                deviceids=_devices, return_dict=True)
+                deviceids=_devices, return_dict=True,
+                client=self.mongodb_client)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
@@ -1131,7 +1150,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Check if the slice is already assigned to an overlay
                 _overlay = (srv6_sdn_controller_state
-                            .get_overlay_containing_slice(_slice, tenantid))
+                            .get_overlay_containing_slice(
+                                _slice=_slice, tenantid=tenantid,
+                                client=self.mongodb_client))
                 if _overlay is not None:
                     # Slice already assigned to an overlay
                     err = ('Cannot create overlay: the slice %s is '
@@ -1154,7 +1175,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             #
             # Save the overlay to the controller state
             overlayid = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name)
+                name=overlay_name, type=overlay_type, slices=slices,
+                tenantid=tenantid, tunnel_mode=tunnel_name,
+                client=self.mongodb_client)
             if overlayid is None:
                 err = 'Cannot save the overlay to the controller state'
                 logging.error(err)
@@ -1173,7 +1196,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 # Remove overlay DB status
                 if srv6_sdn_controller_state.remove_overlay(
-                        overlayid, tenantid) is not True:
+                        overlayid=overlayid, tenantid=tenantid,
+                        client=self.mongodb_client) is not True:
                     logging.error('Cannot remove overlay. Inconsistent data')
                 return OverlayServiceReply(
                     status=Status(code=status_code, reason=err))
@@ -1184,9 +1208,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 interface_name = site1['interface_name']
                 # Init tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
-                           .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid,
-                                                            tenantid))
+                           .get_and_inc_tunnel_mode_counter(
+                               tunnel_name=tunnel_name,
+                               deviceid=deviceid,
+                               tenantid=tenantid,
+                               client=self.mongodb_client))
                 if counter == 0:
                     status_code = tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1196,7 +1222,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         # Remove overlay DB status
                         if srv6_sdn_controller_state.remove_overlay(
-                                overlayid, tenantid) is not True:
+                                overlayid=overlayid, tenantid=tenantid,
+                                client=self.mongodb_client) is not True:
                             logging.error(
                                 'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
@@ -1206,7 +1233,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.error(err)
                     # Remove overlay DB status
                     if srv6_sdn_controller_state.remove_overlay(
-                            overlayid, tenantid) is not True:
+                            overlayid=overlayid, tenantid=tenantid,
+                            client=self.mongodb_client) is not True:
                         logging.error(
                             'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
@@ -1227,7 +1255,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.warning(err)
                         # Remove overlay DB status
                         if srv6_sdn_controller_state.remove_overlay(
-                                overlayid, tenantid) is not True:
+                                overlayid=overlayid, tenantid=tenantid,
+                                client=self.mongodb_client) is not True:
                             logging.error(
                                 'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
@@ -1248,7 +1277,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     # Remove overlay DB status
                     if srv6_sdn_controller_state.remove_overlay(
-                            overlayid, tenantid) is not True:
+                            overlayid=overlayid, tenantid=tenantid,
+                            client=self.mongodb_client) is not True:
                         logging.error(
                             'Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
@@ -1269,7 +1299,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             logging.warning(err)
                             # Remove overlay DB status
                             if srv6_sdn_controller_state.remove_overlay(
-                                    overlayid, tenantid) is not True:
+                                    overlayid=overlayid, tenantid=tenantid,
+                                    client=self.mongodb_client) is not True:
                                 logging.error(
                                     'Cannot remove overlay. Inconsistent data')
                             return OverlayServiceReply(
@@ -1305,7 +1336,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the tenant is configured
             is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
+                         .is_tenant_configured(tenantid=tenantid,
+                                               client=self.mongodb_client))
             if is_config is None:
                 err = 'Error while checking tenant configuration'
                 logging.error(err)
@@ -1336,7 +1368,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Let's check if the overlay exists
         logging.debug('Checking the overlay: %s' % overlayid)
         overlays = srv6_sdn_controller_state.get_overlays(
-            overlayids=[overlayid])
+            overlayids=[overlayid], client=self.mongodb_client)
         if overlays is None:
             err = 'Error getting the overlay'
             logging.error(err)
@@ -1418,9 +1450,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     return status_code, err
             # Destroy tunnel mode on the devices
             counter = (srv6_sdn_controller_state
-                       .dec_and_get_tunnel_mode_counter(tunnel_name,
-                                                        deviceid,
-                                                        tenantid))
+                       .dec_and_get_tunnel_mode_counter(
+                           tunnel_name=tunnel_name,
+                           deviceid=deviceid,
+                           tenantid=tenantid,
+                           client=self.mongodb_client))
             if counter == 0:
                 status_code = tunnel_mode.destroy_tunnel_mode(
                     deviceid, tenantid, tunnel_info)
@@ -1442,7 +1476,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.warning(err)
             return status_code, err
         # Delete the overlay
-        success = srv6_sdn_controller_state.remove_overlay(overlayid, tenantid)
+        success = srv6_sdn_controller_state.remove_overlay(
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if success is None or success is False:
             err = 'Cannot remove the overlay from the controller state'
             logging.error(err)
@@ -1474,7 +1510,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the tenant is configured
             is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
+                         .is_tenant_configured(tenantid=tenantid,
+                                               client=self.mongodb_client))
             if is_config is None:
                 err = 'Error while checking tenant configuration'
                 logging.error(err)
@@ -1490,7 +1527,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Get the overlay
             overlays = srv6_sdn_controller_state.get_overlays(
-                overlayids=[overlayid])
+                overlayids=[overlayid], client=self.mongodb_client)
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1543,7 +1580,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.debug('Checking the overlay: %s' % overlay_name)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                deviceids=list(incoming_devices) + _devices, return_dict=True)
+                deviceids=list(incoming_devices) + _devices, return_dict=True,
+                client=self.mongodb_client)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
@@ -1622,7 +1660,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 # Check if the slice is already assigned to an overlay
                 _overlay = (srv6_sdn_controller_state
-                            .get_overlay_containing_slice(_slice, tenantid))
+                            .get_overlay_containing_slice(_slice=_slice,
+                                                          tenantid=tenantid,
+                                                          client=self.mongodb_client))
                 if _overlay is not None:
                     # Slice already assigned to an overlay
                     err = ('Cannot create overlay: the slice %s is '
@@ -1650,9 +1690,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 interface_name = site1['interface_name']
                 # Init tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
-                           .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid,
-                                                            tenantid))
+                           .get_and_inc_tunnel_mode_counter(
+                               tunnel_name=tunnel_name,
+                               deviceid=deviceid,
+                               tenantid=tenantid,
+                               client=self.mongodb_client))
                 if counter == 0:
                     status_code = tunnel_mode.init_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1720,7 +1762,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 configured_slices.append(site1)
             # Save the overlay to the state
             success = srv6_sdn_controller_state.add_many_slices_to_overlay(
-                overlayid, tenantid, incoming_slices)
+                overlayid=overlayid, tenantid=tenantid, slices=incoming_slices,
+                client=self.mongodb_client)
             if success is None or success is False:
                 err = 'Cannot update overlay in controller state'
                 logging.error(err)
@@ -1756,7 +1799,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # Check if the tenant is configured
             is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
+                         .is_tenant_configured(tenantid=tenantid,
+                                               client=self.mongodb_client))
             if is_config is None:
                 err = 'Error while checking tenant configuration'
                 logging.error(err)
@@ -1773,7 +1817,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Let's check if the overlay exists
             logging.debug('Checking the overlay: %s' % overlayid)
             overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                overlayid])
+                overlayid], client=self.mongodb_client)
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
@@ -1820,7 +1864,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     incoming_devices.add(deviceid)
             # Get the devices
             devices = srv6_sdn_controller_state.get_devices(
-                deviceids=incoming_devices, return_dict=True)
+                deviceids=incoming_devices, return_dict=True,
+                client=self.mongodb_client)
             if devices is None:
                 err = 'Error getting devices'
                 logging.error(err)
@@ -1950,9 +1995,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             status=Status(code=status_code, reason=err))
                 # Destroy tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
-                           .dec_and_get_tunnel_mode_counter(tunnel_name,
-                                                            deviceid,
-                                                            tenantid))
+                           .dec_and_get_tunnel_mode_counter(
+                               tunnel_name=tunnel_name,
+                               deviceid=deviceid,
+                               tenantid=tenantid,
+                               client=self.mongodb_client))
                 if counter == 0:
                     status_code = tunnel_mode.destroy_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
@@ -1971,7 +2018,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Save the overlay to the state
             success = (srv6_sdn_controller_state
                        .remove_many_slices_from_overlay(
-                           overlayid, tenantid, incoming_slices))
+                           overlayid=overlayid, tenantid=tenantid,
+                           slices=incoming_slices, client=self.mongodb_client))
             if success is None or success is False:
                 err = 'Cannot update overlay in controller state'
                 logging.error(err)
@@ -2017,7 +2065,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response = OverlayServiceReply()
         # Build the overlays list
         overlays = srv6_sdn_controller_state.get_overlays(
-            overlayids=overlayids, tenantid=tenantid)
+            overlayids=overlayids, tenantid=tenantid, client=self.mongodb_client)
         if overlays is None:
             err = 'Error getting overlays'
             logging.error(err)
@@ -2065,7 +2113,8 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  devices=None,
                  vpn_file=DEFAULT_VPN_DUMP,
                  controller_state=None,
-                 verbose=DEFAULT_VERBOSE):
+                 verbose=DEFAULT_VERBOSE,
+                 mongodb_client=None):
     # Initialize controller state
     # controller_state = srv6_controller_utils.ControllerState(
     #    topology=topo_graph,
@@ -2088,7 +2137,7 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     # Initialize the Northbound Interface    
     service = NorthboundInterface(
         grpc_client_port, srv6_manager,
-        southbound_interface, verbose, stamp_controller
+        southbound_interface, verbose, stamp_controller, self.mongodb_client
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server

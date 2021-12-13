@@ -50,7 +50,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
     """gRPC request handler"""
 
     def __init__(self, grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
-                 controller_state=None, verbose=DEFAULT_VERBOSE):
+                 controller_state=None, verbose=DEFAULT_VERBOSE,
+                 mongodb_client=None):
         # Name of the tunnel mode
         self.name = 'SRv6'
         # Port of the gRPC client
@@ -63,7 +64,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         self.srv6_manager = sb_grpc_client.SRv6Manager()
         # Initialize controller state
         self.controller_state_srv6 = \
-            srv6_tunnel_utils.ControllerStateSRv6(controller_state)
+            srv6_tunnel_utils.ControllerStateSRv6(controller_state,
+                                                  client=mongodb_client)
+        # Reference to the MongoDB client
+        self.mongodb_client = mongodb_client
 
     def _create_tunnel_uni(self, overlayid, overlay_name, overlay_type,
                            l_slice, r_slice, tenantid, overlay_info):
@@ -75,7 +79,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         #
         # Increase the number of tunnels
         num_tunnels = srv6_sdn_controller_state.inc_and_get_tunnels_counter(
-            overlayid, tenantid, l_slice['deviceid'], r_slice)
+            overlayid=overlayid, tenantid=tenantid, deviceid=l_slice['deviceid'],
+            dest_slice=r_slice, client=self.mongodb_client)
         # If the uni tunnel already exists, we have done
         if num_tunnels > 1:
             logger.debug('Skip tunnel %s %s' %
@@ -86,7 +91,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         #
         # Get router address
         l_deviceip = (srv6_sdn_controller_state
-                      .get_router_mgmtip(l_slice['deviceid'], tenantid))
+                      .get_router_mgmtip(deviceid=l_slice['deviceid'],
+                                         tenantid=tenantid,
+                                         client=self.mongodb_client))
         if l_deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -96,7 +103,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # in order to solve an issue of routes getting deleted when the
         # interface is assigned to a VRF
         dev = (srv6_sdn_controller_state
-               .get_wan_interfaces(l_slice['deviceid'], tenantid))
+               .get_wan_interfaces(deviceid=l_slice['deviceid'],
+                                   tenantid=tenantid,
+                                   client=self.mongodb_client))
         if dev is None:
             # Cannot get wan interface
             logger.warning('Cannot get WAN interface')
@@ -108,7 +117,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         dev = dev[0]
         # Get the table ID
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
+            overlayid=overlayid, tenantid=tenantid, client=self.mongodb_client)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -121,10 +130,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Get the subnets
         if overlay_type == OverlayType.IPv6Overlay:
             subnets = srv6_sdn_controller_state.get_ipv6_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                interface_name=r_slice['interface_name'],
+                client=self.mongodb_client)
         elif overlay_type == OverlayType.IPv4Overlay:
             subnets = srv6_sdn_controller_state.get_ipv4_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                interface_name=r_slice['interface_name'],
+                client=self.mongodb_client)
         else:
             logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -148,7 +161,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                            l_slice, r_slice, tenantid, overlay_info):
         # Decrease the number of tunnels
         num_tunnels = srv6_sdn_controller_state.dec_and_get_tunnels_counter(
-            overlayid, tenantid, l_slice['deviceid'], r_slice)
+            overlayid=overlayid, tenantid=tenantid,
+            deviceid=l_slice['deviceid'], dest_slice=r_slice,
+            client=self.mongodb_client)
         # Check if there are other unidirectional tunnels
         # between the two slices
         # If the uni tunnel already exists, we have done
@@ -158,24 +173,30 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         #
         # Get router address
         l_deviceip = srv6_sdn_controller_state.get_router_mgmtip(
-            l_slice['deviceid'], tenantid)
+            deviceid=l_slice['deviceid'], tenantid=tenantid,
+            client=self.mongodb_client)
         if l_deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the subnets
         if overlay_type == OverlayType.IPv6Overlay:
             subnets = srv6_sdn_controller_state.get_ipv6_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                interface_name=r_slice['interface_name'],
+                client=self.mongodb_client)
         elif overlay_type == OverlayType.IPv4Overlay:
             subnets = srv6_sdn_controller_state.get_ipv4_subnets(
-                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                interface_name=r_slice['interface_name'],
+                client=self.mongodb_client)
         else:
             logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -204,7 +225,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Get a new table ID for the overlay
         logger.debug('Attempting to get a new table ID for the VPN')
         tableid = srv6_sdn_controller_state.get_new_tableid(
-            overlayid, tenantid
+            overlayid=overlayid, tenantid=tenantid, client=self.mongodb_client
         )
         logger.debug('New table ID assigned to the VPN: %s', tableid)
         logger.debug('Validating the table ID: %s' % tableid)
@@ -225,7 +246,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         #
         # Get the router address
         deviceip = srv6_sdn_controller_state.get_device_mgmtip(
-            tenantid, deviceid)
+            tenantid=tenantid, deviceid=deviceid, client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -277,7 +298,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % (overlay_name, deviceid))
         # Get the router address
         deviceip = srv6_sdn_controller_state.get_device_mgmtip(
-            tenantid, deviceid)
+            tenantid=tenantid, deviceid=deviceid, client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -297,7 +318,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Get the table ID for the VPN
         logger.debug('Attempting to retrieve the table ID assigned to the VPN')
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client
         )
         if tableid is None:
             # Table ID not yet assigned
@@ -318,7 +340,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # We use the WAN interface
         # in order to solve an issue of routes getting deleted when the
         # interface is assigned to a VRF
-        dev = srv6_sdn_controller_state.get_wan_interfaces(deviceid, tenantid)
+        dev = srv6_sdn_controller_state.get_wan_interfaces(
+            deviceid=deviceid, tenantid=tenantid,
+            client=self.mongodb_client)
         if dev is None:
             # Cannot get non-loopback interface
             logger.warning('Cannot get non-loopback interface')
@@ -358,7 +382,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % (interface_name, deviceid, overlay_name))
         # Get router address
         deviceip = srv6_sdn_controller_state.get_device_mgmtip(
-            tenantid, deviceid)
+            tenantid=tenantid, deviceid=deviceid,
+            client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -390,13 +415,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create the routes for the subnets
         subnets = srv6_sdn_controller_state.get_ip_subnets(
-            deviceid, tenantid, interface_name)
+            deviceid=deviceid, tenantid=tenantid,
+            interface_name=interface_name, client=self.mongodb_client)
         for subnet in subnets:
             gateway = subnet['gateway']
             subnet = subnet['subnet']
@@ -451,7 +478,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                              tenantid, overlay_info):
         logger.debug('Trying to destroy the overlay data structure')
         # Release the table ID
-        res = srv6_sdn_controller_state.release_tableid(overlayid, tenantid)
+        res = srv6_sdn_controller_state.release_tableid(
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if res == -1:
             logger.debug('Cannot release the table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -464,7 +493,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      'router %s' % deviceid)
         # Get router address
         deviceip = srv6_sdn_controller_state.get_router_mgmtip(
-            deviceid, tenantid)
+            deviceid=deviceid, tenantid=tenantid,
+            client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
@@ -511,14 +541,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % (overlay_name, deviceid))
         # Get the router address
         deviceip = srv6_sdn_controller_state.get_router_mgmtip(
-            deviceid, tenantid)
+            deviceid=deviceid, tenantid=tenantid,
+            client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Extract params from the VPN
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if tableid is None:
             # If the operation has failed, return an error message
             logger.warning('Cannot get table ID for the VPN %s' % overlay_name)
@@ -578,14 +610,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                      % (interface_name, deviceid, overlay_name))
         # Get router address
         deviceip = srv6_sdn_controller_state.get_router_mgmtip(
-            deviceid, tenantid)
+            deviceid=deviceid, tenantid=tenantid,
+            client=self.mongodb_client)
         if deviceip is None:
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
         tableid = srv6_sdn_controller_state.get_tableid(
-            overlayid, tenantid)
+            overlayid=overlayid, tenantid=tenantid,
+            client=self.mongodb_client)
         if tableid is None:
             logger.warning('Cannot retrieve VPN table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -595,7 +629,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # from the VRF. We do it just for symmetry with respect
         # to the add_slice_to_overlay function
         subnets = srv6_sdn_controller_state.get_ip_subnets(
-            deviceid, tenantid, interface_name)
+            deviceid=deviceid, tenantid=tenantid,
+            interface_name=interface_name,
+            client=self.mongodb_client)
         for subnet in subnets:
             gateway = subnet['gateway']
             subnet = subnet['subnet']

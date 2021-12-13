@@ -136,30 +136,38 @@ class ControllerStateSRv6:
        methods to handle it
     """
 
-    def __init__(self, controller_state):
+    def __init__(self, controller_state, mongodb_client=None):
         # Create SIDs allocator
         self.sid_allocator = SIDAllocator()
+        # MongoDB client
+        self.mongodb_client = mongodb_client
 
     # Return SID
     def get_sid(self, deviceid, tenantid, tableid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(
+            deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
         if sid_prefix is None:
             sid_prefix = DEFAULT_SID_PREFIX
         return self.sid_allocator.getSID(sid_prefix, tableid)
 
     # Return SID
     def get_sid_family(self, deviceid, tenantid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(
+            deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
         if sid_prefix is None:
             sid_prefix = DEFAULT_SID_PREFIX
         return self.sid_allocator.getSIDFamily(sid_prefix)
 
     def get_sid_list(self, deviceid, tenantid, tableid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(
+            deviceid=deviceid, tenantid=tenantid, client=self.mongodb_client)
         if sid_prefix is None:
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
-                deviceid, tenantid)[0]
+                deviceid=deviceid, tenantid=tenantid,
+                client=self.mongodb_client)[0]
             ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
-                deviceid, tenantid, wan_interface)[0].split('/')[0]
+                deviceid=deviceid, tenantid=tenantid,
+                interface_name=wan_interface,
+                client=self.mongodb_client)[0].split('/')[0]
             return [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
         return [self.get_sid(deviceid, tenantid, tableid)]

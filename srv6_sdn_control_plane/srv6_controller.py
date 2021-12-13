@@ -70,6 +70,12 @@ DEFAULT_NB_INTERFACE = 'gRPC'
 DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS = 5
 # Default interval between two keep alive messages
 DEFAULT_KEEP_ALIVE_INTERVAL = 30
+# Default MongoDB params
+DEFAULT_MONGODB_HOST = '0.0.0.0'
+DEFAULT_MONGODB_PORT = 27017
+DEFAULT_MONGODB_USERNAME = 'root'
+DEFAULT_MONGODB_PASSWORD = '12345678'
+
 
 
 class SRv6Controller(object):
@@ -84,7 +90,10 @@ class SRv6Controller(object):
                  pymerang_server_port, min_interval_between_topo_dumps,
                  topo_extraction=False,
                  keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
-                 verbose=False):
+                 mongodb_host=DEFAULT_MONGODB_HOST,
+                 mongodb_port=DEFAULT_MONGODB_PORT,
+                 mongodb_username=DEFAULT_MONGODB_USERNAME,
+                 mongodb_password=DEFAULT_MONGODB_PASSWORD, verbose=False):
         # Verbose mode
         self.VERBOSE = verbose
         if self.VERBOSE:
@@ -154,6 +163,11 @@ class SRv6Controller(object):
         self.topo_extraction = topo_extraction
         # Interval between two consecutive keep-alive messages
         self.keep_alive_interval = keep_alive_interval
+        # Establish a connection to MongoDB
+        self.mongodb_client = srv6_sdn_controller_state.get_mongodb_session(
+            host=mongodb_host, port=mongodb_port,
+            username=mongodb_username, password=mongodb_password
+        )
         # Print configuration
         if self.VERBOSE:
             print()
@@ -443,7 +457,8 @@ class SRv6Controller(object):
         if self.VERBOSE:
             print(('*** Extracting interface from router %s' % routerid))
         # Get the IP address of the router
-        router = srv6_sdn_controller_state.get_device_mgmtip(deviceid=routerid)
+        router = srv6_sdn_controller_state.get_device_mgmtip(
+            deviceid=routerid, client=self.mongodb_client)
         if router is None:
             # Router address not found
             # The topology has not changed
@@ -534,7 +549,7 @@ class SRv6Controller(object):
     def listen_network_events(self, routerid):
         topo_changed = False
         router = srv6_sdn_controller_state.get_router_mgmtip(
-            deviceid=routerid)
+            deviceid=routerid, client=self.mongodb_client)
         if router is None:
             logging.warning('Error in listen_network_events(): '
                             'Cannot find an address for the router %s'
@@ -724,7 +739,7 @@ class SRv6Controller(object):
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
                 managementip = srv6_sdn_controller_state.get_router_mgmtip(
-                    deviceid=routerid)
+                    deviceid=routerid, client=self.mongodb_client)
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
                 # Add the node to the graph
@@ -894,7 +909,8 @@ class SRv6Controller(object):
         if self.VERBOSE:
             print('*** Starting the SRv6 Controller')
         # Init database
-        if srv6_sdn_controller_state.init_db() is not True:
+        if srv6_sdn_controller_state.init_db(
+                client=self.mongodb_client) is not True:
             logging.error('Error while initializing database')
             return
         # Init Northbound Interface
@@ -915,7 +931,8 @@ class SRv6Controller(object):
                         'client_certificate': self.client_certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
-                        'verbose': self.VERBOSE
+                        'verbose': self.VERBOSE,
+                        'mongodb_client': self.mongodb_client
                         }
                         )
             )
@@ -1047,11 +1064,27 @@ def parseArguments():
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
                         help='Path of the configuration file')
-    # Config file
+    # Keep alive interval
     parser.add_argument('--keep-alive-interval', dest='keep_alive_interval',
                         action='store', default=DEFAULT_KEEP_ALIVE_INTERVAL,
                         help='Interval between two consecutive '
                         'keep alive messages')
+    # MongoDB Host
+    parser.add_argument('--mongodb-host', dest='mongodb_host',
+                        action='store', default=DEFAULT_MONGODB_HOST,
+                        help='MongoDB Host')
+    # MongoDB Port
+    parser.add_argument('--mongodb-port', dest='mongodb_port',
+                        action='store', default=DEFAULT_MONGODB_PORT,
+                        help='MongoDB Port')
+    # MongoDB Username
+    parser.add_argument('--mongodb-username', dest='mongodb_username',
+                        action='store', default=DEFAULT_MONGODB_USERNAME,
+                        help='MongoDB Username')
+    # MongoDB Password
+    parser.add_argument('--mongodb-password', dest='mongodb_password',
+                        action='store', default=DEFAULT_MONGODB_PASSWORD,
+                        help='MongoDB Password')
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -1086,6 +1119,10 @@ def parse_config_file(config_file):
         client_cert = None
         min_interval_between_topo_dumps = None
         keep_alive_interval = None
+        mongodb_host = None
+        mongodb_port = None
+        mongodb_username = None
+        mongodb_password = None
 
     args = Args()
     # Get parser
@@ -1157,6 +1194,18 @@ def parse_config_file(config_file):
     # Keep-alive interval
     args.keep_alive_interval = config['DEFAULT'].get(
         'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+    # MongoDB Host
+    args.mongodb_host = config['DEFAULT'].get(
+        'mongodb_host', DEFAULT_MONGODB_HOST)
+    # MongoDB Port
+    args.mongodb_port = config['DEFAULT'].get(
+        'mongodb_port', DEFAULT_MONGODB_PORT)
+    # MongoDB Username
+    args.mongodb_username = config['DEFAULT'].get(
+        'mongodb_username', DEFAULT_MONGODB_USERNAME)
+    # MongoDB Password
+    args.mongodb_password = config['DEFAULT'].get(
+        'mongodb_password', DEFAULT_MONGODB_PASSWORD)
     # Done, return
     return args
 
@@ -1231,6 +1280,11 @@ def _main():
     min_interval_between_topo_dumps = args.min_interval_between_topo_dumps
     # Keep-alive interval
     keep_alive_interval = args.keep_alive_interval
+    # MongoDB params
+    mongodb_host = args.mongodb_host
+    mongodb_port = args.mongodb_port
+    mongodb_username = args.mongodb_username
+    mongodb_password = args.mongodb_password
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
@@ -1264,6 +1318,10 @@ def _main():
         min_interval_between_topo_dumps=min_interval_between_topo_dumps,
         topo_extraction=topo_extraction,
         keep_alive_interval=keep_alive_interval,
+        mongodb_host=mongodb_host,
+        mongodb_port=mongodb_port,
+        mongodb_username=mongodb_username,
+        mongodb_password=mongodb_password,
         verbose=verbose
     )
     # Start the controller
