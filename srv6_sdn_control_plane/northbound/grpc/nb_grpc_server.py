@@ -2133,11 +2133,13 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     stamp_controller = None
     if ENABLE_STAMP_SUPPORT:
         stamp_controller = \
-            stamp_controller_module.run_grpc_server(server=grpc_server)
+            stamp_controller_module.run_grpc_server(server=grpc_server,
+                                                    storage='mongodb',
+                                                    mongodb_client=mongodb_client)
     # Initialize the Northbound Interface    
     service = NorthboundInterface(
         grpc_client_port, srv6_manager,
-        southbound_interface, verbose, stamp_controller, self.mongodb_client
+        southbound_interface, verbose, stamp_controller, mongodb_client
     )
     srv6_vpn_pb2_grpc.add_NorthboundInterfaceServicer_to_server(
         service, grpc_server

@@ -65,7 +65,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Initialize controller state
         self.controller_state_srv6 = \
             srv6_tunnel_utils.ControllerStateSRv6(controller_state,
-                                                  client=mongodb_client)
+                                                  mongodb_client=mongodb_client)
         # Reference to the MongoDB client
         self.mongodb_client = mongodb_client
 

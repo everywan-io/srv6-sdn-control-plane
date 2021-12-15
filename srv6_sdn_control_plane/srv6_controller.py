@@ -900,7 +900,8 @@ class SRv6Controller(object):
             server_port=self.pymerang_server_port,
             keep_alive_interval=self.keep_alive_interval,
             secure=self.sb_secure, key=self.sb_server_key,
-            certificate=self.sb_server_certificate)
+            certificate=self.sb_server_certificate,
+            mongodb_client=self.mongodb_client)
         server.serve()
 
     # Run the SRv6 controller

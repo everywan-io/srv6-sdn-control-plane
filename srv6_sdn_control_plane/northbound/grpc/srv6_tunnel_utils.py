@@ -165,9 +165,15 @@ class ControllerStateSRv6:
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid=deviceid, tenantid=tenantid,
                 client=self.mongodb_client)[0]
-            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
+            ipv6_addrs = srv6_sdn_controller_state.get_global_ipv6_addresses(
                 deviceid=deviceid, tenantid=tenantid,
                 interface_name=wan_interface,
-                client=self.mongodb_client)[0].split('/')[0]
+                client=self.mongodb_client)
+            if ipv6_addrs is None or len(ipv6_addrs) == 0:
+                ipv6_addrs = srv6_sdn_controller_state.get_non_link_local_ipv6_addresses(
+                    deviceid=deviceid, tenantid=tenantid,
+                    interface_name=wan_interface,
+                    client=self.mongodb_client)
+            ipv6_addr = ipv6_addrs[0].split('/')[0]
             return [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
         return [self.get_sid(deviceid, tenantid, tableid)]

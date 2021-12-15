@@ -14,8 +14,8 @@ class TunnelState:
 
     def __init__(self, grpc_client_port, verbose, mongodb_client=None):
         self.tunnel_modes = dict()
-        self.init_tunnel_modes(grpc_client_port, verbose)
         self.mongodb_client = mongodb_client
+        self.init_tunnel_modes(grpc_client_port, verbose)
 
     def register_tunnel_mode(self, name, tunnel_mode):
         self.tunnel_modes[tunnel_mode.name] = tunnel_mode
