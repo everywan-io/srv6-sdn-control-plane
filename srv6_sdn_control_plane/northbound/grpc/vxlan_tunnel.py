@@ -7,6 +7,7 @@ from bson.objectid import ObjectId
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
+from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
 
@@ -145,14 +146,27 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     tenantid=tenantid,
                                     client=self.mongodb_client)[0])
         # get external IP address for loal site and remote site
-        wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            deviceid=id_local_site, tenantid=tenantid,
-            interface_name=wan_intf_local_site,
-            client=self.mongodb_client)[0].split("/")[0]
-        wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            deviceid=id_remote_site, tenantid=tenantid,
-            interface_name=wan_intf_remote_site,
-            client=self.mongodb_client)[0].split("/")[0]
+        if overlay_type == OverlayType.IPv4Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                deviceid=id_local_site, tenantid=tenantid,
+                interface_name=wan_intf_local_site,
+                client=self.mongodb_client)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                deviceid=id_remote_site, tenantid=tenantid,
+                interface_name=wan_intf_remote_site,
+                client=self.mongodb_client)[0].split("/")[0]
+        elif overlay_type == OverlayType.IPv6Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                deviceid=id_local_site, tenantid=tenantid,
+                interface_name=wan_intf_local_site,
+                client=self.mongodb_client)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                deviceid=id_remote_site, tenantid=tenantid,
+                interface_name=wan_intf_remote_site,
+                client=self.mongodb_client)[0].split("/")[0]
+        else:
+            logger.error('Unrecognized overlay type %s', overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
@@ -486,14 +500,27 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                                     tenantid=tenantid,
                                     client=self.mongodb_client)[0])
         # get external IP address for local site and remote site
-        wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            deviceid=id_local_site, tenantid=tenantid,
-            interface_name=wan_intf_local_site,
-            client=self.mongodb_client)[0].split("/")[0]
-        wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            deviceid=id_remote_site, tenantid=tenantid,
-            interface_name=wan_intf_remote_site,
-            client=self.mongodb_client)[0].split("/")[0]
+        if overlay_type == OverlayType.IPv4Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                deviceid=id_local_site, tenantid=tenantid,
+                interface_name=wan_intf_local_site,
+                client=self.mongodb_client)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                deviceid=id_remote_site, tenantid=tenantid,
+                interface_name=wan_intf_remote_site,
+                client=self.mongodb_client)[0].split("/")[0]
+        elif overlay_type == OverlayType.IPv6Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                deviceid=id_local_site, tenantid=tenantid,
+                interface_name=wan_intf_local_site,
+                client=self.mongodb_client)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                deviceid=id_remote_site, tenantid=tenantid,
+                interface_name=wan_intf_remote_site,
+                client=self.mongodb_client)[0].split("/")[0]
+        else:
+            logger.error('Unrecognized overlay type %s', overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get local and remote subnet
         lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
             deviceid=id_local_site, tenantid=tenantid,
