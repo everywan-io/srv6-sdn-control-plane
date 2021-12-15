@@ -144,7 +144,7 @@ class ControllerStateSRv6:
     def get_sid(self, deviceid, tenantid, tableid):
         # Get the public prefix length
         public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
-        if public_prefix_length == 128:
+        if public_prefix_length is None or public_prefix_length == 128:
             # The device is reachable only on the IPv6 address
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
@@ -167,7 +167,7 @@ class ControllerStateSRv6:
     def get_sid_family(self, deviceid, tenantid):
         # Get the public prefix length
         public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
-        if public_prefix_length == 128:
+        if public_prefix_length is None or public_prefix_length == 128:
             # The device is reachable only on the IPv6 address
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
@@ -189,7 +189,7 @@ class ControllerStateSRv6:
     def get_sid_list(self, deviceid, tenantid, tableid):
         # Get the public prefix length
         public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
-        if public_prefix_length == 128:
+        if public_prefix_length is None or public_prefix_length == 128:
             # The device is reachable only on the IPv6 address
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
