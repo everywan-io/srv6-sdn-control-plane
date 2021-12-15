@@ -142,24 +142,66 @@ class ControllerStateSRv6:
 
     # Return SID
     def get_sid(self, deviceid, tenantid, tableid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
-        if sid_prefix is None:
-            sid_prefix = DEFAULT_SID_PREFIX
-        return self.sid_allocator.getSID(sid_prefix, tableid)
-
-    # Return SID
-    def get_sid_family(self, deviceid, tenantid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
-        if sid_prefix is None:
-            sid_prefix = DEFAULT_SID_PREFIX
-        return self.sid_allocator.getSIDFamily(sid_prefix)
-
-    def get_sid_list(self, deviceid, tenantid, tableid):
-        sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
-        if sid_prefix is None:
+        # Get the public prefix length
+        public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
+        if public_prefix_length == 128:
+            # The device is reachable only on the IPv6 address
+            # We have not a public subnet from which we can allocate SIDs, so
+            # we are forced to use two SIDs:
+            # - Public IPv6 address
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+            if sid_prefix is None:
+                sid_prefix = DEFAULT_SID_PREFIX
+        else: # public_prefix_length < 128
+            # In this case we have a subnet from which we can allocate SIDs
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid, tenantid)[0]
             ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
                 deviceid, tenantid, wan_interface)[0].split('/')[0]
-            return [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
-        return [self.get_sid(deviceid, tenantid, tableid)]
+            sid_prefix = str(IPv6Network(ipv6_addr).supernet(new_prefix=public_prefix_length))
+        # Generate local SID from SID prefix
+        return self.sid_allocator.getSID(sid_prefix, tableid)
+
+    # Return SID
+    def get_sid_family(self, deviceid, tenantid):
+        # Get the public prefix length
+        public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
+        if public_prefix_length == 128:
+            # The device is reachable only on the IPv6 address
+            # We have not a public subnet from which we can allocate SIDs, so
+            # we are forced to use two SIDs:
+            # - Public IPv6 address
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            sid_prefix = srv6_sdn_controller_state.get_sid_prefix(deviceid, tenantid)
+            if sid_prefix is None:
+                sid_prefix = DEFAULT_SID_PREFIX
+        else: # public_prefix_length < 128
+            # In this case we have a subnet from which we can allocate SIDs
+            wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
+                deviceid, tenantid)[0]
+            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)[0].split('/')[0]
+            sid_prefix = str(IPv6Network(ipv6_addr).supernet(new_prefix=public_prefix_length))
+        # Generate local SID family from SID prefix
+        return self.sid_allocator.getSIDFamily(sid_prefix)
+
+    def get_sid_list(self, deviceid, tenantid, tableid):
+        # Get the public prefix length
+        public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid)
+        if public_prefix_length == 128:
+            # The device is reachable only on the IPv6 address
+            # We have not a public subnet from which we can allocate SIDs, so
+            # we are forced to use two SIDs:
+            # - Public IPv6 address
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
+                deviceid, tenantid)[0]
+            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)[0].split('/')[0]
+            sid_list = [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
+        else: # public_prefix_length < 128
+            # In this case we have a subnet from which we can allocate SIDs
+            sid_list = [self.get_sid(deviceid, tenantid, tableid)]
+        # Return the SID list
+        return sid_list
