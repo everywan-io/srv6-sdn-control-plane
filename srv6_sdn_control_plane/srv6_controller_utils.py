@@ -28,6 +28,8 @@ from ipaddress import IPv6Interface
 from ipaddress import IPv6Network
 from ipaddress import IPv4Address
 
+# Main Routing Table
+MAIN_ROUTING_TABLE = 254
 
 ZEBRA_PORT = 2601
 SSH_PORT = 22
@@ -36,7 +38,7 @@ MIN_TABLE_ID = 2
 # Linux kernel supports up to 255 different tables (or 2**32?)
 MAX_TABLE_ID = 2**32 - 1  # = 255
 # Table where we store our seg6local routes
-LOCAL_SID_TABLE = 1
+LOCAL_SID_TABLE = MAIN_ROUTING_TABLE
 # Reserved table IDs
 RESERVED_TABLEIDS = [0, 253, 254, 255]
 RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)

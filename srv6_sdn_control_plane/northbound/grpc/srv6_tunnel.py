@@ -244,28 +244,38 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Add the rule to steer the SIDs through the local SID table
-        response = self.srv6_manager.create_iprule(
-            deviceip, self.grpc_client_port, family=AF_INET6,
-            table=srv6_controller_utils.LOCAL_SID_TABLE, destination=sid_family
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            logger.warning(
-                'Cannot create the IP rule for destination %s: %s'
-                % (sid_family, response)
+        # Note: by default there is already an ip rule to steer the packets
+        # through the main routing table; therefore, if the local SID table is
+        # the main routing table, we don't need to add an ip rule and we can
+        # skip this step
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.create_iprule(
+                deviceip, self.grpc_client_port, family=AF_INET6,
+                table=srv6_controller_utils.LOCAL_SID_TABLE, destination=sid_family
             )
-            # If the operation has failed, return an error message
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP rule for destination %s: %s'
+                    % (sid_family, response)
+                )
+                # If the operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Add a blackhole route to drop all unknown active segments
-        response = self.srv6_manager.create_iproute(
-            deviceip, self.grpc_client_port, family=AF_INET6,
-            type='blackhole', table=srv6_controller_utils.LOCAL_SID_TABLE
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            logger.warning(
-                'Cannot create the blackhole route: %s' % response
+        # If the local SID table used to store the segments is the main table,
+        # we skip this step
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.create_iproute(
+                deviceip, self.grpc_client_port, family=AF_INET6,
+                type='blackhole', table=srv6_controller_utils.LOCAL_SID_TABLE
             )
-            # If the operation has failed, return an error message
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the blackhole route: %s' % response
+                )
+                # If the operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Init tunnel mode on device %s completed'
                      % deviceid)
@@ -479,28 +489,36 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Remove rule for SIDs
-        response = self.srv6_manager.remove_iprule(
-            deviceip, self.grpc_client_port, family=AF_INET6,
-            table=srv6_controller_utils.LOCAL_SID_TABLE,
-            destination=sid_family
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            # If the operation has failed, return an error message
-            logger.warning(
-                'Cannot remove the localSID rule: %s' % response
+        # The IP rule is present only if the main routing table is not used
+        # as local SID table
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.remove_iprule(
+                deviceip, self.grpc_client_port, family=AF_INET6,
+                table=srv6_controller_utils.LOCAL_SID_TABLE,
+                destination=sid_family
             )
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning(
+                    'Cannot remove the localSID rule: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Remove blackhole route
-        response = self.srv6_manager.remove_iproute(
-            deviceip, self.grpc_client_port, family=AF_INET6, type='blackhole',
-            table=srv6_controller_utils.LOCAL_SID_TABLE
-        )
-        if response != SbStatusCode.STATUS_SUCCESS:
-            # If the operation has failed, return an error message
-            logger.warning(
-                'Cannot remove the blackhole rule: %s' % response
+        # The blackhole route is present only if the main routing table is not
+        # used as local SID table
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.remove_iproute(
+                deviceip, self.grpc_client_port, family=AF_INET6, type='blackhole',
+                table=srv6_controller_utils.LOCAL_SID_TABLE
             )
-            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning(
+                    'Cannot remove the blackhole rule: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Destroy tunnel mode completed')
         return NbStatusCode.STATUS_OK
