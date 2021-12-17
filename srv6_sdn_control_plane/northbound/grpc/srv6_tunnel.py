@@ -356,6 +356,31 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             # The operation has failed, return an error message
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Enable NDP advertisements for the SID
+        if srv6_sdn_controller_state.is_proxy_ndp_enabled(deviceid, tenantid) and \
+                srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid) != 128:
+            # Get the WAN interface
+            wan_interfaces = (srv6_sdn_controller_state
+                            .get_wan_interfaces(deviceid, tenantid))
+            if wan_interfaces is None:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface. No WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Get the first WAN interface
+            dev = wan_interfaces[0]
+            # Enable NDP advertisements for the SID
+            response = self.srv6_manager.add_proxy_ndp(
+                deviceip, self.grpc_client_port, address=sid, device=dev,
+                family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning('Cannot add proxy NDP: %s', response)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Init overlay completed for the overlay %s and the '
                      'deviceid %s' % (overlay_name, deviceid))
@@ -547,6 +572,31 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # If the operation has failed, return an error message
             logger.warning('Cannot get SID for deviceid %s' % deviceid)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Disable NDP advertisements for the SID
+        if srv6_sdn_controller_state.is_proxy_ndp_enabled(deviceid, tenantid) and \
+                srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid) != 128:
+            # Get the WAN interface
+            wan_interfaces = (srv6_sdn_controller_state
+                            .get_wan_interfaces(deviceid, tenantid))
+            if wan_interfaces is None:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface. No WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Get the first WAN interface
+            dev = wan_interfaces[0]
+            # Disable NDP advertisements for the SID
+            response = self.srv6_manager.del_proxy_ndp(
+                deviceip, self.grpc_client_port, address=sid, device=dev,
+                family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning('Cannot remove proxy NDP: %s', response)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Remove the decap and lookup function (i.e. the End.DT4 or End.DT6
         # route)
         response = self.srv6_manager.remove_srv6_local_processing_function(

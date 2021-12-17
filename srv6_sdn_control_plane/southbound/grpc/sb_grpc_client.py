@@ -977,7 +977,7 @@ class SRv6Manager:
         neigh = neigh_request.neighs.add()
         # Set address, device, family
         neigh.family = int(family)
-        neigh.dst = text_type(dst)
+        neigh.addr = text_type(dst)
         neigh.lladdr = text_type(lladdr)
         neigh.device = text_type(device)
         try:
@@ -986,6 +986,78 @@ class SRv6Manager:
                 server_ip, server_port)
             # Remove IP neigh
             response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
+    def add_proxy_ndp(self, server_ip, server_port,
+                      address, family, device):
+        """
+        Add proxy NDP for an IPv6 address
+        """
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPNeigh
+        # Create a new IP neighbor request
+        neigh_request = srv6_request.ipneigh_request
+        # Create a IP neigh entity
+        neigh = neigh_request.neighs.add()
+        # Set device
+        neigh.device = text_type(device)
+        # Set family
+        neigh.family = int(family)
+        # Set IPv6 address
+        neigh.addr = text_type(address)
+        # Set "proxy" flag
+        neigh.proxy = True
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Create IP neigh
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
+    def del_proxy_ndp(self, server_ip, server_port,
+                      address, family, device):
+        """
+        Remove proxy NDP for an IPv6 address
+        """
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPNeigh
+        # Create a new IP neighbor request
+        neigh_request = srv6_request.ipneigh_request
+        # Create a IP neigh entity
+        neigh = neigh_request.neighs.add()
+        # Set device
+        neigh.device = text_type(device)
+        # Set family
+        neigh.family = int(family)
+        # Set IPv6 address
+        neigh.addr = text_type(address)
+        # Set "proxy" flag
+        neigh.proxy = True
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Remove IP neigh
+            response = srv6_stub.Remove(srv6_request)
             # Create the response
             response = response.status
         except grpc.RpcError as e:
