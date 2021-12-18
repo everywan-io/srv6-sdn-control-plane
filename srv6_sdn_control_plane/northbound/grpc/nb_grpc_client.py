@@ -613,6 +613,41 @@ class NorthboundInterface:
         # Return the response
         return response
 
+    def get_sid_lists(self, ingress_deviceid, egress_deviceid, tenantid):
+        # Create the request
+        request = srv6_vpn_pb2.GetSIDListsRequest()
+        request.ingress_deviceid = ingress_deviceid
+        request.egress_deviceid = egress_deviceid
+        request.tenantid = tenantid
+        try:
+            # Get the reference of the stub
+            srv6_vpn_stub, channel = self.get_grpc_session(
+                self.server_ip, self.server_port, self.SECURE)
+            # Get SID lists between the edge devices
+            response = srv6_vpn_stub.GetSIDLists(request)
+            if response.status.code == NbStatusCode.STATUS_OK:
+                # Parse response and retrieve SID list information
+                sid_lists = list()
+                for sid_list in response.sid_lists:
+                    sid_lists.append({
+                        'overlayid': sid_list.overlayid,
+                        'overlay_name': sid_list.overlay_name,
+                        'direct_sid_list': list(sid_list.direct_sid_list),
+                        'return_sid_list': list(sid_list.return_sid_list),
+                        'tenantid': sid_list.tenantid
+                    })
+            else:
+                sid_lists = None
+            # Create the response
+            response = response.status.code, response.status.reason, sid_lists
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e, self.server_ip, self.server_port)
+            response = response[0], response[1], None
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
     def register_stamp_sender(self, *args, **kwargs):
         if self.stamp_nb_interface is None:
             raise NotImplementedError("STAMP Support not enabled")

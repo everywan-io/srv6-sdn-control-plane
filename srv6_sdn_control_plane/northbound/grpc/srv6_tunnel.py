@@ -737,6 +737,51 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('Remove tunnel completed')
         return NbStatusCode.STATUS_OK
 
+    def get_sid_lists(self, ingress_deviceid, egress_deviceid, tenantid):
+        # Get all the overlays common to the two devices
+        overlays = srv6_sdn_controller_state.get_overlays_containing_devices(
+            deviceid1=ingress_deviceid, deviceid2=egress_deviceid,
+            tenantid=tenantid
+        )
+        if overlays is None:
+            err = 'Error getting overlays containing devices'
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR, err, None
+        # Get the SID list (in both the directions) between the two devices
+        # for each overlay
+        sid_lists = []
+        for overlay in overlays:
+            if overlay['tunnel_mode'] != 'SRv6':
+                # We are only interested in SRv6 tunnels
+                # Skip non-SRv6 tunnels
+                continue
+            # Retrieve the SID list
+            _overlayid = str(overlay['_id'])
+            _overlay_name = overlay['name']
+            _tenantid = overlay['tenantid']
+            _tableid = srv6_sdn_controller_state.get_tableid(
+                overlayid=_overlayid, tenantid=_tenantid)
+            if _tableid is None:
+                # If the operation has failed, return an error message
+                err = 'Cannot get table ID for the VPN %s' % _overlay_name
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR, err, None
+            _direct_sid_list = self.controller_state_srv6.get_sid_list(
+                deviceid=egress_deviceid, tenantid=_tenantid, tableid=_tableid
+            )
+            _return_sid_list = self.controller_state_srv6.get_sid_list(
+                deviceid=ingress_deviceid, tenantid=_tenantid, tableid=_tableid
+            )
+            # Add the SID list
+            sid_lists.append({
+                'overlayid': _overlayid,
+                'overlay_name': _overlay_name,
+                'direct_sid_list': _direct_sid_list,
+                'return_sid_list':  _return_sid_list,
+                'tenantid': _tenantid
+            })
+        # Return the result
+        return NbStatusCode.STATUS_OK, 'OK', sid_lists
+
+
     # def get_overlays(self):
     #     # Create the response
     #     response = srv6_vpn_pb2.SRv6VPNReply(

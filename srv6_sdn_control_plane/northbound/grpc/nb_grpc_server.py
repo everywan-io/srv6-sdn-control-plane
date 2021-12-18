@@ -49,6 +49,8 @@ from srv6_sdn_controller_state import srv6_sdn_controller_state
 from srv6_sdn_proto.status_codes_pb2 import Status, NbStatusCode, SbStatusCode
 from srv6_sdn_proto.srv6_vpn_pb2 import TenantReply, OverlayServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import InventoryServiceReply
+from srv6_sdn_proto.srv6_vpn_pb2 import GetSIDListsReply
+from . import srv6_tunnel_utils
 
 # STAMP Support
 ENABLE_STAMP_SUPPORT = True
@@ -2045,6 +2047,64 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 __slice.deviceid = _slice['deviceid']
                 # Add interface name
                 __slice.interface_name = _slice['interface_name']
+        # Return the overlays list
+        logging.debug('Sending response:\n%s' % response)
+        response.status.code = STATUS_OK
+        response.status.reason = 'OK'
+        return response
+
+    # Get SID lists available between two edge devices
+    def GetSIDLists(self, request, context):
+        logging.debug('GetSIDLists request received')
+        # Extract the ingress and egress device IDs from the request
+        ingress_deviceid = request.ingress_deviceid
+        ingress_deviceid = ingress_deviceid if ingress_deviceid != '' else None
+        egress_deviceid = request.egress_deviceid
+        egress_deviceid = egress_deviceid if egress_deviceid != '' else None
+        # Extract the tenant ID
+        tenantid = request.tenantid
+        tenantid = tenantid if tenantid != '' else None
+        # Parameters validation
+        #
+        # Validate the device IDs
+        if ingress_deviceid is None:
+            err = 'Missing manadtory ingress_deviceid argument'
+            logging.error(err)
+            return GetSIDListsReply(
+                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+        if egress_deviceid is None:
+            err = 'Missing manadtory egress_deviceid argument'
+            logging.error(err)
+            return GetSIDListsReply(
+                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+        # Validate the tenant ID
+        if tenantid is not None:
+            logging.debug('Validating the tenant ID: %s' % tenantid)
+            if not srv6_controller_utils.validate_tenantid(tenantid):
+                # If tenant ID is invalid, return an error message
+                err = 'Invalid tenant ID: %s' % tenantid
+                logging.warning(err)
+                return GetSIDListsReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+        # Create the response
+        response = GetSIDListsReply()
+        # Get the SID list (in both the directions) between the two devices
+        # for each overlay
+        status, err, sid_lists = self.tunnel_modes['SRv6'].get_sid_lists(
+            ingress_deviceid=ingress_deviceid, egress_deviceid=egress_deviceid,
+            tenantid=tenantid)
+        if status != NbStatusCode.STATUS_OK:
+            logging.error(err)
+            return GetSIDListsReply(
+                status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err))
+        for _sid_list in sid_lists:
+            # Retrieve the SID list
+            sid_list = response.sid_lists.add()
+            sid_list.overlayid = _sid_list['overlayid']
+            sid_list.overlay_name = _sid_list['overlay_name']
+            sid_list.tenantid = _sid_list['tenantid']
+            sid_list.direct_sid_list.extend(_sid_list['direct_sid_list'])
+            sid_list.return_sid_list.extend(_sid_list['return_sid_list'])
         # Return the overlays list
         logging.debug('Sending response:\n%s' % response)
         response.status.code = STATUS_OK
