@@ -767,7 +767,8 @@ class SRv6Manager:
     # CRUD IP Address
 
     def create_ipaddr(self, server_ip, server_port,
-                      ip_addr, device, net='', family=AF_INET):
+                      ip_addr, device, net='', family=AF_INET,
+                      ignore_errors=False):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -781,6 +782,8 @@ class SRv6Manager:
         addr.device = text_type(device)
         addr.family = int(family)
         addr.net = text_type(net)
+        # Flag to ignore errors
+        addr_request.ignore_errors = ignore_errors
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
