@@ -171,6 +171,8 @@ class SRv6Controller(object):
             print('*** Selected southbound interface: %s' % self.sb_interface)
             print('*** Selected northbound interface: %s' % self.nb_interface)
             print()
+        # Reference to the Northbound interface instance
+        self.nb_interface_ref = None
 
     # Get the interface of the router facing on a net
     def get_interface_facing_on_net(self, routerid, net):
@@ -885,8 +887,36 @@ class SRv6Controller(object):
             server_port=self.pymerang_server_port,
             keep_alive_interval=self.keep_alive_interval,
             secure=self.sb_secure, key=self.sb_server_key,
-            certificate=self.sb_server_certificate)
+            certificate=self.sb_server_certificate,
+            nb_interface_ref=self.nb_interface_ref)
         server.serve()
+
+    def start_nb_server(self, grpc_server_ip, grpc_server_port, grpc_client_port,
+                        nb_secure, server_key, server_certificate, sb_secure,
+                        client_certificate, southbound_interface, topo_graph,
+                        vpn_dict, devices, vpn_file, controller_state,
+                        verbose):
+        nb_server, nb_interface_ref = nb_grpc_server.create_server(
+            grpc_server_ip=grpc_server_ip,
+            grpc_server_port=grpc_server_port,
+            grpc_client_port=grpc_client_port,
+            nb_secure=nb_secure, server_key=server_key,
+            server_certificate=server_certificate,
+            sb_secure=sb_secure,
+            client_certificate=client_certificate,
+            southbound_interface=southbound_interface,
+            topo_graph=topo_graph, vpn_dict=vpn_dict,
+            devices=devices,
+            vpn_file=vpn_file,
+            controller_state=controller_state,
+            verbose=verbose
+        )
+        self.nb_interface_ref = nb_interface_ref
+        # Start the loop for gRPC
+        logging.info('Listening gRPC')
+        nb_server.start()
+        while True:
+            time.sleep(5)
 
     # Run the SRv6 controller
 
@@ -903,7 +933,7 @@ class SRv6Controller(object):
                 print('*** Starting gRPC Northbound server')
             # Start a new thread events listener in a new thread
             thread = Thread(
-                target=nb_grpc_server.start_server,
+                target=self.start_nb_server,
                 kwargs=({
                         'grpc_server_ip': self.grpc_server_ip,
                         'grpc_server_port': self.grpc_server_port,
@@ -915,7 +945,11 @@ class SRv6Controller(object):
                         'client_certificate': self.client_certificate,
                         'southbound_interface': self.sb_interface,
                         'topo_graph': self.G,
-                        'verbose': self.VERBOSE
+                        'verbose': self.VERBOSE,
+                        'vpn_dict': None,
+                        'vpn_file': None,
+                        'devices': None,
+                        'controller_state': None
                         }
                         )
             )
@@ -927,6 +961,8 @@ class SRv6Controller(object):
         )
         thread.daemon = True
         thread.start()
+        # Wait for NB Interface getting ready
+        time.sleep(3)
         # Start registration server
         thread = Thread(
             target=self.start_registration_server
