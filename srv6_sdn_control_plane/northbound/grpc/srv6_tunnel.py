@@ -811,3 +811,346 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
     #     # Return the VPNs list
     #     logger.debug('Sending response:\n%s' % response)
     #     return response
+
+    def _create_tunnel_uni_reconciliation(self, overlayid, overlay_name, overlay_type,
+                           l_slice, r_slice, tenantid, overlay_info):
+        logger.debug('Attempting to create unidirectional tunnel '
+                     'from %s to %s' % (l_slice['interface_name'],
+                                        r_slice['interface_name']))
+        # Check if the unidirectional tunnel
+        # between the two slices already exists
+        #
+        # Increase the number of tunnels
+        num_tunnels = srv6_sdn_controller_state.inc_and_get_tunnels_counter(
+            overlayid, tenantid, l_slice['deviceid'], r_slice)
+        # If the uni tunnel already exists, we have done
+        if num_tunnels > 1:
+            logger.debug('Skip tunnel %s %s' %
+                         (l_slice['interface_name'],
+                          r_slice['interface_name']))
+            return NbStatusCode.STATUS_OK
+        # Configure the tunnel
+        #
+        # Get router address
+        l_deviceip = (srv6_sdn_controller_state
+                      .get_router_mgmtip(l_slice['deviceid'], tenantid))
+        if l_deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Any non-loopback device
+        # We use the WAN interface
+        # in order to solve an issue of routes getting deleted when the
+        # interface is assigned to a VRF
+        dev = (srv6_sdn_controller_state
+               .get_wan_interfaces(l_slice['deviceid'], tenantid))
+        if dev is None:
+            # Cannot get wan interface
+            logger.warning('Cannot get WAN interface')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if len(dev) == 0:
+            # Cannot get wan interface
+            logger.warning('Cannot get WAN interface. No WAN interfaces')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        dev = dev[0]
+        # Get the table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logger.warning('Cannot retrieve VPN table ID')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the SID
+        sid_list = self.controller_state_srv6.get_sid_list(
+            r_slice['deviceid'], tenantid, tableid
+        )
+        # pyroute2 requires SID list in reverse order
+        sid_list = sid_list[::-1]
+        # Get the subnets
+        if overlay_type == OverlayType.IPv6Overlay:
+            subnets = srv6_sdn_controller_state.get_ipv6_subnets(
+                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        elif overlay_type == OverlayType.IPv4Overlay:
+            subnets = srv6_sdn_controller_state.get_ipv4_subnets(
+                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        else:
+            logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Create the SRv6 route
+        for subnet in subnets:
+            subnet = subnet['subnet']
+            response = self.srv6_manager.create_srv6_explicit_path(
+                l_deviceip, self.grpc_client_port, destination=subnet,
+                table=tableid, device=dev, segments=sid_list, encapmode='encap'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning('Cannot create SRv6 Explicit Path: %s'
+                               % response)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Success
+        logger.debug('Remote interface assigned to VPN successfully')
+        return NbStatusCode.STATUS_OK
+
+    def init_overlay_data_reconciliation(self, overlayid,
+                          overlay_name, tenantid, overlay_info):
+        logger.debug('Initiating overlay data for the overlay %s'
+                     % overlay_name)
+        # Success
+        logger.debug('Init overlay data completed for the overlay %s'
+                     % overlay_name)
+        return NbStatusCode.STATUS_OK
+
+    def init_tunnel_mode_reconciliation(self, deviceid, tenantid, overlay_info):
+        logger.debug('Initiating tunnel mode on router %s'
+                     % deviceid)
+        # Initialize the tunnel mode on the router
+        #
+        # Get the router address
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
+        if deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # First step: create a rule for local SIDs processing
+        # This step is just required for the first VPN
+        #
+        # Get SID family for this router
+        sid_family = self.controller_state_srv6.get_sid_family(
+            deviceid, tenantid
+        )
+        if sid_family is None:
+            # If the operation has failed, return an error message
+            logger.warning(
+                'Cannot get SID family for deviceid %s' % deviceid
+            )
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Add the rule to steer the SIDs through the local SID table
+        # Note: by default there is already an ip rule to steer the packets
+        # through the main routing table; therefore, if the local SID table is
+        # the main routing table, we don't need to add an ip rule and we can
+        # skip this step
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.create_iprule(
+                deviceip, self.grpc_client_port, family=AF_INET6,
+                table=srv6_controller_utils.LOCAL_SID_TABLE, destination=sid_family
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP rule for destination %s: %s'
+                    % (sid_family, response)
+                )
+                # If the operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Add a blackhole route to drop all unknown active segments
+        # If the local SID table used to store the segments is the main table,
+        # we skip this step
+        if srv6_controller_utils.LOCAL_SID_TABLE != \
+                srv6_controller_utils.MAIN_ROUTING_TABLE:
+            response = self.srv6_manager.create_iproute(
+                deviceip, self.grpc_client_port, family=AF_INET6,
+                type='blackhole', table=srv6_controller_utils.LOCAL_SID_TABLE
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the blackhole route: %s' % response
+                )
+                # If the operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Success
+        logger.debug('Init tunnel mode on device %s completed'
+                     % deviceid)
+        return NbStatusCode.STATUS_OK
+
+    def init_overlay_reconciliation(self, overlayid, overlay_name,
+                     overlay_type, tenantid, deviceid, overlay_info):
+        logger.debug('Initiating overlay %s on the device %s'
+                     % (overlay_name, deviceid))
+        # Get the router address
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
+        if deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Second step is the creation of the decapsulation and lookup route
+        if overlay_type == 'IPv6Overlay':
+            # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
+            # table. This behavior is realized by End.DT6 SRv6 action
+            action = 'End.DT6'
+        elif overlay_type == 'IPv4Overlay':
+            # For IPv4 VPN we have to perform decap and lookup in IPv6 routing
+            # table. This behavior is realized by End.DT4 SRv6 action
+            action = 'End.DT4'
+        else:
+            logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the table ID for the VPN
+        logger.debug('Attempting to retrieve the table ID assigned to the VPN')
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid
+        )
+        if tableid is None:
+            # Table ID not yet assigned
+            logger.debug('Cannot get table ID')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        logger.debug('Received table ID:%s', tableid)
+        # Third step is the creation of the VRF assigned to the VPN
+        response = self.srv6_manager.create_vrf_device(
+            deviceip, self.grpc_client_port, name=overlay_name, table=tableid
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            logger.warning(
+                'Cannot create the VRF %s: %s' % (overlay_name, response)
+            )
+            # If the operation has failed, return an error message
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get a WAN interface
+        # We use the WAN interface
+        # in order to solve an issue of routes getting deleted when the
+        # interface is assigned to a VRF
+        dev = srv6_sdn_controller_state.get_wan_interfaces(deviceid, tenantid)
+        if dev is None:
+            # Cannot get non-loopback interface
+            logger.warning('Cannot get non-loopback interface')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if len(dev) == 0:
+            # Cannot get wan interface
+            logger.warning('Cannot get non-loopback interface. '
+                           'No WAN interfaces')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        dev = dev[0]
+        # Get the SID
+        logger.debug('Attempting to get a SID for the router')
+        sid = self.controller_state_srv6.get_sid(deviceid, tenantid, tableid)
+        logger.debug('Received SID %s' % sid)
+        # Add the End.DT4 / End.DT6 route
+        response = self.srv6_manager.create_srv6_local_processing_function(
+            deviceip, self.grpc_client_port, segment=sid,
+            action=action, device=dev,
+            localsid_table=srv6_controller_utils.LOCAL_SID_TABLE, table=tableid
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            logger.warning(
+                'Cannot create the SRv6 Local Processing function: %s'
+                % response
+            )
+            # The operation has failed, return an error message
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Enable NDP advertisements for the SID
+        if srv6_sdn_controller_state.is_proxy_ndp_enabled(deviceid, tenantid) and \
+                srv6_sdn_controller_state.get_public_prefix_length(deviceid, tenantid) != 128:
+            # Get the WAN interface
+            wan_interfaces = (srv6_sdn_controller_state
+                            .get_wan_interfaces(deviceid, tenantid))
+            if wan_interfaces is None:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get wan interface
+                logger.warning('Cannot get WAN interface. No WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Get the first WAN interface
+            dev = wan_interfaces[0]
+            # Enable NDP advertisements for the SID
+            response = self.srv6_manager.add_proxy_ndp(
+                deviceip, self.grpc_client_port, address=sid, device=dev,
+                family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, return an error message
+                logger.warning('Cannot add proxy NDP: %s', response)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Success
+        logger.debug('Init overlay completed for the overlay %s and the '
+                     'deviceid %s' % (overlay_name, deviceid))
+        return NbStatusCode.STATUS_OK
+
+    def add_slice_to_overlay_reconciliation(self, overlayid, overlay_name,
+                             deviceid, interface_name, tenantid, overlay_info):
+        logger.debug('Attempting to add the slice %s from the router %s '
+                     'to the overlay %s'
+                     % (interface_name, deviceid, overlay_name))
+        # Get router address
+        deviceip = srv6_sdn_controller_state.get_device_mgmtip(
+            tenantid, deviceid)
+        if deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Don't advertise the private customer network
+        response = self.srv6_manager.update_interface(
+            deviceip, self.grpc_client_port,
+            name=interface_name, ospf_adv=False
+        )
+        if response == SbStatusCode.STATUS_UNREACHABLE_OSPF6D:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot disable OSPF advertisements: '
+                           'ospf6d not running')
+        elif response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning('Cannot disable OSPF advertisements')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Add the interface to the VRF
+        response = self.srv6_manager.update_vrf_device(
+            deviceip, self.grpc_client_port, name=overlay_name,
+            interfaces=[interface_name],
+            op='add_interfaces'
+        )
+        if response != SbStatusCode.STATUS_SUCCESS:
+            # If the operation has failed, report an error message
+            logger.warning(
+                'Cannot assign the interface to the VRF: %s' % response
+            )
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logger.warning('Cannot retrieve VPN table ID')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Create the routes for the subnets
+        subnets = srv6_sdn_controller_state.get_ip_subnets(
+            deviceid, tenantid, interface_name)
+        for subnet in subnets:
+            gateway = subnet['gateway']
+            subnet = subnet['subnet']
+            if gateway is not None and gateway != '':
+                response = self.srv6_manager.create_iproute(
+                    deviceip, self.grpc_client_port,
+                    destination=subnet, gateway=gateway,
+                    out_interface=interface_name,
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s (gateway %s) '
+                                   'in %s ' % (subnet, gateway, deviceip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Success
+        logger.debug('Add slice to overlay completed')
+        return NbStatusCode.STATUS_OK
+
+    def create_tunnel_reconciliation(self, overlayid, overlay_name, overlay_type,
+                      l_slice, r_slice, tenantid, overlay_info):
+        logger.debug(
+            'Attempting to create a tunnel %s between the interfaces %s and %s'
+            % (overlay_name, l_slice['interface_name'],
+               r_slice['interface_name'])
+        )
+        # Tunnel from l_slice to r_slice
+        res = self._create_tunnel_uni_reconciliation(
+            overlayid,
+            overlay_name,
+            overlay_type,
+            l_slice,
+            r_slice,
+            tenantid,
+            overlay_info)
+        if res != NbStatusCode.STATUS_OK:
+            return res
+        # Success
+        logger.debug('Tunnel creation completed')
+        return NbStatusCode.STATUS_OK

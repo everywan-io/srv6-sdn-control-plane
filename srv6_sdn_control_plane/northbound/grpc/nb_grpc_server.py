@@ -2111,21 +2111,277 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response.status.reason = 'OK'
         return response
 
+    def prepare_db_for_device_reconciliation(self, deviceid, tenantid):
+        #self.stamp_controller.storage.set_sender_inizialized(
+        #    node_id=deviceid, tenantid=tenantid, is_initialized=False)
+        srv6_sdn_controller_state.reset_overlay_stats(deviceid=deviceid, tenantid=tenantid)
+        for tunnel_name in self.tunnel_modes:
+            srv6_sdn_controller_state.reset_tunnel_mode_counter(tunnel_name=tunnel_name, deviceid=deviceid, tenantid=tenantid)
 
-# Start gRPC server
-def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
-                 grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
-                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
-                 nb_secure=DEFAULT_SECURE, server_key=DEFAULT_KEY,
-                 server_certificate=DEFAULT_CERTIFICATE,
-                 sb_secure=DEFAULT_SECURE,
-                 client_certificate=DEFAULT_CERTIFICATE,
-                 southbound_interface=DEFAULT_SB_INTERFACE,
-                 topo_graph=None, vpn_dict=None,
-                 devices=None,
-                 vpn_file=DEFAULT_VPN_DUMP,
-                 controller_state=None,
-                 verbose=DEFAULT_VERBOSE):
+    def device_reconciliation(self, deviceid, tenantid):
+        logging.debug('Device Reconcliation started')
+        err = STATUS_OK
+        # Get the device
+        device = srv6_sdn_controller_state.get_device(
+            deviceid=deviceid, tenantid=tenantid)
+        if device is None:
+            logging.error('Error getting device')
+            return status_codes_pb2.STATUS_INTERNAL_ERROR
+        if not device['configured']:
+            logging.warning('Device not yet configured. Nothing to reconcile')
+            return err
+        default_interfaces = dict()
+        for interface in device['default']['interfaces']:
+            default_interfaces[interface['name']] = dict()
+            default_interfaces[interface['name']]['ipv4_addrs'] = interface['ipv4_addrs']
+            default_interfaces[interface['name']]['ipv6_addrs'] = interface['ipv6_addrs']
+        for interface in device['interfaces']:
+            if interface['type'] == srv6_controller_utils.InterfaceType.WAN or \
+                    interface['type'] == srv6_controller_utils.InterfaceType.UNKNOWN:
+                logging.warning('Cannot set IP address of WAN interface. Skipping')
+                continue
+            if len(interface['ipv4_addrs']) > 0:
+                addrs = list()
+                for addr in default_interfaces[interface['name']]['ipv4_addrs']:
+                    addrs.append(addr)
+                response = self.srv6_manager.remove_many_ipaddr(
+                    device['mgmtip'],
+                    self.grpc_client_port, addrs=addrs,
+                    device=interface['name'], family=AF_UNSPEC
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed,
+                    # report an error message
+                    logging.warning(
+                        'Cannot remove the public addresses '
+                        'from the interface'
+                    )
+                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                # Add IP address to the interface
+                for ipv4_addr in interface['ipv4_addrs']:
+                    response = self.srv6_manager.create_ipaddr(
+                        device['mgmtip'],
+                        self.grpc_client_port, ip_addr=ipv4_addr,
+                        device=interface['name'], family=AF_INET,
+                        ignore_errors=True
+                    )
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logging.warning(
+                            'The IPv4 address already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed,
+                        # report an error message
+                        logging.warning(
+                            'Cannot assign the private VPN IP address '
+                            'to the interface'
+                        )
+                        err = status_codes_pb2.STATUS_INTERNAL_ERROR
+            if len(interface['ipv6_addrs']) > 0:
+                addrs = list()
+                nets = list()
+                for addr in default_interfaces[interface['name']]['ipv6_addrs']:
+                    addrs.append(addr)
+                    nets.append(str(IPv6Interface(addr).network))
+                response = self.srv6_manager.remove_many_ipaddr(
+                    device['mgmtip'],
+                    self.grpc_client_port, addrs=addrs,
+                    nets=nets, device=interface['name'], family=AF_UNSPEC
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed,
+                    # report an error message
+                    logging.warning(
+                        'Cannot remove the public addresses '
+                        'from the interface'
+                    )
+                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                # Add IP address to the interface
+                for ipv6_addr in interface['ipv6_addrs']:
+                    net = IPv6Interface(ipv6_addr).network.__str__()
+                    response = self.srv6_manager.create_ipaddr(
+                        device['mgmtip'],
+                        self.grpc_client_port, ip_addr=ipv6_addr,
+                        device=interface['name'], net=net, family=AF_INET6,
+                        ignore_errors=True
+                    )
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logging.warning(
+                            'The IPv4 address already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed,
+                        # report an error message
+                        logging.warning(
+                            'Cannot assign the private VPN IP address '
+                            'to the interface'
+                        )
+                        err = status_codes_pb2.STATUS_INTERNAL_ERROR
+            # Push the new configuration
+            if err == STATUS_OK:
+                logging.debug('The device %s has been configured successfully'
+                              % deviceid)
+            else:
+                err = 'The device %s rejected the configuration' % deviceid
+                logging.error(err)
+                return STATUS_BAD_REQUEST
+        logging.info('The device configuration has been saved\n\n')
+        # Setup STAMP information
+        if ENABLE_STAMP_SUPPORT:
+            logging.info('Configuring STAMP information\n\n')
+            # Lookup the WAN interfaces
+            # TODO currently we only support a single WAN interface,
+            # so we look for the address of the first WAN interface
+            # In the future we should support multiple interfaces
+            wan_ip = None
+            wan_ifaces = None
+            for interface in device['interfaces']:
+                if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
+                        len(interface['ipv6_addrs']) > 0:
+                    wan_ip = interface['ipv6_addrs'][0].split('/')[0]
+                    wan_ifaces = [interface['name']]
+                    break
+            # Configure information
+            if self.stamp_controller.storage.get_stamp_node(
+                    node_id=device['deviceid'],
+                    tenantid=tenantid) is None:
+                self.stamp_controller.add_stamp_node(
+                    node_id=device['deviceid'],
+                    node_name=device['name'],
+                    grpc_ip=device['mgmtip'],
+                    grpc_port=self.grpc_client_port,
+                    ip=wan_ip,
+                    sender_port=50051,
+                    reflector_port=50052,
+                    interfaces=wan_ifaces,
+                    stamp_source_ipv6_address=wan_ip,
+                    is_sender=True,
+                    is_reflector=True,
+                    initialize=False
+                )
+            # Configure information
+            self.stamp_controller.init_stamp_node(
+                node_id=device['deviceid']
+            )
+        logging.debug('Device Reconcliation completed')
+        # Create the response
+        return STATUS_OK
+
+    def overlay_reconciliation(self, deviceid, tenantid):
+        logging.info('Overlay Reconcliation started: deviceid %s, tenantid %s', deviceid, tenantid)
+        overlays = srv6_sdn_controller_state.get_overlays_containing_device(deviceid=deviceid, tenantid=tenantid)
+        for overlay in overlays:
+            overlayid = str(overlay['_id'])
+            overlay_name = overlay['name']
+            tenantid = overlay['tenantid']
+            overlay_type = overlay['type']
+            tunnel_name = overlay['tunnel_mode']
+            slices = overlay['slices']
+            tunnel_info = None
+            # Get tunnel mode
+            tunnel_mode = self.tunnel_modes[tunnel_name]
+            # Let's create the overlay
+            # Create overlay data structure
+            status_code = tunnel_mode.init_overlay_data_reconciliation(overlayid=overlayid,
+                overlay_name=overlay_name, tenantid=tenantid, overlay_info=tunnel_info)
+            if status_code != STATUS_OK:
+                err = ('Cannot initialize overlay data (overlay %s, tenant %s)'
+                    % (overlay_name, tenantid))
+                logging.warning(err)
+                return
+            # Iterate on slices and add to the overlay
+            configured_slices = list()
+            for site1 in slices:
+                _deviceid = site1['deviceid']
+                interface_name = site1['interface_name']
+                # Init tunnel mode on the 
+                if deviceid == _deviceid:
+                    counter = (srv6_sdn_controller_state
+                            .get_and_inc_tunnel_mode_counter(tunnel_name,
+                                                                deviceid,
+                                                                tenantid))
+                    if counter == 0:
+                        status_code = tunnel_mode.init_tunnel_mode_reconciliation(
+                            deviceid, tenantid, tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot initialize tunnel mode (device %s '
+                                'tenant %s)' % (deviceid, tenantid))
+                            logging.warning(err)
+                            return
+                    elif counter is None:
+                        err = 'Cannot increase tunnel mode counter'
+                        logging.error(err)
+                        return
+                # Init overlay on the devices
+                if deviceid == _deviceid:
+                    status_code = tunnel_mode.init_overlay_reconciliation(overlayid,
+                                                            overlay_name,
+                                                            overlay_type,
+                                                            tenantid, deviceid,
+                                                            tunnel_info)
+                    if status_code != STATUS_OK:
+                        err = ('Cannot initialize overlay (overlay %s '
+                                'device %s, tenant %s)'
+                                % (overlay_name, deviceid, tenantid))
+                        logging.warning(err)
+                        return
+                # Add the interface to the overlay
+                if deviceid == _deviceid:
+                    status_code = (tunnel_mode.add_slice_to_overlay_reconciliation(overlayid,
+                                                        overlay_name, deviceid,
+                                                        interface_name, tenantid,
+                                                        tunnel_info))
+                    if status_code != STATUS_OK:
+                        err = ('Cannot add slice to overlay (overlay %s, '
+                            'device %s, slice %s, tenant %s)'
+                            % (overlay_name, deviceid,
+                                interface_name, tenantid))
+                        logging.warning(err)
+                        return
+                # Create the tunnel between all the pairs of interfaces
+                for site2 in configured_slices:
+                    if site1['deviceid'] != site2['deviceid']:
+                        if site1['deviceid'] == deviceid:
+                            status_code = tunnel_mode.create_tunnel_reconciliation(
+                                overlayid, overlay_name, overlay_type,
+                                site1, site2, tenantid, tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return
+                        if site2['deviceid'] == deviceid:
+                            status_code = tunnel_mode.create_tunnel_reconciliation(
+                                overlayid, overlay_name, overlay_type,
+                                site2, site1, tenantid, tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return
+                # Add the slice to the configured set
+                configured_slices.append(site1)
+                logging.info('Reconciliation of overlays completed successfully\n\n')
+        logging.debug('Overlay Reconcliation completed: deviceid %s, tenantid %s', deviceid, tenantid)
+        # Create the response
+        return STATUS_OK
+
+
+def create_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
+                  grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
+                  grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                  nb_secure=DEFAULT_SECURE, server_key=DEFAULT_KEY,
+                  server_certificate=DEFAULT_CERTIFICATE,
+                  sb_secure=DEFAULT_SECURE,
+                  client_certificate=DEFAULT_CERTIFICATE,
+                  southbound_interface=DEFAULT_SB_INTERFACE,
+                  topo_graph=None, vpn_dict=None,
+                  devices=None,
+                  vpn_file=DEFAULT_VPN_DUMP,
+                  controller_state=None,
+                  verbose=DEFAULT_VERBOSE):
     # Initialize controller state
     # controller_state = srv6_controller_utils.ControllerState(
     #    topology=topo_graph,
@@ -2174,6 +2430,39 @@ def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
         grpc_server.add_insecure_port(
             '[%s]:%s' % (grpc_server_ip, grpc_server_port)
         )
+    return grpc_server, service
+
+
+# Start gRPC server
+def start_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
+                 grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
+                 grpc_client_port=DEFAULT_GRPC_CLIENT_PORT,
+                 nb_secure=DEFAULT_SECURE, server_key=DEFAULT_KEY,
+                 server_certificate=DEFAULT_CERTIFICATE,
+                 sb_secure=DEFAULT_SECURE,
+                 client_certificate=DEFAULT_CERTIFICATE,
+                 southbound_interface=DEFAULT_SB_INTERFACE,
+                 topo_graph=None, vpn_dict=None,
+                 devices=None,
+                 vpn_file=DEFAULT_VPN_DUMP,
+                 controller_state=None,
+                 verbose=DEFAULT_VERBOSE):
+    # Create the gRPC server
+    grpc_server, _ = create_server(
+        grpc_server_ip=grpc_server_ip,
+        grpc_server_port=grpc_server_port,
+        grpc_client_port=grpc_client_port,
+        nb_secure=nb_secure, server_key=server_key,
+        server_certificate=server_certificate,
+        sb_secure=sb_secure,
+        client_certificate=client_certificate,
+        southbound_interface=southbound_interface,
+        topo_graph=topo_graph, vpn_dict=vpn_dict,
+        devices=devices,
+        vpn_file=vpn_file,
+        controller_state=controller_state,
+        verbose=verbose
+    )
     # Start the loop for gRPC
     logging.info('Listening gRPC')
     grpc_server.start()
