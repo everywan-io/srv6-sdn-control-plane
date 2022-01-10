@@ -7,8 +7,10 @@ from bson.objectid import ObjectId
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
+from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
+from socket import AF_INET, AF_INET6
 
 # Default gRPC client port
 DEFAULT_GRPC_CLIENT_PORT = 12345
@@ -106,10 +108,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
         # get VTEP IP remote site and local site
-        vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
-            id_remote_site, tenantid)
-        vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
-            id_local_site, tenantid)
+        if overlay_type == OverlayType.IPv6Overlay:
+            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                id_remote_site, tenantid)
+            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                id_local_site, tenantid)
+        else:
+            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
+                id_remote_site, tenantid)
+            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
+                id_local_site, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
@@ -120,10 +128,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_remote_site = (srv6_sdn_controller_state
                                 .get_wan_interfaces(id_remote_site, tenantid)[0])
         # get external IP address for loal site and remote site
-        wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        if overlay_type == OverlayType.IPv4Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        elif overlay_type == OverlayType.IPv6Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
@@ -301,15 +315,22 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
-            routerid, tenantid)
+        if overlay_type == OverlayType.IPv6Overlay:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                routerid, tenantid)
+            vtep_ip_family = AF_INET6
+        else:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+                routerid, tenantid)
+            vtep_ip_family = AF_INET
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
             mgmt_ip_site, self.grpc_client_port,
             ifname=vtep_name,
             vxlan_link=wan_intf_site,
             vxlan_id=vni,
-            vxlan_port=vxlan_port_site
+            vxlan_port=vxlan_port_site,
+            vxlan_group='::' if overlay_type == OverlayType.IPv6Overlay else '0.0.0.0'
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
@@ -319,7 +340,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # set VTEP IP address
         response = self.srv6_manager.create_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
-            ip_addr=vtep_ip_site, device=vtep_name, net='')
+            ip_addr=vtep_ip_site, device=vtep_name, net='', family=vtep_ip_family)
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning('Cannot set IP %s for VTEP %s in %s'
@@ -361,6 +382,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             routerid, tenantid)
         if vtep_ip_site == -1:
             vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
+                routerid, tenantid)
+        vtep_ipv6_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            routerid, tenantid)
+        if vtep_ipv6_site == -1:
+            vtep_ipv6_site = srv6_sdn_controller_state.get_new_vtep_ipv6(
                 routerid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
@@ -433,10 +459,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_remote_site = (srv6_sdn_controller_state
                                 .get_wan_interfaces(id_remote_site, tenantid)[0])
         # get external IP address for local site and remote site
-        wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        if overlay_type == OverlayType.IPv4Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        elif overlay_type == OverlayType.IPv6Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
         # get local and remote subnet
         lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
             id_local_site, tenantid, local_site['interface_name'])
@@ -612,8 +644,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
-            routerid, tenantid)
+        if overlay_type == OverlayType.IPv6Overlay:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                routerid, tenantid)
+        else:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+                routerid, tenantid)
         # get VTEP IP address
         response = self.srv6_manager.remove_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
@@ -665,6 +701,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
         # release VTEP IP address if no more VTEP on the EDGE device
         srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
+        srv6_sdn_controller_state.release_vtep_ipv6(routerid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -739,10 +776,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             logging.error('Error while getting table ID assigned to the '
                           'overlay %s' % overlayid)
         # get VTEP IP remote site and local site
-        vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
-            id_remote_site, tenantid)
-        vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
-            id_local_site, tenantid)
+        if overlay_type == OverlayType.IPv6Overlay:
+            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                id_remote_site, tenantid)
+            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                id_local_site, tenantid)
+        else:
+            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
+                id_remote_site, tenantid)
+            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
+                id_local_site, tenantid)
         # get VNI
         vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
         # get VTEP name
@@ -753,10 +796,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         wan_intf_remote_site = (srv6_sdn_controller_state
                                 .get_wan_interfaces(id_remote_site, tenantid)[0])
         # get external IP address for loal site and remote site
-        wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
-        wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-            id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        if overlay_type == OverlayType.IPv4Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
+        elif overlay_type == OverlayType.IPv6Overlay:
+            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_local_site, tenantid, wan_intf_local_site)[0].split("/")[0]
+            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                id_remote_site, tenantid, wan_intf_remote_site)[0].split("/")[0]
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
         key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
@@ -863,15 +912,22 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
-            routerid, tenantid)
+        if overlay_type == OverlayType.IPv6Overlay:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+                routerid, tenantid)
+            vtep_ip_family = AF_INET6
+        else:
+            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+                routerid, tenantid)
+            vtep_ip_family = AF_INET
         # crete VTEP interface
         response = self.srv6_manager.createVxLAN(
             mgmt_ip_site, self.grpc_client_port,
             ifname=vtep_name,
             vxlan_link=wan_intf_site,
             vxlan_id=vni,
-            vxlan_port=vxlan_port_site
+            vxlan_port=vxlan_port_site,
+            vxlan_group='::' if overlay_type == OverlayType.IPv6Overlay else '0.0.0.0'
         )
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
@@ -881,7 +937,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # set VTEP IP address
         response = self.srv6_manager.create_ipaddr(
             mgmt_ip_site, self.grpc_client_port,
-            ip_addr=vtep_ip_site, device=vtep_name, net='')
+            ip_addr=vtep_ip_site, device=vtep_name, net='', family=vtep_ip_family)
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning('Cannot set IP %s for VTEP %s in %s'

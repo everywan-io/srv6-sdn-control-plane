@@ -1070,7 +1070,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port):
+    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port,
+                    vxlan_group=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1084,6 +1085,8 @@ class SRv6Manager:
         vxlan.vxlan_link = vxlan_link
         vxlan.vxlan_id = vxlan_id
         vxlan.vxlan_port = vxlan_port
+        if vxlan_group is not None:
+            vxlan.vxlan_group = vxlan_group
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
