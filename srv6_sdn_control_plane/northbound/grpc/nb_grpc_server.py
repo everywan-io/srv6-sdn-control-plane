@@ -47,6 +47,7 @@ from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 from srv6_sdn_proto.status_codes_pb2 import Status, NbStatusCode, SbStatusCode
+from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
 from srv6_sdn_proto.srv6_vpn_pb2 import TenantReply, OverlayServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import InventoryServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import GetSIDListsReply
@@ -1142,6 +1143,45 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check for IP addresses
+                if overlay_type == OverlayType.IPv4Overlay:
+                    addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(addrs) == 0:
+                        # No IPv4 address assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
+                               'at least one IPv4 address is required to create an IPv4 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(subnets) == 0:
+                        # No IPv4 subnet assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
+                               'at least one IPv4 subnet is required to create an IPv4 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                elif overlay_type == OverlayType.IPv6Overlay:
+                    addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(addrs) == 0:
+                        # No IPv6 address assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
+                               'at least one IPv6 address is required to create an IPv6 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(subnets) == 0:
+                        # No IPv6 subnet assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
+                               'at least one IPv6 subnet is required to create an IPv6 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
@@ -1633,6 +1673,45 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check for IP addresses
+                if overlay_type == OverlayType.IPv4Overlay:
+                    addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(addrs) == 0:
+                        # No IPv4 address assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
+                               'at least one IPv4 address is required to create an IPv4 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(subnets) == 0:
+                        # No IPv4 subnet assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
+                               'at least one IPv4 subnet is required to create an IPv4 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                elif overlay_type == OverlayType.IPv6Overlay:
+                    addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(addrs) == 0:
+                        # No IPv6 address assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
+                               'at least one IPv6 address is required to create an IPv6 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                    if len(subnets) == 0:
+                        # No IPv6 subnet assigned to the interface
+                        err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
+                               'at least one IPv6 subnet is required to create an IPv6 Overlay'
+                               % _slice)
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
