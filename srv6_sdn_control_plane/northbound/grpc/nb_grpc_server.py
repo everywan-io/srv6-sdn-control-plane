@@ -37,7 +37,7 @@ from socket import AF_UNSPEC
 from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
-from ipaddress import IPv6Interface
+from ipaddress import IPv6Interface, IPv6Network, IPv4Network
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_vpn_pb2_grpc
 from srv6_sdn_proto import srv6_vpn_pb2
@@ -1182,6 +1182,44 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.error(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            for slice1 in slices:
+                # Extract the device ID
+                deviceid_1 = slice1['deviceid']
+                # Extract the interface name
+                interface_name_1 = slice1['interface_name']
+                for slice2 in slices:
+                    if slice2 == slice1:
+                        continue
+                    # Extract the device ID
+                    deviceid_2 = slice2['deviceid']
+                    # Extract the interface name
+                    interface_name_2 = slice2['interface_name']
+                    if overlay_type == OverlayType.IPv4Overlay:
+                        subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                        subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                        for subnet1 in subnets1:
+                            subnet1 = subnet1['subnet']
+                            for subnet2 in subnets2:
+                                subnet2 = subnet2['subnet']
+                                if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
+                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                           % (slice1, slice2))
+                                    logging.error(err)
+                                    return OverlayServiceReply(
+                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    elif overlay_type == OverlayType.IPv6Overlay:
+                        subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                        subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                        for subnet1 in subnets1:
+                            subnet1 = subnet1['subnet']
+                            for subnet2 in subnets2:
+                                subnet2 = subnet2['subnet']
+                                if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
+                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                           % (slice1, slice2))
+                                    logging.error(err)
+                                    return OverlayServiceReply(
+                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
@@ -1712,6 +1750,44 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         logging.error(err)
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            for slice1 in slices + incoming_slices:
+                # Extract the device ID
+                deviceid_1 = slice1['deviceid']
+                # Extract the interface name
+                interface_name_1 = slice1['interface_name']
+                for slice2 in slices + incoming_slices:
+                    if slice2 == slice1:
+                        continue
+                    # Extract the device ID
+                    deviceid_2 = slice2['deviceid']
+                    # Extract the interface name
+                    interface_name_2 = slice2['interface_name']
+                    if overlay_type == OverlayType.IPv4Overlay:
+                        subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                        subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                        for subnet1 in subnets1:
+                            subnet1 = subnet1['subnet']
+                            for subnet2 in subnets2:
+                                subnet2 = subnet2['subnet']
+                                if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
+                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                           % (slice1, slice2))
+                                    logging.error(err)
+                                    return OverlayServiceReply(
+                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    elif overlay_type == OverlayType.IPv6Overlay:
+                        subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                        subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                        for subnet1 in subnets1:
+                            subnet1 = subnet1['subnet']
+                            for subnet2 in subnets2:
+                                subnet2 = subnet2['subnet']
+                                if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
+                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                           % (slice1, slice2))
+                                    logging.error(err)
+                                    return OverlayServiceReply(
+                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
