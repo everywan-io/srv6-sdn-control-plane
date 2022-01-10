@@ -2117,6 +2117,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         srv6_sdn_controller_state.reset_overlay_stats(deviceid=deviceid, tenantid=tenantid)
         for tunnel_name in self.tunnel_modes:
             srv6_sdn_controller_state.reset_tunnel_mode_counter(tunnel_name=tunnel_name, deviceid=deviceid, tenantid=tenantid)
+        srv6_sdn_controller_state.reset_created_tunnels(deviceid=deviceid, tenantid=tenantid)
 
     def device_reconciliation(self, deviceid, tenantid):
         logging.debug('Device Reconcliation started')
