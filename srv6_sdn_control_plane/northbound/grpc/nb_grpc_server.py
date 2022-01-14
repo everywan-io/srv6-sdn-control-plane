@@ -1220,6 +1220,30 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     logging.error(err)
                                     return OverlayServiceReply(
                                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            can_use_ipv6_addr_for_wan = True
+            can_use_ipv4_addr_for_wan = True
+            for _slice in slices:
+                addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                if addrs is None:
+                    can_use_ipv6_addr_for_wan = False
+                addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                if addrs is None:
+                    can_use_ipv4_addr_for_wan = False
+            if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
+                err = ('Cannot establish a full-mesh between all the WAN interfaces')
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
+                err = ('IPv6 transport not available: cannot create a SRv6 overlay')
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            transport_proto = 'ipv4'
+            if can_use_ipv6_addr_for_wan:
+                transport_proto = 'ipv6'
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
@@ -1234,7 +1258,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             #
             # Save the overlay to the controller state
             overlayid = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name)
+                overlay_name, overlay_type, slices, tenantid, tunnel_name,
+                transport_proto=transport_proto)
             if overlayid is None:
                 err = 'Cannot save the overlay to the controller state'
                 logging.error(err)
@@ -1788,6 +1813,27 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     logging.error(err)
                                     return OverlayServiceReply(
                                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            can_use_ipv6_addr_for_wan = True
+            can_use_ipv4_addr_for_wan = True
+            for _slice in slices + incoming_slices:
+                addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                if addrs is None:
+                    can_use_ipv6_addr_for_wan = False
+                addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                if addrs is None:
+                    can_use_ipv4_addr_for_wan = False
+            if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
+                err = ('Cannot establish a full-mesh between all the WAN interfaces')
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
+                err = ('IPv6 transport not available: cannot create a SRv6 overlay')
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
