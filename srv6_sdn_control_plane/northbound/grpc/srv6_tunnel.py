@@ -148,7 +148,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # IPv6 destination address field of the packets; in this case, the
         # SRH is not required and the encapsulation becomes an IPv4 over
         # IPv6 encapsulation or IPv6 over IPv6 encapsulation
-        if len(sid_list) == 1:
+        if not srv6_sdn_controller_state.is_srh_forced(
+                r_slice['deviceid'], tenantid) and len(sid_list) == 1:
             # Create a name for the Linux interface and establish the tunnel
             # type
             ip6tnl_ifname =  tunnel['tunnel_name']
@@ -265,7 +266,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Create the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
-            if len(sid_list) == 1:
+            if not srv6_sdn_controller_state.is_srh_forced(
+                    r_slice['deviceid'], tenantid) and len(sid_list) == 1:
                 # If we are using an IP over IPv6 encapsulation, we need to
                 # redirect the traffic of the slice over the ip6tnl tunnel
                 response = self.srv6_manager.create_iproute(
@@ -345,7 +347,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Remove the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
-            if len(sid_list) == 1:
+            if not srv6_sdn_controller_state.is_srh_forced(
+                    r_slice['deviceid'], tenantid) and len(sid_list) == 1:
                 # Get tunnel
                 tunnel = srv6_sdn_controller_state.get_tunnel(
                     overlayid=overlayid, ldeviceid=l_slice['deviceid'],
@@ -383,7 +386,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # If the SID list has only one SID and we are using the ip6tnl interface
         # to encapsulate the traffic over an IPv6 tunnel
-        if len(sid_list) == 1:
+        if not srv6_sdn_controller_state.is_srh_forced(
+                r_slice['deviceid'], tenantid) and len(sid_list) == 1:
             # Get tunnel
             tunnel = srv6_sdn_controller_state.get_tunnel(
                 overlayid=overlayid, ldeviceid=l_slice['deviceid'],
@@ -1195,7 +1199,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # IPv6 destination address field of the packets; in this case, the
         # SRH is not required and the encapsulation becomes an IPv4 over
         # IPv6 encapsulation or IPv6 over IPv6 encapsulation
-        if len(sid_list) == 1:
+        if not srv6_sdn_controller_state.is_srh_forced(
+                r_slice['deviceid'], tenantid) and len(sid_list) == 1:
             # Create a name for the Linux interface and establish the tunnel
             # type
             ip6tnl_ifname =  tunnel['tunnel_name']
@@ -1270,7 +1275,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # Create the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
-            if len(sid_list) == 1:
+            if not srv6_sdn_controller_state.is_srh_forced(
+                    r_slice['deviceid'], tenantid) and len(sid_list) == 1:
                 # If we are using an IP over IPv6 encapsulation, we need to
                 # redirect the traffic of the slice over the ip6tnl tunnel
                 response = self.srv6_manager.create_iproute(
@@ -1375,7 +1381,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         # IPv6 destination address field of the packets; in this case, the
         # SRH is not required and the encapsulation becomes an IPv4 over
         # IPv6 encapsulation or IPv6 over IPv6 encapsulation
-        if len(sid_list) == 1:
+        if not srv6_sdn_controller_state.is_srh_forced(
+                r_slice['deviceid'], tenantid) and len(sid_list) == 1:
             # Create a name for the Linux interface and establish the tunnel
             # type
             ip6tnl_ifname =  tunnel['tunnel_name']
