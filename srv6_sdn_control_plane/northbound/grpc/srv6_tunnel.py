@@ -625,6 +625,12 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             logger.debug('Cannot get table ID')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         logger.debug('Received table ID:%s', tableid)
+        # If ip6tnl is forced, the SID list can only contain one SID
+        if srv6_sdn_controller_state.is_ip6tnl_forced(deviceid, tenantid) and \
+                len(self.controller_state_srv6.get_sid_list(
+                    deviceid, tenantid, tableid)) > 1:
+            logger.error('force_ip6tnl option is set: Only one SID is supported')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Third step is the creation of the VRF assigned to the VPN
         response = self.srv6_manager.create_vrf_device(
             deviceip, self.grpc_client_port, name=overlay_name, table=tableid
