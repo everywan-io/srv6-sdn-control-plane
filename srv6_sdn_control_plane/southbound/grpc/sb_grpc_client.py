@@ -49,6 +49,7 @@ from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import empty_req_pb2
 from srv6_sdn_proto import gre_interface_pb2
+from srv6_sdn_proto import ip_tunnel_interface_pb2
 
 
 # Network event types
@@ -1181,6 +1182,73 @@ class SRv6Manager:
         channel.close()
         # Return the response
         return response
+
+    def create_ip_tunnel_interface(self, server_ip, server_port, ifname,
+                                   local_addr='', remote_addr='', tunnel_type='ipip'):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPTunnel
+        # Create a new ip tunnel request
+        iptunnel_request = srv6_request.iptunnel_request
+        # Create a new ip tunnel
+        iptunnel = iptunnel_request.ip_tunnels.add()
+        # Set params
+        iptunnel.ifname = ifname
+        iptunnel.local_addr = local_addr
+        iptunnel.remote_addr = remote_addr
+        if tunnel_type == 'ip4ip4':
+            iptunnel.tunnel_type = ip_tunnel_interface_pb2.IPTunnelType.IP4IP4
+        elif tunnel_type == 'ip4ip6':
+            iptunnel.tunnel_type = ip_tunnel_interface_pb2.IPTunnelType.IP4IP6
+        elif tunnel_type == 'ip6ip4':
+            iptunnel.tunnel_type = ip_tunnel_interface_pb2.IPTunnelType.IP6IP4
+        elif tunnel_type == 'ip6ip6':
+            iptunnel.tunnel_type = ip_tunnel_interface_pb2.IPTunnelType.IP6IP6
+        else:
+            logging.error('Invalid tunnel type: %s', tunnel_type)
+            return SbStatusCode.STATUS_INTERNAL_ERROR
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Add ip tunnel
+            response = srv6_stub.Create(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+
+    def remove_ip_tunnel_interface(self, server_ip, server_port, ifname):
+        # Create message request
+        srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
+        # Set the type of the carried entity
+        srv6_request.entity_type = srv6_manager_pb2.IPTunnel
+        # Create a new ip tunnel request
+        iptunnel_request = srv6_request.iptunnel_request
+        # Create a new ip tunnel
+        iptunnel = iptunnel_request.ip_tunnels.add()
+        # Set params
+        iptunnel.ifname = ifname
+        try:
+            # Get the reference of the stub
+            srv6_stub, channel = self.get_grpc_session(
+                server_ip, server_port)
+            # Remove ip tunnel
+            response = srv6_stub.Remove(srv6_request)
+            # Create the response
+            response = response.status
+        except grpc.RpcError as e:
+            response = parse_grpc_error(e)
+        # Let's close the session
+        channel.close()
+        # Return the response
+        return response
+        
 
 
 class NetworkEventsListener:

@@ -2544,7 +2544,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 for site2 in configured_slices:
                     if site1['deviceid'] != site2['deviceid']:
                         if site1['deviceid'] == deviceid:
-                            status_code = tunnel_mode.create_tunnel_reconciliation(
+                            status_code = tunnel_mode.create_tunnel_reconciliation_l(
                                 overlayid, overlay_name, overlay_type,
                                 site1, site2, tenantid, tunnel_info)
                             if status_code != STATUS_OK:
@@ -2553,10 +2553,28 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     % (overlay_name, site1, site2, tenantid))
                                 logging.warning(err)
                                 return
-                        if site2['deviceid'] == deviceid:
-                            status_code = tunnel_mode.create_tunnel_reconciliation(
+                            status_code = tunnel_mode.create_tunnel_reconciliation_r(
                                 overlayid, overlay_name, overlay_type,
                                 site2, site1, tenantid, tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return
+                        if site2['deviceid'] == deviceid:
+                            status_code = tunnel_mode.create_tunnel_reconciliation_l(
+                                overlayid, overlay_name, overlay_type,
+                                site2, site1, tenantid, tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return
+                            status_code = tunnel_mode.create_tunnel_reconciliation_r(
+                                overlayid, overlay_name, overlay_type,
+                                site1, site2, tenantid, tunnel_info)
                             if status_code != STATUS_OK:
                                 err = ('Cannot create tunnel (overlay %s site1 %s '
                                     'site2 %s, tenant %s)'

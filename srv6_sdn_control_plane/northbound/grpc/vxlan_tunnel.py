@@ -775,7 +775,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel_reconciliation(self, overlayid, overlay_name, overlay_type,
+    def create_tunnel_reconciliation_l(self, overlayid, overlay_name, overlay_type,
                       local_site, remote_site, tenantid, overlay_info):
         # get devices ID
         id_remote_site = remote_site['deviceid']
@@ -913,6 +913,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                             'fdb_entry_config')}},
                 upsert=True)
         # Success
+        return NbStatusCode.STATUS_OK
+
+    def create_tunnel_reconciliation_r(self, overlayid, overlay_name, overlay_type,
+                      local_site, remote_site, tenantid, overlay_info):
+        # Nothing to do
         return NbStatusCode.STATUS_OK
 
     def init_overlay_reconciliation(self, overlayid, overlay_name,

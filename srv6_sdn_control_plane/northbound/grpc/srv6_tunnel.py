@@ -91,6 +91,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get router address
+        r_deviceip = (srv6_sdn_controller_state
+                      .get_router_mgmtip(r_slice['deviceid'], tenantid))
+        if r_deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Any non-loopback device
         # We use the WAN interface
         # in order to solve an issue of routes getting deleted when the
@@ -128,18 +135,161 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         else:
             logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Create the SRv6 route
-        for subnet in subnets:
-            subnet = subnet['subnet']
-            response = self.srv6_manager.create_srv6_explicit_path(
-                l_deviceip, self.grpc_client_port, destination=subnet,
-                table=tableid, device=dev, segments=sid_list, encapmode='encap'
+        # Add the tunnel to the controller state and get the tunnel ID of the
+        # new tunnel
+        tunnel = srv6_sdn_controller_state.add_tunnel_to_overlay(
+            overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+            rdeviceid=r_slice['deviceid'], tenantid=tenantid
+        )
+        if tunnel is None:
+            logger.warning('Error: Cannot store tunnel')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If the SID list has only one SID, we can store the SID in the
+        # IPv6 destination address field of the packets; in this case, the
+        # SRH is not required and the encapsulation becomes an IPv4 over
+        # IPv6 encapsulation or IPv6 over IPv6 encapsulation
+        if len(sid_list) == 1:
+            # Create a name for the Linux interface and establish the tunnel
+            # type
+            ip6tnl_ifname =  tunnel['tunnel_name']
+            ip6tnl_tx_ifname = '%s-tx' % ip6tnl_ifname
+            ip6tnl_rx_ifname =  '%s-rx' % ip6tnl_ifname
+            if overlay_type == OverlayType.IPv4Overlay:
+                tunnel_type = 'ip4ip6'
+            elif overlay_type == OverlayType.IPv6Overlay:
+                tunnel_type = 'ip6ip6'
+            else:
+                logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Create an ip6tnl Linux interface to encapsulate the traffic sent
+            # over the tunnel
+            # Get a WAN interface
+            wan_interfaces = srv6_sdn_controller_state.get_wan_interfaces(
+                l_slice['deviceid'], tenantid)
+            if wan_interfaces is None:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            wan_interface = wan_interfaces[0]
+            # Get an IPv6 address
+            addrs = srv6_sdn_controller_state.get_ipv6_addresses(
+                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                interface_name=wan_interface)
+            if len(addrs) == 0:
+                # No IPv6 address assigned to the interface
+                logging.error('No IPv6 addresses assigned to the interface %s', wan_interface)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            l_device_wan_ipaddr = addrs[0]
+            # Create the ip6tnl interface
+            response = self.srv6_manager.create_ip_tunnel_interface(
+                server_ip=l_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_tx_ifname, local_addr=l_device_wan_ipaddr.split('/')[0],
+                remote_addr=sid_list[0], tunnel_type=tunnel_type
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Add the tunnel interface to the VRF
+            response = self.srv6_manager.update_vrf_device(
+                l_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_tx_ifname],
+                op='add_interfaces'
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
-                logger.warning('Cannot create SRv6 Explicit Path: %s'
-                               % response)
+                logger.warning(
+                    'Cannot assign the interface to the VRF: %s' % response
+                )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Set the IP address
+            response = self.srv6_manager.create_ipaddr(
+                l_deviceip, self.grpc_client_port, ip_addr=l_device_wan_ipaddr,
+                device=ip6tnl_tx_ifname, family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot assign the IP address to the tunnel interface'
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Create an ip6tnl Linux interface to decapsulate the traffic
+            # received over the tunnel
+            # Create the ip6tnl interface
+            response = self.srv6_manager.create_ip_tunnel_interface(
+                server_ip=r_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_rx_ifname, local_addr=sid_list[0],
+                remote_addr=l_device_wan_ipaddr.split('/')[0], tunnel_type=tunnel_type
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Add the tunnel interface to the VRF
+            response = self.srv6_manager.update_vrf_device(
+                r_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_rx_ifname],
+                op='add_interfaces'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning(
+                    'Cannot assign the interface to the VRF: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Get SID prefix length
+            public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
+                r_slice['deviceid'], tenantid)
+            # Set the IP address
+            response = self.srv6_manager.create_ipaddr(
+                r_deviceip, self.grpc_client_port,
+                ip_addr=sid_list[0] + '/' + str(public_prefix_length),
+                device=ip6tnl_rx_ifname, family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot assign the IP address to the tunnel interface'
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Create the SRv6 route
+        for subnet in subnets:
+            subnet = subnet['subnet']
+            if len(sid_list) == 1:
+                # If we are using an IP over IPv6 encapsulation, we need to
+                # redirect the traffic of the slice over the ip6tnl tunnel
+                response = self.srv6_manager.create_iproute(
+                    server_ip=l_deviceip, server_port=self.grpc_client_port,
+                    destination=subnet,
+                    out_interface=ip6tnl_tx_ifname, table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s in %s '
+                                   % (subnet, l_deviceip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:
+                # If we are using an IP over IPv6+SRH encapsulation, we need
+                # to redirect the traffic over the SRH tunnel
+                response = self.srv6_manager.create_srv6_explicit_path(
+                    l_deviceip, self.grpc_client_port, destination=subnet,
+                    table=tableid, device=dev, segments=sid_list, encapmode='encap'
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot create SRv6 Explicit Path: %s'
+                                   % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Remote interface assigned to VPN successfully')
         return NbStatusCode.STATUS_OK
@@ -163,6 +313,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # Cannot get the router address
             logger.warning('Cannot get the router address')
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get router address
+        r_deviceip = (srv6_sdn_controller_state
+                      .get_router_mgmtip(r_slice['deviceid'], tenantid))
+        if r_deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Get the table ID
         tableid = srv6_sdn_controller_state.get_tableid(
             overlayid, tenantid)
@@ -179,18 +336,168 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         else:
             logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the SID
+        sid_list = self.controller_state_srv6.get_sid_list(
+            r_slice['deviceid'], tenantid, tableid
+        )
+        # pyroute2 requires SID list in reverse order
+        sid_list = sid_list[::-1]
         # Remove the SRv6 route
         for subnet in subnets:
             subnet = subnet['subnet']
-            response = self.srv6_manager.remove_srv6_explicit_path(
-                l_deviceip, self.grpc_client_port, destination=subnet,
-                table=tableid
+            if len(sid_list) == 1:
+                # Get tunnel
+                tunnel = srv6_sdn_controller_state.get_tunnel(
+                    overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+                    rdeviceid=r_slice['deviceid'], tenantid=tenantid
+                )
+                if tunnel is None:
+                    logger.warning('Error: Cannot store tunnel')
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                ip6tnl_ifname =  tunnel['tunnel_name']
+                ip6tnl_tx_ifname = '%s-tx' % ip6tnl_ifname
+                ip6tnl_rx_ifname =  '%s-rx' % ip6tnl_ifname
+                # If we are using an IP over IPv6 encapsulation, we need to
+                # remove the route
+                response = self.srv6_manager.remove_iproute(
+                    server_ip=l_deviceip, server_port=self.grpc_client_port,
+                    destination=subnet,
+                    out_interface=ip6tnl_tx_ifname, table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s '
+                                   'in %s ' % (subnet, l_deviceip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:
+                # If we are using an IP over IPv6+SRH encapsulation, we need
+                # to remove the SRv6 route
+                response = self.srv6_manager.remove_srv6_explicit_path(
+                    l_deviceip, self.grpc_client_port, destination=subnet,
+                    table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot remove SRv6 Explicit Path: %s'
+                                % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If the SID list has only one SID and we are using the ip6tnl interface
+        # to encapsulate the traffic over an IPv6 tunnel
+        if len(sid_list) == 1:
+            # Get tunnel
+            tunnel = srv6_sdn_controller_state.get_tunnel(
+                overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+                rdeviceid=r_slice['deviceid'], tenantid=tenantid
+            )
+            if tunnel is None:
+                logger.warning('Error: Cannot store tunnel')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            ip6tnl_ifname =  tunnel['tunnel_name']
+            ip6tnl_tx_ifname = '%s-tx' % ip6tnl_ifname
+            ip6tnl_rx_ifname =  '%s-rx' % ip6tnl_ifname
+            # Get a WAN interface
+            wan_interfaces = srv6_sdn_controller_state.get_wan_interfaces(
+                l_slice['deviceid'], tenantid)
+            if wan_interfaces is None:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            wan_interface = wan_interfaces[0]
+            # Get an IPv6 address
+            addrs = srv6_sdn_controller_state.get_ipv6_addresses(
+                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                interface_name=wan_interface)
+            if len(addrs) == 0:
+                # No IPv6 address assigned to the interface
+                logging.error('No IPv6 addresses assigned to the interface %s', wan_interface)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            l_device_wan_ipaddr = addrs[0]
+            # Get SID prefix length
+            public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
+                r_slice['deviceid'], tenantid)
+            # Remove the IP address
+            response = self.srv6_manager.remove_ipaddr(
+                r_deviceip, self.grpc_client_port,
+                ip_addr=sid_list[0] + '/' + str(public_prefix_length),
+                device=ip6tnl_rx_ifname, family=AF_INET6
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot remove SRv6 Explicit Path: %s'
-                               % response)
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot remove the IP address from the tunnel interface'
+                )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Remove the ip6 tunnel decap interface from the VRF
+            response = self.srv6_manager.update_vrf_device(
+                r_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_rx_ifname],
+                op='del_interfaces'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning(
+                    'Cannot remove the ip6tnl interface from the VRF: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Remove the ip6tnl Linux interface used for decapsulation
+            response = self.srv6_manager.remove_ip_tunnel_interface(
+                server_ip=r_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_rx_ifname
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot remove the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Remove the IP address of the encapsulation ip6tnl interface
+            response = self.srv6_manager.remove_ipaddr(
+                l_deviceip, self.grpc_client_port, ip_addr=l_device_wan_ipaddr,
+                device=ip6tnl_tx_ifname, family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot remove the IP address from the tunnel interface'
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Remove the ip6tnl encap interface from the VRF
+            response = self.srv6_manager.update_vrf_device(
+                l_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_tx_ifname],
+                op='del_interfaces'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning(
+                    'Cannot remove the ip6tnl interface from the VRF: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Remove the ip6tnl encap interface
+            response = self.srv6_manager.remove_ip_tunnel_interface(
+                server_ip=l_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_tx_ifname
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot remove the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Remove the tunnel from the controller state
+        tunnel = srv6_sdn_controller_state.remove_tunnel_from_overlay(
+            overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+            rdeviceid=r_slice['deviceid'], tenantid=tenantid
+        )
+        if tunnel is None:
+            logger.warning('Error: Cannot remove tunnel')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Remove unidirectional tunnel completed')
         return NbStatusCode.STATUS_OK
@@ -812,7 +1119,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
     #     logger.debug('Sending response:\n%s' % response)
     #     return response
 
-    def _create_tunnel_uni_reconciliation(self, overlayid, overlay_name, overlay_type,
+    def _create_tunnel_uni_reconciliation_l(self, overlayid, overlay_name, overlay_type,
                            l_slice, r_slice, tenantid, overlay_info):
         logger.debug('Attempting to create unidirectional tunnel '
                      'from %s to %s' % (l_slice['interface_name'],
@@ -875,17 +1182,276 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         else:
             logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
-        # Create the SRv6 route
-        for subnet in subnets:
-            subnet = subnet['subnet']
-            response = self.srv6_manager.create_srv6_explicit_path(
-                l_deviceip, self.grpc_client_port, destination=subnet,
-                table=tableid, device=dev, segments=sid_list, encapmode='encap'
+        # Add the tunnel to the controller state and get the tunnel ID of the
+        # new tunnel
+        tunnel = srv6_sdn_controller_state.get_tunnel(
+            overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+            rdeviceid=r_slice['deviceid'], tenantid=tenantid
+        )
+        if tunnel is None:
+            logger.warning('Error: Cannot store tunnel')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If the SID list has only one SID, we can store the SID in the
+        # IPv6 destination address field of the packets; in this case, the
+        # SRH is not required and the encapsulation becomes an IPv4 over
+        # IPv6 encapsulation or IPv6 over IPv6 encapsulation
+        if len(sid_list) == 1:
+            # Create a name for the Linux interface and establish the tunnel
+            # type
+            ip6tnl_ifname =  tunnel['tunnel_name']
+            ip6tnl_tx_ifname = '%s-tx' % ip6tnl_ifname
+            ip6tnl_rx_ifname =  '%s-rx' % ip6tnl_ifname
+            if overlay_type == OverlayType.IPv4Overlay:
+                tunnel_type = 'ip4ip6'
+            elif overlay_type == OverlayType.IPv6Overlay:
+                tunnel_type = 'ip6ip6'
+            else:
+                logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Create an ip6tnl Linux interface to encapsulate the traffic sent
+            # over the tunnel
+            # Get a WAN interface
+            wan_interfaces = srv6_sdn_controller_state.get_wan_interfaces(
+                l_slice['deviceid'], tenantid)
+            if wan_interfaces is None:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            wan_interface = wan_interfaces[0]
+            # Get an IPv6 address
+            addrs = srv6_sdn_controller_state.get_ipv6_addresses(
+                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                interface_name=wan_interface)
+            if len(addrs) == 0:
+                # No IPv6 address assigned to the interface
+                logging.error('No IPv6 addresses assigned to the interface %s', wan_interface)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            l_device_wan_ipaddr = addrs[0]
+            # Create the ip6tnl interface
+            response = self.srv6_manager.create_ip_tunnel_interface(
+                server_ip=l_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_tx_ifname, local_addr=l_device_wan_ipaddr.split('/')[0],
+                remote_addr=sid_list[0], tunnel_type=tunnel_type
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Add the tunnel interface to the VRF
+            response = self.srv6_manager.update_vrf_device(
+                l_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_tx_ifname],
+                op='add_interfaces'
             )
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
-                logger.warning('Cannot create SRv6 Explicit Path: %s'
-                               % response)
+                logger.warning(
+                    'Cannot assign the interface to the VRF: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Set the IP address
+            response = self.srv6_manager.create_ipaddr(
+                l_deviceip, self.grpc_client_port, ip_addr=l_device_wan_ipaddr,
+                device=ip6tnl_tx_ifname, family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot assign the IP address to the tunnel interface'
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Create the SRv6 route
+        for subnet in subnets:
+            subnet = subnet['subnet']
+            if len(sid_list) == 1:
+                # If we are using an IP over IPv6 encapsulation, we need to
+                # redirect the traffic of the slice over the ip6tnl tunnel
+                response = self.srv6_manager.create_iproute(
+                    server_ip=l_deviceip, server_port=self.grpc_client_port,
+                    destination=subnet,
+                    out_interface=ip6tnl_tx_ifname, table=tableid
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot set route for %s '
+                                   'in %s ' % (subnet, l_deviceip))
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            else:
+                # If we are using an IP over IPv6+SRH encapsulation, we need
+                # to redirect the traffic over the SRH tunnel
+                response = self.srv6_manager.create_srv6_explicit_path(
+                    l_deviceip, self.grpc_client_port, destination=subnet,
+                    table=tableid, device=dev, segments=sid_list, encapmode='encap'
+                )
+                if response != SbStatusCode.STATUS_SUCCESS:
+                    # If the operation has failed, report an error message
+                    logger.warning('Cannot create SRv6 Explicit Path: %s'
+                                % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Success
+        logger.debug('Remote interface assigned to VPN successfully')
+        return NbStatusCode.STATUS_OK
+
+    def _create_tunnel_uni_reconciliation_r(self, overlayid, overlay_name, overlay_type,
+                           l_slice, r_slice, tenantid, overlay_info):
+        logger.debug('Attempting to create unidirectional tunnel '
+                     'from %s to %s' % (l_slice['interface_name'],
+                                        r_slice['interface_name']))
+        # Check if the unidirectional tunnel
+        # between the two slices already exists
+        #
+        # Increase the number of tunnels
+        #num_tunnels = srv6_sdn_controller_state.inc_and_get_tunnels_counter(
+        #    overlayid, tenantid, l_slice['deviceid'], r_slice)
+        # If the uni tunnel already exists, we have done
+        #if num_tunnels > 1:
+        #    logger.debug('Skip tunnel %s %s' %
+        #                 (l_slice['interface_name'],
+        #                  r_slice['interface_name']))
+        #    return NbStatusCode.STATUS_OK
+        # Configure the tunnel
+        #
+        # Get router address
+        r_deviceip = (srv6_sdn_controller_state
+                      .get_router_mgmtip(r_slice['deviceid'], tenantid))
+        if r_deviceip is None:
+            # Cannot get the router address
+            logger.warning('Cannot get the router address')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Any non-loopback device
+        # We use the WAN interface
+        # in order to solve an issue of routes getting deleted when the
+        # interface is assigned to a VRF
+        dev = (srv6_sdn_controller_state
+               .get_wan_interfaces(l_slice['deviceid'], tenantid))
+        if dev is None:
+            # Cannot get wan interface
+            logger.warning('Cannot get WAN interface')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if len(dev) == 0:
+            # Cannot get wan interface
+            logger.warning('Cannot get WAN interface. No WAN interfaces')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        dev = dev[0]
+        # Get the table ID
+        tableid = srv6_sdn_controller_state.get_tableid(
+            overlayid, tenantid)
+        if tableid is None:
+            logger.warning('Cannot retrieve VPN table ID')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Get the SID
+        sid_list = self.controller_state_srv6.get_sid_list(
+            r_slice['deviceid'], tenantid, tableid
+        )
+        # pyroute2 requires SID list in reverse order
+        sid_list = sid_list[::-1]
+        # Get the subnets
+        if overlay_type == OverlayType.IPv6Overlay:
+            subnets = srv6_sdn_controller_state.get_ipv6_subnets(
+                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        elif overlay_type == OverlayType.IPv4Overlay:
+            subnets = srv6_sdn_controller_state.get_ipv4_subnets(
+                r_slice['deviceid'], tenantid, r_slice['interface_name'])
+        else:
+            logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # Add the tunnel to the controller state and get the tunnel ID of the
+        # new tunnel
+        tunnel = srv6_sdn_controller_state.get_tunnel(
+            overlayid=overlayid, ldeviceid=l_slice['deviceid'],
+            rdeviceid=r_slice['deviceid'], tenantid=tenantid
+        )
+        if tunnel is None:
+            logger.warning('Error: Cannot store tunnel')
+            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        # If the SID list has only one SID, we can store the SID in the
+        # IPv6 destination address field of the packets; in this case, the
+        # SRH is not required and the encapsulation becomes an IPv4 over
+        # IPv6 encapsulation or IPv6 over IPv6 encapsulation
+        if len(sid_list) == 1:
+            # Create a name for the Linux interface and establish the tunnel
+            # type
+            ip6tnl_ifname =  tunnel['tunnel_name']
+            ip6tnl_tx_ifname = '%s-tx' % ip6tnl_ifname
+            ip6tnl_rx_ifname =  '%s-rx' % ip6tnl_ifname
+            if overlay_type == OverlayType.IPv4Overlay:
+                tunnel_type = 'ip4ip6'
+            elif overlay_type == OverlayType.IPv6Overlay:
+                tunnel_type = 'ip6ip6'
+            else:
+                logger.warning('Error: Unsupported VPN type: %s' % overlay_type)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Create an ip6tnl Linux interface to encapsulate the traffic sent
+            # over the tunnel
+            # Get a WAN interface
+            wan_interfaces = srv6_sdn_controller_state.get_wan_interfaces(
+                l_slice['deviceid'], tenantid)
+            if wan_interfaces is None:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interfaces')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            if len(wan_interfaces) == 0:
+                # Cannot get WAN interface
+                logger.warning('Cannot get WAN interface')
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            wan_interface = wan_interfaces[0]
+            # Get an IPv6 address
+            addrs = srv6_sdn_controller_state.get_ipv6_addresses(
+                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                interface_name=wan_interface)
+            if len(addrs) == 0:
+                # No IPv6 address assigned to the interface
+                logging.error('No IPv6 addresses assigned to the interface %s', wan_interface)
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            l_device_wan_ipaddr = addrs[0]
+            # Create an ip6tnl Linux interface to decapsulate the traffic
+            # received over the tunnel
+            # Create the ip6tnl interface
+            response = self.srv6_manager.create_ip_tunnel_interface(
+                server_ip=r_deviceip, server_port=self.grpc_client_port,
+                ifname=ip6tnl_rx_ifname, local_addr=sid_list[0],
+                remote_addr=l_device_wan_ipaddr.split('/')[0], tunnel_type=tunnel_type
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                logger.warning(
+                    'Cannot create the IP Tunnel interface: %s', response
+                )
+                # The operation has failed, return an error message
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Add the tunnel interface to the VRF
+            response = self.srv6_manager.update_vrf_device(
+                r_deviceip, self.grpc_client_port, name=overlay_name,
+                interfaces=[ip6tnl_rx_ifname],
+                op='add_interfaces'
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed, report an error message
+                logger.warning(
+                    'Cannot assign the interface to the VRF: %s' % response
+                )
+                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+            # Get SID prefix length
+            public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
+                r_slice['deviceid'], tenantid)
+            # Set the IP address
+            response = self.srv6_manager.create_ipaddr(
+                r_deviceip, self.grpc_client_port,
+                ip_addr=sid_list[0] + '/' + str(public_prefix_length),
+                device=ip6tnl_rx_ifname, family=AF_INET6
+            )
+            if response != SbStatusCode.STATUS_SUCCESS:
+                # If the operation has failed,
+                # report an error message
+                logging.warning(
+                    'Cannot assign the IP address to the tunnel interface'
+                )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         logger.debug('Remote interface assigned to VPN successfully')
@@ -1133,7 +1699,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('Add slice to overlay completed')
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel_reconciliation(self, overlayid, overlay_name, overlay_type,
+    def create_tunnel_reconciliation_l(self, overlayid, overlay_name, overlay_type,
                       l_slice, r_slice, tenantid, overlay_info):
         logger.debug(
             'Attempting to create a tunnel %s between the interfaces %s and %s'
@@ -1141,7 +1707,29 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                r_slice['interface_name'])
         )
         # Tunnel from l_slice to r_slice
-        res = self._create_tunnel_uni_reconciliation(
+        res = self._create_tunnel_uni_reconciliation_l(
+            overlayid,
+            overlay_name,
+            overlay_type,
+            l_slice,
+            r_slice,
+            tenantid,
+            overlay_info)
+        if res != NbStatusCode.STATUS_OK:
+            return res
+        # Success
+        logger.debug('Tunnel creation completed')
+        return NbStatusCode.STATUS_OK
+
+    def create_tunnel_reconciliation_r(self, overlayid, overlay_name, overlay_type,
+                      l_slice, r_slice, tenantid, overlay_info):
+        logger.debug(
+            'Attempting to create a tunnel %s between the interfaces %s and %s'
+            % (overlay_name, l_slice['interface_name'],
+               r_slice['interface_name'])
+        )
+        # Tunnel from l_slice to r_slice
+        res = self._create_tunnel_uni_reconciliation_r(
             overlayid,
             overlay_name,
             overlay_type,
