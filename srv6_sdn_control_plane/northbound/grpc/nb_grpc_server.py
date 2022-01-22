@@ -1244,6 +1244,33 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             transport_proto = 'ipv4'
             if can_use_ipv6_addr_for_wan:
                 transport_proto = 'ipv6'
+            # For SRv6 overlays, Segment Routing transparency must be T0 or T1
+            # for each device, otherwise the SRv6 full-mesh overlay cannot be
+            # created
+            if tunnel_name == 'SRv6':
+                for _slice in slices:
+                    incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
+                    outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
+                    is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
+                    is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
+                    if incoming_sr_transparency == 'op':
+                        err = ('Device %s has incoming SR Transparency set to OP. '
+                              'SRv6 overlays are not supported for OP.' % (deviceid))
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    if outgoing_sr_transparency == 'op':
+                        err = ('Device %s has outgoing SR Transparency set to OP. '
+                              'SRv6 overlays are not supported for OP.' % (deviceid))
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # if incoming_sr_transparency == 't1' and is_srh_forced:
+                    #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
+                    #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                    #     logging.error(err)
+                    #     return OverlayServiceReply(
+                    #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
@@ -1834,6 +1861,33 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.error(err)
                 return OverlayServiceReply(
                     status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # For SRv6 overlays, Segment Routing transparency must be T0 or T1
+            # for each device, otherwise the SRv6 full-mesh overlay cannot be
+            # created
+            if tunnel_name == 'SRv6':
+                for _slice in incoming_slices:
+                    incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
+                    outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
+                    is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
+                    is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
+                    if incoming_sr_transparency == 'op':
+                        err = ('Device %s has incoming SR Transparency set to OP. '
+                              'SRv6 overlays are not supported for OP.' % (deviceid))
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    if outgoing_sr_transparency == 'op':
+                        err = ('Device %s has outgoing SR Transparency set to OP. '
+                              'SRv6 overlays are not supported for OP.' % (deviceid))
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # if incoming_sr_transparency == 't1' and is_srh_forced:
+                    #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
+                    #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                    #     logging.error(err)
+                    #     return OverlayServiceReply(
+                    #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
             # All the devices must belong to the same tenant
             for device in devices.values():
                 if device['tenantid'] != tenantid:
