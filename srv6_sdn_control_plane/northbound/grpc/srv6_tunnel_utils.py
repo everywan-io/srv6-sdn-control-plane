@@ -157,8 +157,13 @@ class ControllerStateSRv6:
             # In this case we have a subnet from which we can allocate SIDs
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid, tenantid)[0]
-            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
-                deviceid, tenantid, wan_interface)[0].split('/')[0]
+            ipv6_addrs = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)
+            if ipv6_addrs is None or len(ipv6_addrs) == 0:
+                ipv6_addrs = srv6_sdn_controller_state.get_non_link_local_ipv6_addresses(
+                    deviceid=deviceid, tenantid=tenantid,
+                    interface_name=wan_interface)
+            ipv6_addr = ipv6_addrs[0].split('/')[0]
             sid_prefix = str(IPv6Network(ipv6_addr).supernet(new_prefix=public_prefix_length))
         # Generate local SID from SID prefix
         return self.sid_allocator.getSID(sid_prefix, tableid)
@@ -180,8 +185,13 @@ class ControllerStateSRv6:
             # In this case we have a subnet from which we can allocate SIDs
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid, tenantid)[0]
-            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
-                deviceid, tenantid, wan_interface)[0].split('/')[0]
+            ipv6_addrs = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)
+            if ipv6_addrs is None or len(ipv6_addrs) == 0:
+                ipv6_addrs = srv6_sdn_controller_state.get_non_link_local_ipv6_addresses(
+                    deviceid=deviceid, tenantid=tenantid,
+                    interface_name=wan_interface)
+            ipv6_addr = ipv6_addrs[0].split('/')[0]
             sid_prefix = str(IPv6Network(ipv6_addr).supernet(new_prefix=public_prefix_length))
         # Generate local SID family from SID prefix
         return self.sid_allocator.getSIDFamily(sid_prefix)
@@ -197,8 +207,13 @@ class ControllerStateSRv6:
             # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
             wan_interface = srv6_sdn_controller_state.get_wan_interfaces(
                 deviceid, tenantid)[0]
-            ipv6_addr = srv6_sdn_controller_state.get_global_ipv6_addresses(
-                deviceid, tenantid, wan_interface)[0].split('/')[0]
+            ipv6_addrs = srv6_sdn_controller_state.get_global_ipv6_addresses(
+                deviceid, tenantid, wan_interface)
+            if ipv6_addrs is None or len(ipv6_addrs) == 0:
+                ipv6_addrs = srv6_sdn_controller_state.get_non_link_local_ipv6_addresses(
+                    deviceid=deviceid, tenantid=tenantid,
+                    interface_name=wan_interface)
+            ipv6_addr = ipv6_addrs[0].split('/')[0]
             sid_list = [ipv6_addr, self.get_sid(deviceid, tenantid, tableid)]
         else: # public_prefix_length < 128
             # In this case we have a subnet from which we can allocate SIDs
