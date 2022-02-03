@@ -2373,6 +2373,11 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         for tunnel_name in self.tunnel_modes:
             srv6_sdn_controller_state.reset_tunnel_mode_counter(tunnel_name=tunnel_name, deviceid=deviceid, tenantid=tenantid)
         srv6_sdn_controller_state.reset_created_tunnels(deviceid=deviceid, tenantid=tenantid)
+        if self.stamp_controller is not None:
+            self.stamp_controller.storage.set_sender_inizialized(node_id=deviceid,
+                tenantid=tenantid, is_initialized=False)
+            self.stamp_controller.storage.set_reflector_inizialized(node_id=deviceid,
+                tenantid=tenantid, is_initialized=False)
 
     def device_reconciliation(self, deviceid, tenantid):
         logging.debug('Device Reconcliation started')
@@ -2519,6 +2524,39 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             self.stamp_controller.init_stamp_node(
                 node_id=device['deviceid']
             )
+
+            stamp_sessions = self.stamp_controller.storage.get_stamp_sessions(
+                tenantid=tenantid
+            )
+            for session in stamp_sessions:
+                if session.sender.node_id == deviceid:
+                    self.stamp_controller.storage.set_session_running(
+                        ssid=session.ssid, tenantid=tenantid, is_running=False)
+                    self.stamp_controller._create_stamp_sender_session(
+                        ssid=session.ssid,
+                        sender=session.sender,
+                        reflector=session.reflector,
+                        sidlist=session.sidlist,
+                        interval=session.interval,
+                        auth_mode=session.auth_mode,
+                        key_chain=session.sender_key_chain,
+                        timestamp_format=session.sender_timestamp_format,
+                        packet_loss_type=session.packet_loss_type,
+                        delay_measurement_mode=session.delay_measurement_mode
+                    )
+                if session.reflector.node_id == deviceid:
+                    self.stamp_controller.storage.set_session_running(
+                        ssid=session.ssid, tenantid=tenantid, is_running=False)
+                    self.stamp_controller._create_stamp_reflector_session(
+                        ssid=session.ssid,
+                        sender=session.sender,
+                        reflector=session.reflector,
+                        return_sidlist=session.return_sidlist,
+                        auth_mode=session.auth_mode,
+                        key_chain=session.reflector_key_chain,
+                        timestamp_format=session.reflector_timestamp_format,
+                        session_reflector_mode=session.session_reflector_mode
+                    )
         logging.debug('Device Reconcliation completed')
         # Create the response
         return STATUS_OK
@@ -2673,8 +2711,11 @@ def create_server(grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
     # Add the STAMP controller
     stamp_controller = None
     if ENABLE_STAMP_SUPPORT:
+        mongodb_client = srv6_sdn_controller_state.get_mongodb_session()
         stamp_controller = \
-            stamp_controller_module.run_grpc_server(server=grpc_server)
+            stamp_controller_module.run_grpc_server(
+                server=grpc_server, storage='mongodb',
+                mongodb_client=mongodb_client)
     # Initialize the Northbound Interface    
     service = NorthboundInterface(
         grpc_client_port, srv6_manager,
