@@ -19,4 +19,4 @@ jobs:
         root: "VERSION"
         regex_pattern: "^(\\d+\\.\\d+\\.\\d+)$"
         tag_prefix: "v"
-        tag_message: "Tagged by General AutoTag Github Action."
+        tag_message: "Tagged by Autotag Github Action."
