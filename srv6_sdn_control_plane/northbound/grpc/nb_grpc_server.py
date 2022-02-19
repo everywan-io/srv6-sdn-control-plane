@@ -105,6 +105,26 @@ STATUS_BAD_REQUEST = NbStatusCode.STATUS_BAD_REQUEST
 STATUS_INTERNAL_SERVER_ERROR = NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
 
 
+def exec_or_mark_device_inconsitent(deviceid, tenantid, *args, **kwargs):
+    try:
+        if func(*args, **kwargs) != SbStatusCode.STATUS_SUCCESS:
+            # Change device state to reboot required
+            success = srv6_sdn_controller_state.change_device_state(
+                deviceid=deviceid, tenantid=tenantid,
+                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+            if success is False or success is None:
+                logging.error('Error changing the device state')
+                return status_codes_pb2.STATUS_INTERNAL_ERROR
+    except Exception:
+        # Change device state to reboot required
+        success = srv6_sdn_controller_state.change_device_state(
+            deviceid=deviceid, tenantid=tenantid,
+            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+        if success is False or success is None:
+            logging.error('Error changing the device state')
+            return status_codes_pb2.STATUS_INTERNAL_ERROR
+
+
 class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
     """gRPC request handler"""
 
@@ -309,421 +329,502 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 
     def ConfigureDevice(self, request, context):
         logging.debug('ConfigureDevice request received: %s' % request)
-        # Get the devices
-        devices = [device.id for device in request.configuration.devices]
-        devices = srv6_sdn_controller_state.get_devices(
-            deviceids=devices, return_dict=True)
-        if devices is None:
-            logging.error('Error getting devices')
-            return OverlayServiceReply(
-                status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                              reason='Error getting devices'))
-        # Convert interfaces list to a dict representation
-        # This step simplifies future processing
-        interfaces = dict()
-        for deviceid in devices:
-            for interface in devices[deviceid]['interfaces']:
-                interfaces[interface['name']] = interface
-            devices[deviceid]['interfaces'] = interfaces
-        # Parameters validation
-        for device in request.configuration.devices:
-            # Parameters extraction
-            #
-            # Extract the device ID from the configuration
-            deviceid = device.id
-            # Extract the tenant ID
-            tenantid = device.tenantid
-            # Extract the interfaces
-            interfaces = device.interfaces
-            # Extract the device name
-            device_name = device.name
-            # Extract the device description
-            device_description = device.description
-            # If the device is partecipating to some overlay
-            # we cannot configure it
-            overlay = srv6_sdn_controller_state.get_overlay_containing_device(
-                deviceid, tenantid)
-            if overlay is not None:
-                err = ('Cannot configure device %s: the device '
-                       'is partecipating to the overlay %s'
-                       % (deviceid, overlay['_id']))
-                logging.error(err)
+        with RollbackContext() as rollback:
+            # Get the devices
+            devices = [device.id for device in request.configuration.devices]
+            devices = srv6_sdn_controller_state.get_devices(
+                deviceids=devices, return_dict=True)
+            if devices is None:
+                logging.error('Error getting devices')
                 return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Name is mandatory
-            if device_name is None or device_name == '':
-                err = ('Invalid configuration for device %s\n'
-                       'Invalid value for the mandatory parameter '
-                       '"name": %s' % (deviceid, device_name))
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Description parameter is mandatory
-            if device_description is None or device_description == '':
-                err = ('Invalid configuration for device %s\n'
-                       'Invalid value for the mandatory parameter '
-                       '"description": %s' % (deviceid, device_description))
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the device IDs
-            logging.debug('Validating the device ID: %s' % deviceid)
-            if not srv6_controller_utils.validate_deviceid(deviceid):
-                # If device ID is invalid, return an error message
-                err = ('Invalid configuration for device %s\n'
-                       'Invalid device ID: %s' % (deviceid, deviceid))
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the tenant ID
-            logging.debug('Validating the tenant ID: %s' % tenantid)
-            if not srv6_controller_utils.validate_tenantid(tenantid):
-                # If tenant ID is invalid, return an error message
-                err = ('Invalid configuration for device %s\n'
-                       'Invalid tenant ID: %s' % (deviceid, tenantid))
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Check if the devices exist
-            if deviceid not in devices:
-                err = ('Invalid configuration for device %s\n'
-                       'Device not found: %s' % (deviceid, deviceid))
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Check if the device belongs to the tenant
-            if tenantid != devices[deviceid]['tenantid']:
-                err = ('Invalid configuration for device %s\n'
-                       'The device %s does not belong to the tenant %s'
-                       % (deviceid, deviceid, tenantid))
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the interfaces
-            wan_interfaces_counter = 0
-            lan_interfaces_counter = 0
-            for interface in interfaces:
-                # Update counters
-                if interface.type == srv6_controller_utils.InterfaceType.WAN:
-                    wan_interfaces_counter += 1
-                elif interface.type == srv6_controller_utils.InterfaceType.LAN:
-                    lan_interfaces_counter += 1
-                # Check if the interface exists
-                if interface.name not in devices[deviceid]['interfaces']:
-                    err = ('Invalid configuration for device %s\n'
-                           'Interface %s not found on device %s'
-                           % (deviceid, interface.name, deviceid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check interface type
-                if not (srv6_controller_utils
-                        .validate_interface_type(interface.type)):
-                    err = ('Invalid configuration for device %s\n'
-                           'Invalid type %s for the interface %s (%s)'
-                           % (deviceid, interface.type, interface.name,
-                              deviceid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Cannot set IP address and subnets for the WAN interfaces
-                if interface.type == srv6_controller_utils.InterfaceType.WAN:
-                    if len(interface.ipv4_addrs) > 0 or \
-                            len(interface.ipv6_addrs) > 0:
-                        err = ('Invalid configuration for device %s\n'
-                               'WAN interfaces do not support IP addrs '
-                               'assignment: %s' % (deviceid, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    if len(interface.ipv4_subnets) > 0 or \
-                            len(interface.ipv6_subnets) > 0:
-                        err = ('Invalid configuration for device %s\n'
-                               'WAN interfaces do not support subnets '
-                               'assignment: %s' % (deviceid, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Validate IP addresses
-                for ipaddr in interface.ipv4_addrs:
-                    if not srv6_controller_utils.validate_ipv4_address(ipaddr):
-                        err = ('Invalid configuration for device %s\n'
-                               'Invalid IPv4 address %s for the interface %s'
-                               % (deviceid, ipaddr, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                for ipaddr in interface.ipv6_addrs:
-                    if not srv6_controller_utils.validate_ipv6_address(ipaddr):
-                        err = ('Invalid configuration for device %s\n'
-                               'Invalid IPv6 address %s for the interface %s'
-                               % (deviceid, ipaddr, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Validate subnets
-                for subnet in interface.ipv4_subnets:
-                    gateway = subnet.gateway
-                    subnet = subnet.subnet
-                    if not srv6_controller_utils.validate_ipv4_address(subnet):
-                        err = ('Invalid configuration for device %s\n'
-                               'Invalid IPv4 subnet %s for the interface %s'
-                               % (deviceid, subnet, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    if gateway is not None and gateway != '':
-                        if (not srv6_controller_utils
-                                .validate_ipv4_address(gateway)):
-                            err = ('Invalid configuration for device %s\n'
-                                   'Invalid IPv4 gateway %s for the subnet %s '
-                                   'on the interface %s'
-                                   % (deviceid, gateway, subnet, interface.name))
-                            logging.warning(err)
-                            return OverlayServiceReply(
-                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                for subnet in interface.ipv6_subnets:
-                    gateway = subnet.gateway
-                    subnet = subnet.subnet
-                    if not srv6_controller_utils.validate_ipv6_address(subnet):
-                        err = ('Invalid configuration for device %s\n'
-                               'Invalid IPv6 subnet %s for the interface %s'
-                               % (deviceid, subnet, interface.name))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    if gateway is not None and gateway != '':
-                        if (not srv6_controller_utils
-                                .validate_ipv6_address(gateway)):
-                            err = ('Invalid configuration for device %s\n'
-                                   'Invalid IPv6 gateway %s for the subnet %s '
-                                   'on the interface %s'
-                                   % (deviceid, gateway, subnet, interface.name))
-                            logging.warning(err)
-                            return OverlayServiceReply(
-                                status=Status(
-                                    code=STATUS_BAD_REQUEST, reason=err))
-            # At least one WAN interface is required
-            if wan_interfaces_counter == 0:
-                err = ('Invalid configuration for device %s\n'
-                       'The configuration must contain at least one WAN '
-                       'interface (0 provided)' % deviceid)
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # At least one LAN interface is required
-            if lan_interfaces_counter == 0:
-                err = ('Invalid configuration for device %s\n'
-                       'The configuration must contain at least one LAN '
-                       'interface (0 provided)' % deviceid)
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        # All checks passed
-        #
-        # Remove curent STAMP information
-        if ENABLE_STAMP_SUPPORT:
-            logging.info('Removing current STAMP information\n\n')
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                reason='Error getting devices'))
+            # Convert interfaces list to a dict representation
+            # This step simplifies future processing
+            interfaces = dict()
+            for deviceid in devices:
+                for interface in devices[deviceid]['interfaces']:
+                    interfaces[interface['name']] = interface
+                devices[deviceid]['interfaces'] = interfaces
+            # Parameters validation
             for device in request.configuration.devices:
-                # Extract the device ID from the configuration
-                deviceid = device.id
-                # Configure information
-                try:
-                    self.stamp_controller.remove_stamp_node(
-                        node_id=deviceid,
-                    )
-                except NodeIdNotFoundError:
-                    logging.debug(f'STAMP Node {deviceid} does not exist. '
-                                  'Nothing to do.')
-                except STAMPSessionsExistError:
-                    err = (f'STAMP Node {deviceid} is participating in one '
-                           'or more STAMP sessions. Delete all existing '
-                           'sessions before changing device configuration.')
-                    logging.error(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        # Extract the configurations from the request message
-        new_devices = list()
-        for device in request.configuration.devices:
-            logging.info('Processing the configuration:\n%s' % device)
-            # Parameters extraction
-            #
-            # Extract the device ID from the configuration
-            deviceid = device.id
-            # Extract the device name from the configuration
-            device_name = device.name
-            # Extract the device description from the configuration
-            device_description = device.description
-            # Extract the tenant ID
-            tenantid = device.tenantid
-            # Extract the device interfaces from the configuration
-            interfaces = devices[deviceid]['interfaces']
-            err = STATUS_OK
-            for interface in device.interfaces:
-                interfaces[interface.name]['name'] = interface.name
-                if interface.type != '':
-                    interfaces[interface.name]['type'] = interface.type
-                if interface.type == srv6_controller_utils.InterfaceType.WAN:
-                    if len(interface.ipv4_addrs) > 0 or \
-                            len(interface.ipv6_addrs) > 0:
-                        logging.warning(
-                            'Cannot set IP addrs for a WAN interface')
-                    if len(interface.ipv4_subnets) > 0 or \
-                            len(interface.ipv6_subnets) > 0:
-                        logging.warning(
-                            'Cannot set subnets for a WAN interface')
-                else:
-                    if len(interface.ipv4_addrs) > 0:
-                        addrs = list()
-                        for addr in interfaces[interface.name]['ipv4_addrs']:
-                            addrs.append(addr)
-                        response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
-                            self.grpc_client_port, addrs=addrs,
-                            device=interface.name, family=AF_UNSPEC
-                        )
-                        if response != SbStatusCode.STATUS_SUCCESS:
-                            # If the operation has failed,
-                            # report an error message
-                            logging.warning(
-                                'Cannot remove the public addresses '
-                                'from the interface'
-                            )
-                            err = status_codes_pb2.STATUS_INTERNAL_ERROR
-                        interfaces[interface.name]['ipv4_addrs'] = list()
-                        # Add IP address to the interface
-                        for ipv4_addr in interface.ipv4_addrs:
-                            response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
-                                self.grpc_client_port, ip_addr=ipv4_addr,
-                                device=interface.name, family=AF_INET
-                            )
-                            if response != SbStatusCode.STATUS_SUCCESS:
-                                # If the operation has failed,
-                                # report an error message
-                                logging.warning(
-                                    'Cannot assign the private VPN IP address '
-                                    'to the interface'
-                                )
-                                err = status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv4_addrs'].append(
-                                ipv4_addr)
-                    if len(interface.ipv6_addrs) > 0:
-                        addrs = list()
-                        nets = list()
-                        for addr in interfaces[interface.name]['ipv6_addrs']:
-                            addrs.append(addr)
-                            nets.append(str(IPv6Interface(addr).network))
-                        response = self.srv6_manager.remove_many_ipaddr(
-                            devices[deviceid]['mgmtip'],
-                            self.grpc_client_port, addrs=addrs,
-                            nets=nets, device=interface.name, family=AF_UNSPEC
-                        )
-                        if response != SbStatusCode.STATUS_SUCCESS:
-                            # If the operation has failed,
-                            # report an error message
-                            logging.warning(
-                                'Cannot remove the public addresses '
-                                'from the interface'
-                            )
-                            err = status_codes_pb2.STATUS_INTERNAL_ERROR
-                        interfaces[interface.name]['ipv6_addrs'] = list()
-                        # Add IP address to the interface
-                        for ipv6_addr in interface.ipv6_addrs:
-                            net = IPv6Interface(ipv6_addr).network.__str__()
-                            response = self.srv6_manager.create_ipaddr(
-                                devices[deviceid]['mgmtip'],
-                                self.grpc_client_port, ip_addr=ipv6_addr,
-                                device=interface.name, net=net, family=AF_INET6
-                            )
-                            if response != SbStatusCode.STATUS_SUCCESS:
-                                # If the operation has failed,
-                                # report an error message
-                                logging.warning(
-                                    'Cannot assign the private VPN IP address '
-                                    'to the interface'
-                                )
-                                err = status_codes_pb2.STATUS_INTERNAL_ERROR
-                            interfaces[interface.name]['ipv6_addrs'].append(
-                                ipv6_addr)
-                    interfaces[interface.name]['ipv4_subnets'] = list()
-                    for subnet in interface.ipv4_subnets:
-                        gateway = subnet.gateway
-                        subnet = subnet.subnet
-                        interfaces[interface.name]['ipv4_subnets'].append(
-                            {'subnet': subnet, 'gateway': gateway})
-                    interfaces[interface.name]['ipv6_subnets'] = list()
-                    for subnet in interface.ipv6_subnets:
-                        gateway = subnet.gateway
-                        subnet = subnet.subnet
-                        interfaces[interface.name]['ipv6_subnets'].append(
-                            {'subnet': subnet, 'gateway': gateway})
-            # Push the new configuration
-            if err == STATUS_OK:
-                logging.debug('The device %s has been configured successfully'
-                              % deviceid)
-                new_devices.append({
-                    'deviceid': deviceid,
-                    'name': device_name,
-                    'description': device_description,
-                    'interfaces': interfaces,
-                    'tenantid': tenantid,
-                    'configured': True
-                })
-            else:
-                err = 'The device %s rejected the configuration' % deviceid
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        success = srv6_sdn_controller_state.configure_devices(new_devices)
-        if success is False or success is None:
-            err = 'Error configuring the devices'
-            logging.error(err)
-            return OverlayServiceReply(
-                status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err))
-        logging.info('The device configuration has been saved\n\n')
-        # Setup STAMP information
-        if ENABLE_STAMP_SUPPORT:
-            logging.info('Configuring STAMP information\n\n')
-            for device in request.configuration.devices:
+                # Parameters extraction
+                #
                 # Extract the device ID from the configuration
                 deviceid = device.id
                 # Extract the tenant ID
                 tenantid = device.tenantid
-                # Retrieve device information
-                device = srv6_sdn_controller_state.get_device(
-                    deviceid=deviceid, tenantid=tenantid)
-                if device is None:
-                    logging.error('Error getting device')
+                # Extract the interfaces
+                interfaces = device.interfaces
+                # Extract the device name
+                device_name = device.name
+                # Extract the device description
+                device_description = device.description
+                # If the device is partecipating to some overlay
+                # we cannot configure it
+                overlay = srv6_sdn_controller_state.get_overlay_containing_device(
+                    deviceid, tenantid)
+                if overlay is not None:
+                    err = ('Cannot configure device %s: the device '
+                        'is partecipating to the overlay %s'
+                        % (deviceid, overlay['_id']))
+                    logging.error(err)
                     return OverlayServiceReply(
-                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                      reason='Error getting device'))
-                # Lookup the WAN interfaces
-                # TODO currently we only support a single WAN interface,
-                # so we look for the address of the first WAN interface
-                # In the future we should support multiple interfaces
-                wan_ip = None
-                wan_ifaces = None
-                for interface in device['interfaces']:
-                    if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
-                            len(interface['ipv6_addrs']) > 0:
-                        wan_ip = interface['ipv6_addrs'][0].split('/')[0]
-                        wan_ifaces = [interface['name']]
-                        break
-                # Configure information
-                self.stamp_controller.add_stamp_node(
-                    node_id=device['deviceid'],
-                    node_name=device['name'],
-                    grpc_ip=device['mgmtip'],
-                    grpc_port=self.grpc_client_port,
-                    ip=wan_ip,
-                    sender_port=42069,
-                    reflector_port=862,
-                    interfaces=wan_ifaces,
-                    stamp_source_ipv6_address=wan_ip,
-                    is_sender=True,
-                    is_reflector=True,
-                )
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Name is mandatory
+                if device_name is None or device_name == '':
+                    err = ('Invalid configuration for device %s\n'
+                        'Invalid value for the mandatory parameter '
+                        '"name": %s' % (deviceid, device_name))
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Description parameter is mandatory
+                if device_description is None or device_description == '':
+                    err = ('Invalid configuration for device %s\n'
+                        'Invalid value for the mandatory parameter '
+                        '"description": %s' % (deviceid, device_description))
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the device IDs
+                logging.debug('Validating the device ID: %s' % deviceid)
+                if not srv6_controller_utils.validate_deviceid(deviceid):
+                    # If device ID is invalid, return an error message
+                    err = ('Invalid configuration for device %s\n'
+                        'Invalid device ID: %s' % (deviceid, deviceid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the tenant ID
+                logging.debug('Validating the tenant ID: %s' % tenantid)
+                if not srv6_controller_utils.validate_tenantid(tenantid):
+                    # If tenant ID is invalid, return an error message
+                    err = ('Invalid configuration for device %s\n'
+                        'Invalid tenant ID: %s' % (deviceid, tenantid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the devices exist
+                if deviceid not in devices:
+                    err = ('Invalid configuration for device %s\n'
+                        'Device not found: %s' % (deviceid, deviceid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the device belongs to the tenant
+                if tenantid != devices[deviceid]['tenantid']:
+                    err = ('Invalid configuration for device %s\n'
+                        'The device %s does not belong to the tenant %s'
+                        % (deviceid, deviceid, tenantid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the interfaces
+                wan_interfaces_counter = 0
+                lan_interfaces_counter = 0
+                for interface in interfaces:
+                    # Update counters
+                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                        wan_interfaces_counter += 1
+                    elif interface.type == srv6_controller_utils.InterfaceType.LAN:
+                        lan_interfaces_counter += 1
+                    # Check if the interface exists
+                    if interface.name not in devices[deviceid]['interfaces']:
+                        err = ('Invalid configuration for device %s\n'
+                            'Interface %s not found on device %s'
+                            % (deviceid, interface.name, deviceid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check interface type
+                    if not (srv6_controller_utils
+                            .validate_interface_type(interface.type)):
+                        err = ('Invalid configuration for device %s\n'
+                            'Invalid type %s for the interface %s (%s)'
+                            % (deviceid, interface.type, interface.name,
+                                deviceid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Cannot set IP address and subnets for the WAN interfaces
+                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                        if len(interface.ipv4_addrs) > 0 or \
+                                len(interface.ipv6_addrs) > 0:
+                            err = ('Invalid configuration for device %s\n'
+                                'WAN interfaces do not support IP addrs '
+                                'assignment: %s' % (deviceid, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        if len(interface.ipv4_subnets) > 0 or \
+                                len(interface.ipv6_subnets) > 0:
+                            err = ('Invalid configuration for device %s\n'
+                                'WAN interfaces do not support subnets '
+                                'assignment: %s' % (deviceid, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Validate IP addresses
+                    for ipaddr in interface.ipv4_addrs:
+                        if not srv6_controller_utils.validate_ipv4_address(ipaddr):
+                            err = ('Invalid configuration for device %s\n'
+                                'Invalid IPv4 address %s for the interface %s'
+                                % (deviceid, ipaddr, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    for ipaddr in interface.ipv6_addrs:
+                        if not srv6_controller_utils.validate_ipv6_address(ipaddr):
+                            err = ('Invalid configuration for device %s\n'
+                                'Invalid IPv6 address %s for the interface %s'
+                                % (deviceid, ipaddr, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Validate subnets
+                    for subnet in interface.ipv4_subnets:
+                        gateway = subnet.gateway
+                        subnet = subnet.subnet
+                        if not srv6_controller_utils.validate_ipv4_address(subnet):
+                            err = ('Invalid configuration for device %s\n'
+                                'Invalid IPv4 subnet %s for the interface %s'
+                                % (deviceid, subnet, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        if gateway is not None and gateway != '':
+                            if (not srv6_controller_utils
+                                    .validate_ipv4_address(gateway)):
+                                err = ('Invalid configuration for device %s\n'
+                                    'Invalid IPv4 gateway %s for the subnet %s '
+                                    'on the interface %s'
+                                    % (deviceid, gateway, subnet, interface.name))
+                                logging.warning(err)
+                                return OverlayServiceReply(
+                                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    for subnet in interface.ipv6_subnets:
+                        gateway = subnet.gateway
+                        subnet = subnet.subnet
+                        if not srv6_controller_utils.validate_ipv6_address(subnet):
+                            err = ('Invalid configuration for device %s\n'
+                                'Invalid IPv6 subnet %s for the interface %s'
+                                % (deviceid, subnet, interface.name))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        if gateway is not None and gateway != '':
+                            if (not srv6_controller_utils
+                                    .validate_ipv6_address(gateway)):
+                                err = ('Invalid configuration for device %s\n'
+                                    'Invalid IPv6 gateway %s for the subnet %s '
+                                    'on the interface %s'
+                                    % (deviceid, gateway, subnet, interface.name))
+                                logging.warning(err)
+                                return OverlayServiceReply(
+                                    status=Status(
+                                        code=STATUS_BAD_REQUEST, reason=err))
+                # At least one WAN interface is required
+                if wan_interfaces_counter == 0:
+                    err = ('Invalid configuration for device %s\n'
+                        'The configuration must contain at least one WAN '
+                        'interface (0 provided)' % deviceid)
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # At least one LAN interface is required
+                if lan_interfaces_counter == 0:
+                    err = ('Invalid configuration for device %s\n'
+                        'The configuration must contain at least one LAN '
+                        'interface (0 provided)' % deviceid)
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # All checks passed
+            #
+            # Remove curent STAMP information
+            if ENABLE_STAMP_SUPPORT:
+                logging.info('Removing current STAMP information\n\n')
+                for device in request.configuration.devices:
+                    # Extract the device ID from the configuration
+                    deviceid = device.id
+                    # Configure information
+                    try:
+                        self.stamp_controller.remove_stamp_node(
+                            node_id=deviceid,
+                        )
+                        stamp_node = self.stamp_controller.get_stamp_node(node_id=device['deviceid'], tenantid=tenantid)
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=exec_or_mark_device_inconsitent,
+                            rollback_func=self.stamp_controller.add_stamp_node,
+                            node_id=stamp_node['node_id'],
+                            node_name=stamp_node['node_name'],
+                            grpc_ip=stamp_node['grpc_ip'],
+                            grpc_port=stamp_node['grpc_port'],
+                            ip=stamp_node['ip'],
+                            sender_port=stamp_node['sender_port'],
+                            reflector_port=stamp_node['reflector_port'],
+                            interfaces=stamp_node['interfaces'],
+                            stamp_source_ipv6_address=stamp_node['stamp_source_ipv6_address'],
+                            is_sender=stamp_node['is_sender'],
+                            is_reflector=stamp_node['is_reflector'],
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                    except NodeIdNotFoundError:
+                        logging.debug(f'STAMP Node {deviceid} does not exist. '
+                                    'Nothing to do.')
+                    except STAMPSessionsExistError:
+                        err = (f'STAMP Node {deviceid} is participating in one '
+                            'or more STAMP sessions. Delete all existing '
+                            'sessions before changing device configuration.')
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Extract the configurations from the request message
+            new_devices = list()
+            for device in request.configuration.devices:
+                logging.info('Processing the configuration:\n%s' % device)
+                # Parameters extraction
+                #
+                # Extract the device ID from the configuration
+                deviceid = device.id
+                # Extract the device name from the configuration
+                device_name = device.name
+                # Extract the device description from the configuration
+                device_description = device.description
+                # Extract the tenant ID
+                tenantid = device.tenantid
+                # Extract the device interfaces from the configuration
+                interfaces = devices[deviceid]['interfaces']
+                err = STATUS_OK
+                for interface in device.interfaces:
+                    interfaces[interface.name]['name'] = interface.name
+                    if interface.type != '':
+                        interfaces[interface.name]['type'] = interface.type
+                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                        if len(interface.ipv4_addrs) > 0 or \
+                                len(interface.ipv6_addrs) > 0:
+                            logging.warning(
+                                'Cannot set IP addrs for a WAN interface')
+                        if len(interface.ipv4_subnets) > 0 or \
+                                len(interface.ipv6_subnets) > 0:
+                            logging.warning(
+                                'Cannot set subnets for a WAN interface')
+                    else:
+                        if len(interface.ipv4_addrs) > 0:
+                            addrs = list()
+                            for addr in interfaces[interface.name]['ipv4_addrs']:
+                                addrs.append(addr)
+                                response = self.srv6_manager.remove_ipaddr(
+                                    devices[deviceid]['mgmtip'],
+                                    self.grpc_client_port, ip_addr=addr,
+                                    device=interface.name, family=AF_UNSPEC
+                                )
+                                if response != SbStatusCode.STATUS_SUCCESS:
+                                    # If the operation has failed,
+                                    # report an error message
+                                    logging.warning(
+                                        'Cannot remove the public addresses '
+                                        'from the interface'
+                                    )
+                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                # Add reverse action to the rollback stack
+                                rollback.push(
+                                    func=exec_or_mark_device_inconsitent,
+                                    rollback_func=srv6_sdn_controller_state.create_ipaddr,
+                                    server_ip=devices[deviceid]['mgmtip'],
+                                    server_port=self.grpc_client_port,
+                                    ip_addr=addr,
+                                    device=interface.name,
+                                    family=AF_INET,
+                                    deviceid=deviceid,
+                                    tenantid=tenantid
+                                )
+                            interfaces[interface.name]['ipv4_addrs'] = list()
+                            # Add IP address to the interface
+                            for ipv4_addr in interface.ipv4_addrs:
+                                response = self.srv6_manager.create_ipaddr(
+                                    devices[deviceid]['mgmtip'],
+                                    self.grpc_client_port, ip_addr=ipv4_addr,
+                                    device=interface.name, family=AF_INET
+                                )
+                                if response != SbStatusCode.STATUS_SUCCESS:
+                                    # If the operation has failed,
+                                    # report an error message
+                                    logging.warning(
+                                        'Cannot assign the private VPN IP address '
+                                        'to the interface'
+                                    )
+                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                interfaces[interface.name]['ipv4_addrs'].append(
+                                    ipv4_addr)
+                                # Add reverse action to the rollback stack
+                                rollback.push(
+                                    func=exec_or_mark_device_inconsitent,
+                                    rollback_func=srv6_sdn_controller_state.remove_ipaddr,
+                                    server_ip=devices[deviceid]['mgmtip'],
+                                    server_port=self.grpc_client_port,
+                                    ip_addr=ipv4_addr,
+                                    device=interface.name,
+                                    family=AF_INET,
+                                    deviceid=deviceid,
+                                    tenantid=tenantid
+                                )
+                        if len(interface.ipv6_addrs) > 0:
+                            addrs = list()
+                            nets = list()
+                            for addr in interfaces[interface.name]['ipv6_addrs']:
+                                addrs.append(addr)
+                                nets.append(str(IPv6Interface(addr).network))
+                                response = self.srv6_manager.remove_many_ipaddr(
+                                    devices[deviceid]['mgmtip'],
+                                    self.grpc_client_port, addrs=addr,
+                                    net=str(IPv6Interface(addr).network),
+                                    device=interface.name, family=AF_UNSPEC
+                                )
+                                if response != SbStatusCode.STATUS_SUCCESS:
+                                    # If the operation has failed,
+                                    # report an error message
+                                    logging.warning(
+                                        'Cannot remove the public addresses '
+                                        'from the interface'
+                                    )
+                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                # Add reverse action to the rollback stack
+                                rollback.push(
+                                    func=exec_or_mark_device_inconsitent,
+                                    rollback_func=srv6_sdn_controller_state.create_ipaddr,
+                                    server_ip=devices[deviceid]['mgmtip'],
+                                    server_port=self.grpc_client_port,
+                                    ip_addr=addr,
+                                    device=interface.name,
+                                    family=AF_INET6,
+                                    net=str(IPv6Interface(addr).network),
+                                    deviceid=deviceid,
+                                    tenantid=tenantid
+                                )
+                            interfaces[interface.name]['ipv6_addrs'] = list()
+                            # Add IP address to the interface
+                            for ipv6_addr in interface.ipv6_addrs:
+                                net = IPv6Interface(ipv6_addr).network.__str__()
+                                response = self.srv6_manager.create_ipaddr(
+                                    devices[deviceid]['mgmtip'],
+                                    self.grpc_client_port, ip_addr=ipv6_addr,
+                                    device=interface.name, net=net, family=AF_INET6
+                                )
+                                if response != SbStatusCode.STATUS_SUCCESS:
+                                    # If the operation has failed,
+                                    # report an error message
+                                    logging.warning(
+                                        'Cannot assign the private VPN IP address '
+                                        'to the interface'
+                                    )
+                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                # Add reverse action to the rollback stack
+                                rollback.push(
+                                    func=exec_or_mark_device_inconsitent,
+                                    rollback_func=srv6_sdn_controller_state.remove_ipaddr,
+                                    server_ip=devices[deviceid]['mgmtip'],
+                                    server_port=self.grpc_client_port,
+                                    ip_addr=ipv6_addr,
+                                    device=interface.name,
+                                    family=AF_INET6,
+                                    net=str(IPv6Interface(addr).network),
+                                    deviceid=deviceid,
+                                    tenantid=tenantid
+                                )
+                                interfaces[interface.name]['ipv6_addrs'].append(
+                                    ipv6_addr)
+                        interfaces[interface.name]['ipv4_subnets'] = list()
+                        for subnet in interface.ipv4_subnets:
+                            gateway = subnet.gateway
+                            subnet = subnet.subnet
+                            interfaces[interface.name]['ipv4_subnets'].append(
+                                {'subnet': subnet, 'gateway': gateway})
+                        interfaces[interface.name]['ipv6_subnets'] = list()
+                        for subnet in interface.ipv6_subnets:
+                            gateway = subnet.gateway
+                            subnet = subnet.subnet
+                            interfaces[interface.name]['ipv6_subnets'].append(
+                                {'subnet': subnet, 'gateway': gateway})
+                # Push the new configuration
+                if err == STATUS_OK:
+                    logging.debug('The device %s has been configured successfully'
+                                % deviceid)
+                    new_devices.append({
+                        'deviceid': deviceid,
+                        'name': device_name,
+                        'description': device_description,
+                        'interfaces': interfaces,
+                        'tenantid': tenantid,
+                        'configured': True
+                    })
+                else:
+                    err = 'The device %s rejected the configuration' % deviceid
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            success = srv6_sdn_controller_state.configure_devices(new_devices)
+            if success is False or success is None:
+                err = 'Error configuring the devices'
+                logging.error(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err))
+            logging.info('The device configuration has been saved\n\n')
+            # Setup STAMP information
+            if ENABLE_STAMP_SUPPORT:
+                logging.info('Configuring STAMP information\n\n')
+                for device in request.configuration.devices:
+                    # Extract the device ID from the configuration
+                    deviceid = device.id
+                    # Extract the tenant ID
+                    tenantid = device.tenantid
+                    # Retrieve device information
+                    device = srv6_sdn_controller_state.get_device(
+                        deviceid=deviceid, tenantid=tenantid)
+                    if device is None:
+                        logging.error('Error getting device')
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                        reason='Error getting device'))
+                    # Lookup the WAN interfaces
+                    # TODO currently we only support a single WAN interface,
+                    # so we look for the address of the first WAN interface
+                    # In the future we should support multiple interfaces
+                    wan_ip = None
+                    wan_ifaces = None
+                    for interface in device['interfaces']:
+                        if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
+                                len(interface['ipv6_addrs']) > 0:
+                            wan_ip = interface['ipv6_addrs'][0].split('/')[0]
+                            wan_ifaces = [interface['name']]
+                            break
+                    # Configure information
+                    self.stamp_controller.add_stamp_node(
+                        node_id=device['deviceid'],
+                        node_name=device['name'],
+                        grpc_ip=device['mgmtip'],
+                        grpc_port=self.grpc_client_port,
+                        ip=wan_ip,
+                        sender_port=42069,
+                        reflector_port=862,
+                        interfaces=wan_ifaces,
+                        stamp_source_ipv6_address=wan_ip,
+                        is_sender=True,
+                        is_reflector=True,
+                    )
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=exec_or_mark_device_inconsitent,
+                        rollback_func=self.stamp_controller.remove_stamp_node,
+                        node_id=device['deviceid'],
+                        deviceid=device['deviceid'],
+                        tenantid=tenantid
+                    )
+            # Success, commit all performed operations
+            rollback.commitAll()
         # Create the response
         return OverlayServiceReply(
             status=Status(code=STATUS_OK, reason='OK'))
