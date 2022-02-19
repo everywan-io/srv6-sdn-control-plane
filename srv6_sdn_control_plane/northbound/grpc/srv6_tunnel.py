@@ -696,7 +696,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def _remove_tunnel_uni(self, overlayid, overlay_name, overlay_type,
-                           l_slice, r_slice, tenantid, overlay_info):
+                           l_slice, r_slice, tenantid, overlay_info, ignore_errors=False):
         with RollbackContext() as rollback:
             # Decrease the number of tunnels
             num_tunnels = srv6_sdn_controller_state.dec_and_get_tunnels_counter(
@@ -778,10 +778,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         out_interface=ip6tnl_tx_ifname, table=tableid
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot set route for %s '
-                                    'in %s ' % (subnet, l_deviceip))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            logger.warning('Cannot set route for %s '
+                                        'in %s ' % (subnet, l_deviceip))
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot set route for %s '
+                                        'in %s ' % (subnet, l_deviceip))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -814,10 +825,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             out_interface=ip6tnl_tx_ifname, table=tableid
                         )
                         if response != SbStatusCode.STATUS_SUCCESS:
-                            # If the operation has failed, report an error message
-                            logger.warning('Cannot remove route for %s in %s '
-                                        % (subnet, l_deviceip))
-                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                            if ignore_errors:
+                                logger.warning('Cannot remove route for %s in %s '
+                                            % (subnet, l_deviceip))
+                                # Change device state to reboot required
+                                success = srv6_sdn_controller_state.change_device_state(
+                                    deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                    new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                                if success is False or success is None:
+                                    logging.error('Error changing the device state')
+                                    return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            else:
+                                # If the operation has failed, report an error message
+                                logger.warning('Cannot remove route for %s in %s '
+                                            % (subnet, l_deviceip))
+                                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
                             func=self.exec_or_mark_device_inconsitent,
@@ -847,10 +869,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             encapmode='encap'
                         )
                         if response != SbStatusCode.STATUS_SUCCESS:
-                            # If the operation has failed, report an error message
-                            logger.warning('Cannot remove SRv6 Explicit Path: %s'
-                                        % response)
-                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                            if ignore_errors:
+                                logger.warning('Cannot remove SRv6 Explicit Path: %s'
+                                            % response)
+                                # Change device state to reboot required
+                                success = srv6_sdn_controller_state.change_device_state(
+                                    deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                    new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                                if success is False or success is None:
+                                    logging.error('Error changing the device state')
+                                    return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            else:
+                                # If the operation has failed, report an error message
+                                logger.warning('Cannot remove SRv6 Explicit Path: %s'
+                                            % response)
+                                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
                             func=self.exec_or_mark_device_inconsitent,
@@ -873,10 +906,19 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             table=tableid
                         )
                         if response != SbStatusCode.STATUS_SUCCESS:
-                            # If the operation has failed, return an error message
-                            logger.warning('Cannot remove SRv6 Explicit Path: %s'
-                                        % response)
-                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                            if ignore_errors:
+                                # Change device state to reboot required
+                                success = srv6_sdn_controller_state.change_device_state(
+                                    deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                    new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                                if success is False or success is None:
+                                    logging.error('Error changing the device state')
+                                    return status_codes_pb2.STATUS_INTERNAL_ERROR
+                            else:
+                                # If the operation has failed, return an error message
+                                logger.warning('Cannot remove SRv6 Explicit Path: %s'
+                                            % response)
+                                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         _dev = srv6_sdn_controller_state.get_wan_interfaces(l_slice['deviceid'], tenantid)
                         if _dev is None:
                             # Cannot get non-loopback interface
@@ -948,12 +990,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     device=ip6tnl_rx_ifname, family=AF_INET6
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed,
-                    # report an error message
-                    logging.warning(
-                        'Cannot remove the IP address from the tunnel interface'
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=r_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed,
+                        # report an error message
+                        logging.warning(
+                            'Cannot remove the IP address from the tunnel interface'
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -973,11 +1024,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     op='del_interfaces'
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning(
-                        'Cannot remove the ip6tnl interface from the VRF: %s' % response
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=r_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed, report an error message
+                        logger.warning(
+                            'Cannot remove the ip6tnl interface from the VRF: %s' % response
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -996,11 +1056,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     ifname=ip6tnl_rx_ifname
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    logger.warning(
-                        'Cannot remove the IP Tunnel interface: %s', response
-                    )
-                    # The operation has failed, return an error message
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=r_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        logger.warning(
+                            'Cannot remove the IP Tunnel interface: %s', response
+                        )
+                        # The operation has failed, return an error message
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 if overlay_type == OverlayType.IPv4Overlay:
                     tunnel_type = 'ip4ip6'
                 elif overlay_type == OverlayType.IPv6Overlay:
@@ -1027,12 +1096,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     device=ip6tnl_tx_ifname, family=AF_INET6
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed,
-                    # report an error message
-                    logging.warning(
-                        'Cannot remove the IP address from the tunnel interface'
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=l_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed,
+                        # report an error message
+                        logging.warning(
+                            'Cannot remove the IP address from the tunnel interface'
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1052,11 +1130,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     op='del_interfaces'
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning(
-                        'Cannot remove the ip6tnl interface from the VRF: %s' % response
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=l_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed, report an error message
+                        logger.warning(
+                            'Cannot remove the ip6tnl interface from the VRF: %s' % response
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1075,11 +1162,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     ifname=ip6tnl_tx_ifname
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    logger.warning(
-                        'Cannot remove the IP Tunnel interface: %s', response
-                    )
-                    # The operation has failed, return an error message
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=l_slice['deviceid'], tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        logger.warning(
+                            'Cannot remove the IP Tunnel interface: %s', response
+                        )
+                        # The operation has failed, return an error message
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1158,12 +1254,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         device=ip6tnl_rx_ifname, family=AF_INET6
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed,
-                        # report an error message
-                        logging.warning(
-                            'Cannot remove the IP address of the tunnel interface'
-                        )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            # If the operation has failed,
+                            # report an error message
+                            logging.warning(
+                                'Cannot remove the IP address of the tunnel interface'
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -1196,11 +1301,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         ifname=ip6tnl_rx_ifname
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        logger.warning(
-                            'Cannot remove the IP Tunnel interface: %s', response
-                        )
-                        # The operation has failed, return an error message
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=r_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            logger.warning(
+                                'Cannot remove the IP Tunnel interface: %s', response
+                            )
+                            # The operation has failed, return an error message
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -1220,12 +1334,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         device=ip6tnl_tx_ifname, family=AF_INET6
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed,
-                        # report an error message
-                        logging.warning(
-                            'Cannot remove the IP address of the tunnel interface'
-                        )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            # If the operation has failed,
+                            # report an error message
+                            logging.warning(
+                                'Cannot remove the IP address of the tunnel interface'
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -1245,11 +1368,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         op='del_interfaces'
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove the interface from the VRF: %s' % response
-                        )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            # If the operation has failed, report an error message
+                            logger.warning(
+                                'Cannot remove the interface from the VRF: %s' % response
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -1268,11 +1400,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         ifname=ip6tnl_tx_ifname
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        logger.warning(
-                            'Cannot remove the IP Tunnel interface: %s', response
-                        )
-                        # The operation has failed, return an error message
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=l_slice['deviceid'], tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            logger.warning(
+                                'Cannot remove the IP Tunnel interface: %s', response
+                            )
+                            # The operation has failed, return an error message
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -1732,7 +1873,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay_data(self, overlayid, overlay_name,
-                             tenantid, overlay_info):
+                             tenantid, overlay_info, ignore_errors=False):
         logger.debug('Trying to destroy the overlay data structure')
         with RollbackContext() as rollback:
             # Release the table ID
@@ -1752,7 +1893,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         logger.debug('Destroy overlay data completed')
         return NbStatusCode.STATUS_OK
 
-    def destroy_tunnel_mode(self, deviceid, tenantid, overlay_info):
+    def destroy_tunnel_mode(self, deviceid, tenantid, overlay_info, ignore_errors=False):
         logger.debug('Trying to destroy the tunnel mode on the '
                      'router %s' % deviceid)
         with RollbackContext() as rollback:
@@ -1783,11 +1924,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     destination=sid_family
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, return an error message
-                    logger.warning(
-                        'Cannot remove the localSID rule: %s' % response
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=deviceid, tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed, return an error message
+                        logger.warning(
+                            'Cannot remove the localSID rule: %s' % response
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1810,11 +1960,20 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     table=srv6_controller_utils.LOCAL_SID_TABLE
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, return an error message
-                    logger.warning(
-                        'Cannot remove the blackhole rule: %s' % response
-                    )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=deviceid, tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed, return an error message
+                        logger.warning(
+                            'Cannot remove the blackhole rule: %s' % response
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1834,7 +1993,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, deviceid, overlay_info):
+                        overlay_type, tenantid, deviceid, overlay_info, ignore_errors=False):
         logger.debug('Tryingto destroy the overlay %s on device %s'
                      % (overlay_name, deviceid))
         with RollbackContext() as rollback:
@@ -1880,9 +2039,18 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     family=AF_INET6
                 )
                 if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, return an error message
-                    logger.warning('Cannot remove proxy NDP: %s', response)
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if ignore_errors:
+                        # Change device state to reboot required
+                        success = srv6_sdn_controller_state.change_device_state(
+                            deviceid=deviceid, tenantid=tenantid,
+                            new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return status_codes_pb2.STATUS_INTERNAL_ERROR
+                    else:
+                        # If the operation has failed, return an error message
+                        logger.warning('Cannot remove proxy NDP: %s', response)
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
                     func=self.exec_or_mark_device_inconsitent,
@@ -1902,9 +2070,18 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot remove seg6local route: %s' % response)
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot remove seg6local route: %s' % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Get action
             if overlay_type == 'IPv6Overlay':
                 # For IPv6 VPN we have to perform decap and lookup in IPv6 routing
@@ -1949,12 +2126,21 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 deviceip, self.grpc_client_port, overlay_name
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning(
-                    'Cannot remove the VRF %s from the router %s: %s'
-                    % (overlay_name, deviceid, response)
-                )
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning(
+                        'Cannot remove the VRF %s from the router %s: %s'
+                        % (overlay_name, deviceid, response)
+                    )
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
                 func=self.exec_or_mark_device_inconsitent,
@@ -1971,18 +2157,36 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 deviceip, self.grpc_client_port, family=AF_INET6, table=tableid
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot remove the IPv6 route: %s' % response)
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot remove the IPv6 route: %s' % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # TODO how can we undo this?
             # Delete all remaining IPv4 routes associated to the VPN
             response = self.srv6_manager.remove_iproute(
                 deviceip, self.grpc_client_port, family=AF_INET, table=tableid
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot remove IPv4 routes: %s' % response)
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot remove IPv4 routes: %s' % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # TODO how can we undo this?
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1992,7 +2196,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
 
     def remove_slice_from_overlay(self, overlayid, overlay_name,
                                   deviceid, interface_name,
-                                  tenantid, overlay_info):
+                                  tenantid, overlay_info, ignore_errors=False):
         logger.debug('Trying to remove the slice %s on device %s '
                      'from the overlay %s'
                      % (interface_name, deviceid, overlay_name))
@@ -2027,10 +2231,19 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         table=tableid
                     )
                     if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning('Cannot remove route for %s (gateway %s) '
-                                    'in %s ' % (subnet, gateway, deviceip))
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if ignore_errors:
+                            # Change device state to reboot required
+                            success = srv6_sdn_controller_state.change_device_state(
+                                deviceid=deviceid, tenantid=tenantid,
+                                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                            if success is False or success is None:
+                                logging.error('Error changing the device state')
+                                return status_codes_pb2.STATUS_INTERNAL_ERROR
+                        else:
+                            # If the operation has failed, report an error message
+                            logger.warning('Cannot remove route for %s (gateway %s) '
+                                        'in %s ' % (subnet, gateway, deviceip))
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
                         func=self.exec_or_mark_device_inconsitent,
@@ -2054,9 +2267,18 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot disable OSPF advertisements: '
                             'ospf6d not running')
             elif response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot enable OSPF advertisements: %s' % response)
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot enable OSPF advertisements: %s' % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
                 func=self.exec_or_mark_device_inconsitent,
@@ -2075,9 +2297,18 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 op='del_interfaces'
             )
             if response != SbStatusCode.STATUS_SUCCESS:
-                # If the operation has failed, return an error message
-                logger.warning('Cannot remove the VRF device: %s' % response)
-                return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                if ignore_errors:
+                    # Change device state to reboot required
+                    success = srv6_sdn_controller_state.change_device_state(
+                        deviceid=deviceid, tenantid=tenantid,
+                        new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    # If the operation has failed, return an error message
+                    logger.warning('Cannot remove the VRF device: %s' % response)
+                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
                 func=self.exec_or_mark_device_inconsitent,
@@ -2097,7 +2328,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      l_slice, r_slice, tenantid, overlay_info):
+                      l_slice, r_slice, tenantid, overlay_info, ignore_errors=False):
         logger.debug(
             'Attempting to remove the tunnel %s between the interfaces '
             '%s and %s' % (overlay_name,
@@ -2112,7 +2343,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 l_slice,
                 r_slice,
                 tenantid,
-                overlay_info)
+                overlay_info,
+                ignore_errors=ignore_errors)
             if res != NbStatusCode.STATUS_OK:
                 return res
             # Add reverse action to the rollback stack
@@ -2133,7 +2365,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 r_slice,
                 l_slice,
                 tenantid,
-                overlay_info)
+                overlay_info,
+                ignore_errors=ignore_errors)
             if res != NbStatusCode.STATUS_OK:
                 return res
             # Add reverse action to the rollback stack

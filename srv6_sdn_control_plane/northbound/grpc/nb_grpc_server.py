@@ -239,7 +239,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Unregister all devices
             deviceid = device['deviceid']
             logging.debug('Unregistering device %s' % deviceid)
-            self._unregister_device(deviceid, tenantid)
+            self._unregister_device(deviceid, tenantid, ignore_errors=True)
         # TODO remove tenant from keystone
         #
         # Success
@@ -951,7 +951,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         response.status.reason = 'OK'
         return response
 
-    def _unregister_device(self, deviceid, tenantid):
+    def _unregister_device(self, deviceid, tenantid, ignore_errors=False):
         # Parameters validation
         #
         # Validate the tenant ID
@@ -1009,10 +1009,21 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         res = self.srv6_manager.shutdown_device(
             device['mgmtip'], self.grpc_client_port)
         if res != SbStatusCode.STATUS_SUCCESS:
-            err = ('Cannot unregister the device. '
-                   'Error while shutting down the device')
-            logging.error(err)
-            return STATUS_INTERNAL_SERVER_ERROR, err
+            if ignore_errors:
+                err = ('Device shutdown failed. Setting reboot required flag.')
+                logging.warning(err)
+                # Change device state to reboot required
+                success = srv6_sdn_controller_state.change_device_state(
+                    deviceid=deviceid, tenantid=tenantid,
+                    new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                if success is False or success is None:
+                    logging.error('Error changing the device state')
+                    return status_codes_pb2.STATUS_INTERNAL_ERROR
+            else:
+                err = ('Cannot unregister the device. '
+                    'Error while shutting down the device')
+                logging.error(err)
+                return STATUS_INTERNAL_SERVER_ERROR, err
         # Remove device from controller state
         success = srv6_sdn_controller_state.unregister_device(
             deviceid, tenantid)
@@ -1036,7 +1047,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         # Extract the device ID
         deviceid = request.deviceid
         # Unregister the device
-        code, reason = self._unregister_device(deviceid, tenantid)
+        code, reason = self._unregister_device(deviceid, tenantid, ignore_errors=True)
         # Create the response
         return OverlayServiceReply(
             status=Status(code=code, reason=reason))
@@ -1690,7 +1701,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if site1['deviceid'] != site2['deviceid']:
                         status_code = tunnel_mode.remove_tunnel(
                             overlayid, overlay_name, overlay_type, site1,
-                            site2, tenantid, tunnel_info)
+                            site2, tenantid, tunnel_info, ignore_errors=True)
                         if status_code != STATUS_OK:
                             err = ('Cannot create tunnel (overlay %s site1 %s '
                                 'site2 %s, tenant %s)'
@@ -1705,7 +1716,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                                                     deviceid,
                                                                     interface_name,
                                                                     tenantid,
-                                                                    tunnel_info)
+                                                                    tunnel_info,
+                                                                    ignore_errors=True)
                 if status_code != STATUS_OK:
                     err = ('Cannot remove slice from overlay (overlay %s, '
                         'device %s, slice %s, tenant %s)'
@@ -1722,7 +1734,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                                             overlay_type,
                                                             tenantid,
                                                             deviceid,
-                                                            tunnel_info)
+                                                            tunnel_info,
+                                                            ignore_errors=True)
                     if status_code != STATUS_OK:
                         err = ('Cannot destroy overlay (overlay %s, device %s '
                             'tenant %s)' % (overlay_name, deviceid, tenantid))
@@ -1742,7 +1755,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         tenantid=tenantid
                     )
                     status_code = tunnel_mode.destroy_tunnel_mode(
-                        deviceid, tenantid, tunnel_info)
+                        deviceid, tenantid, tunnel_info, ignore_errors=True)
                     if status_code != STATUS_OK:
                         err = ('Cannot destroy tunnel mode (device %s, tenant %s)'
                             % (deviceid, tenantid))
@@ -1770,7 +1783,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     )
             # Destroy overlay data structure
             status_code = tunnel_mode.destroy_overlay_data(
-                overlayid, overlay_name, tenantid, tunnel_info)
+                overlayid, overlay_name, tenantid, tunnel_info, ignore_errors=True)
             if status_code != STATUS_OK:
                 err = ('Cannot destroy overlay data (overlay %s, tenant %s)'
                     % (overlay_name, tenantid))
