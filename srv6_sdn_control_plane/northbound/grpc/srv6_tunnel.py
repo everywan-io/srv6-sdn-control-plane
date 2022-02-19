@@ -67,6 +67,26 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         self.controller_state_srv6 = \
             srv6_tunnel_utils.ControllerStateSRv6(controller_state)
 
+    def exec_or_mark_device_inconsitent(self, deviceid, tenantid, *args, **kwargs):
+        try:
+            if func(*args, **kwargs) != SbStatusCode.STATUS_SUCCESS:
+                # Change device state to reboot required
+                success = srv6_sdn_controller_state.change_device_state(
+                    deviceid=deviceid, tenantid=tenantid,
+                    new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+                if success is False or success is None:
+                    logging.error('Error changing the device state')
+                    return status_codes_pb2.STATUS_INTERNAL_ERROR
+        except Exception:
+            # Change device state to reboot required
+            success = srv6_sdn_controller_state.change_device_state(
+                deviceid=deviceid, tenantid=tenantid,
+                new_state=srv6_sdn_controller_state.DeviceState.REBOOT_REQUIRED)
+            if success is False or success is None:
+                logging.error('Error changing the device state')
+                return status_codes_pb2.STATUS_INTERNAL_ERROR
+
+
     def _create_tunnel_uni(self, overlayid, overlay_name, overlay_type,
                            l_slice, r_slice, tenantid, overlay_info):
         logger.debug('Attempting to create unidirectional tunnel '
@@ -228,10 +248,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
-                    ifname=ip6tnl_tx_ifname
+                    ifname=ip6tnl_tx_ifname,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Add the tunnel interface to the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -247,12 +270,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_tx_ifname],
-                    op='del_interfaces'
+                    op='del_interfaces',
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Set the IP address
                 response = self.srv6_manager.create_ipaddr(
@@ -268,12 +294,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ipaddr,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=l_device_wan_ipaddr,
                     device=ip6tnl_tx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Create an ip6tnl Linux interface to decapsulate the traffic
                 # received over the tunnel
@@ -291,10 +320,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
-                    ifname=ip6tnl_rx_ifname
+                    ifname=ip6tnl_rx_ifname,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Add the tunnel interface to the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -310,12 +342,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_rx_ifname],
-                    op='del_interfaces'
+                    op='del_interfaces',
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantidf
                 )
                 # Get SID prefix length
                 public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
@@ -335,12 +370,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ipaddr,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=sid_list[0] + '/' + str(public_prefix_length),
                     device=ip6tnl_rx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
             if len(sid_list) > 1 and \
                 (srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -390,10 +428,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
-                        ifname=ip6tnl_tx_ifname
+                        ifname=ip6tnl_tx_ifname,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     response = self.srv6_manager.update_vrf_device(
@@ -409,12 +450,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.update_vrf_device,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.update_vrf_device,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         name=overlay_name,
                         interfaces=[ip6tnl_tx_ifname],
-                        op='del_interfaces'
+                        op='del_interfaces',
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Set the IP address
                     response = self.srv6_manager.create_ipaddr(
@@ -430,12 +474,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ipaddr,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::1/64',
                         device=ip6tnl_tx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Create an ip6tnl Linux interface to decapsulate the traffic
                     # received over the tunnel
@@ -454,10 +501,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
-                        ifname=ip6tnl_rx_ifname
+                        ifname=ip6tnl_rx_ifname,
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     # response = self.srv6_manager.update_vrf_device(
@@ -489,12 +539,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ipaddr,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::2/64',
                         device=ip6tnl_rx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # _dev = srv6_sdn_controller_state.get_wan_interfaces(r_slice['deviceid'], tenantid)
                     # if _dev is None:
@@ -551,12 +604,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_iproute,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         out_interface=ip6tnl_tx_ifname,
-                        table=tableid
+                        table=tableid,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                 else:
                     if srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -573,14 +629,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=dev,
                             segments=sid_list[:-1],
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                         response = self.srv6_manager.create_iproute(
                             server_ip=l_deviceip, server_port=self.grpc_client_port,
@@ -594,12 +653,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_iproute,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_iproute,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=sid_list[-2],
                             out_interface=ip6tnl_tx_ifname,
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                     else:
                         # If we are using an IP over IPv6+SRH encapsulation, we need
@@ -615,14 +677,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=dev,
                             segments=sid_list,
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -719,12 +784,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_iproute,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         out_interface=ip6tnl_tx_ifname,
-                        table=tableid
+                        table=tableid,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                 else:
                     if srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -752,12 +820,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.create_iproute,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.create_iproute,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=sid_list[-2],
                             out_interface=ip6tnl_tx_ifname,
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                         _dev = srv6_sdn_controller_state.get_wan_interfaces(l_slice['deviceid'], tenantid)
                         if _dev is None:
@@ -782,14 +853,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.create_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.create_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=_dev,
                             segments=sid_list[:-1],
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                     else:
                         # If we are using an IP over IPv6+SRH encapsulation, we need
@@ -816,14 +890,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         _dev = _dev[0]
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.create_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.create_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=_dev,
                             segments=sid_list,
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
             # If the SID list has only one SID and we are using the ip6tnl interface
             # to encapsulate the traffic over an IPv6 tunnel
@@ -879,12 +956,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_ipaddr,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=sid_list[0] + '/' + str(public_prefix_length),
                     device=ip6tnl_rx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Remove the ip6 tunnel decap interface from the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -900,12 +980,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_rx_ifname],
-                    op='add_interfaces'
+                    op='add_interfaces',
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Remove the ip6tnl Linux interface used for decapsulation
                 response = self.srv6_manager.remove_ip_tunnel_interface(
@@ -927,13 +1010,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_ip_tunnel_interface,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     ifname=ip6tnl_rx_ifname,
                     local_addr=sid_list[0],
                     remote_addr=l_device_wan_ipaddr.split('/')[0],
-                    tunnel_type=tunnel_type
+                    tunnel_type=tunnel_type,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Remove the IP address of the encapsulation ip6tnl interface
                 response = self.srv6_manager.remove_ipaddr(
@@ -949,12 +1035,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_ipaddr,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=l_device_wan_ipaddr,
                     device=ip6tnl_tx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Remove the ip6tnl encap interface from the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -970,12 +1059,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_tx_ifname],
-                    op='add_interfaces'
+                    op='add_interfaces',
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Remove the ip6tnl encap interface
                 response = self.srv6_manager.remove_ip_tunnel_interface(
@@ -990,13 +1082,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_ip_tunnel_interface,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     ifname=ip6tnl_tx_ifname,
                     local_addr=l_device_wan_ipaddr.split('/')[0],
                     remote_addr=sid_list[0],
-                    tunnel_type=tunnel_type
+                    tunnel_type=tunnel_type,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
             # Remove the tunnel from the controller state
             tunnel = srv6_sdn_controller_state.remove_tunnel_from_overlay(
@@ -1071,12 +1166,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_ipaddr,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::2/64',
                         device=ip6tnl_rx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     # response = self.srv6_manager.update_vrf_device(
@@ -1105,13 +1203,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_ip_tunnel_interface,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
                         ifname=ip6tnl_rx_ifname,
                         local_addr=sid_list[-1],
                         remote_addr=l_device_wan_ipaddr.split('/')[0],
-                        tunnel_type='ip6ip6'
+                        tunnel_type='ip6ip6',
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Set the IP address
                     response = self.srv6_manager.remove_ipaddr(
@@ -1127,12 +1228,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_ipaddr,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::1/64',
                         device=ip6tnl_tx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     response = self.srv6_manager.update_vrf_device(
@@ -1148,12 +1252,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.update_vrf_device,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.update_vrf_device,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         name=overlay_name,
                         interfaces=[ip6tnl_tx_ifname],
-                        op='add_interfaces'
+                        op='add_interfaces',
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Create the ip6tnl interface
                     response = self.srv6_manager.remove_ip_tunnel_interface(
@@ -1168,13 +1275,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_ip_tunnel_interface,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         ifname=ip6tnl_tx_ifname,
                         local_addr=l_device_wan_ipaddr.split('/')[0],
                         remote_addr=sid_list[-1],
-                        tunnel_type='ip6ip6'
+                        tunnel_type='ip6ip6',
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1260,12 +1370,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_iprule,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_iprule,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     table=srv6_controller_utils.LOCAL_SID_TABLE,
-                    destination=sid_family
+                    destination=sid_family,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Add a blackhole route to drop all unknown active segments
             # If the local SID table used to store the segments is the main table,
@@ -1284,12 +1397,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_iproute,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_iproute,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     type='blackhole',
-                    table=srv6_controller_utils.LOCAL_SID_TABLE
+                    table=srv6_controller_utils.LOCAL_SID_TABLE,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1350,10 +1466,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.remove_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.remove_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
-                name=overlay_name
+                name=overlay_name,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # # Install a blackhole route in the VRF
             # response = self.srv6_manager.create_iproute(
@@ -1400,11 +1519,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.remove_srv6_local_processing_function,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.remove_srv6_local_processing_function,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 segment=sid,
-                localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
+                localsid_table=srv6_controller_utils.LOCAL_SID_TABLE,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Enable NDP advertisements for the SID
             if srv6_sdn_controller_state.is_proxy_ndp_enabled(deviceid, tenantid) and \
@@ -1433,12 +1555,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.del_proxy_ndp,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.del_proxy_ndp,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     address=sid,
                     device=dev,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1475,11 +1600,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_interface,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_interface,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=interface_name,
-                ospf_adv=True
+                ospf_adv=True,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Add the interface to the VRF
             response = self.srv6_manager.update_vrf_device(
@@ -1495,12 +1623,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=overlay_name,
                 interfaces=[interface_name],
-                op='del_interfaces'
+                op='del_interfaces',
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Get the table ID
             tableid = srv6_sdn_controller_state.get_tableid(
@@ -1528,12 +1659,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_iproute,
                         server_ip=deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         gateway=gateway,
-                        table=tableid
+                        table=tableid,
+                        deviceid=deviceid,
+                        tenantid=tenantid
                     )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1656,12 +1790,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_iprule,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_iprule,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     table=srv6_controller_utils.LOCAL_SID_TABLE,
-                    destination=sid_family
+                    destination=sid_family,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Remove blackhole route
             # The blackhole route is present only if the main routing table is not
@@ -1680,12 +1817,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.create_iproute,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.create_iproute,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     type='blackhole',
-                    table=srv6_controller_utils.LOCAL_SID_TABLE
+                    table=srv6_controller_utils.LOCAL_SID_TABLE,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -1745,12 +1885,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.add_proxy_ndp,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.add_proxy_ndp,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     address=sid,
                     device=dev,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Remove the decap and lookup function (i.e. the End.DT4 or End.DT6
             # route)
@@ -1789,14 +1932,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             dev = wan_interfaces[0]
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.create_srv6_local_processing_function,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.create_srv6_local_processing_function,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 segment=sid,
                 action=action,
                 device=dev,
                 localsid_table=srv6_controller_utils.LOCAL_SID_TABLE,
-                table=tableid
+                table=tableid,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Delete the VRF assigned to the VPN
             response = self.srv6_manager.remove_vrf_device(
@@ -1811,11 +1957,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.create_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.create_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=overlay_name,
-                table=tableid
+                table=tableid,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Delete all remaining IPv6 routes associated to the VPN
             response = self.srv6_manager.remove_iproute(
@@ -1884,13 +2033,16 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.create_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.create_iproute,
                         server_ip=deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         gateway=gateway,
                         out_interface=interface_name,
-                        table=tableid
+                        table=tableid,
+                        deviceid=deviceid,
+                        tenantid=tenantid
                     )
             # Enable advertisements the private customer network
             response = self.srv6_manager.update_interface(
@@ -1907,11 +2059,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=interface_name,
-                ospf_adv=False
+                ospf_adv=False,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Remove the interface from the VRF
             response = self.srv6_manager.update_vrf_device(
@@ -1925,12 +2080,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=overlay_name,
                 interfaces=[interface_name],
-                op='add_interfaces'
+                op='add_interfaces',
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -2209,10 +2367,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
-                    ifname=ip6tnl_tx_ifname
+                    ifname=ip6tnl_tx_ifname,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Add the tunnel interface to the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -2228,12 +2389,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_tx_ifname],
-                    op='del_interfaces'
+                    op='del_interfaces',
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Set the IP address
                 response = self.srv6_manager.create_ipaddr(
@@ -2249,12 +2413,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ipaddr,
                     server_ip=l_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=l_device_wan_ipaddr,
                     device=ip6tnl_tx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=l_slice['deviceid'],
+                    tenantid=tenantid
                 )
             if len(sid_list) > 1 and \
                 (srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -2305,10 +2472,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
-                        ifname=ip6tnl_tx_ifname
+                        ifname=ip6tnl_tx_ifname,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     response = self.srv6_manager.update_vrf_device(
@@ -2324,12 +2494,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.update_vrf_device,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.update_vrf_device,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         name=overlay_name,
                         interfaces=[ip6tnl_tx_ifname],
-                        op='del_interfaces'
+                        op='del_interfaces',
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Set the IP address
                     response = self.srv6_manager.create_ipaddr(
@@ -2345,12 +2518,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ipaddr,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::1/64',
                         device=ip6tnl_tx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
             # Create the SRv6 route
             for subnet in subnets:
@@ -2370,12 +2546,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_iproute,
                         server_ip=l_deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         out_interface=ip6tnl_tx_ifname,
-                        table=tableid
+                        table=tableid,
+                        deviceid=l_slice['deviceid'],
+                        tenantid=tenantid
                     )
                 else:
                     if srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -2392,14 +2571,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=dev,
                             segments=sid_list[:-1],
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                         response = self.srv6_manager.create_iproute(
                             server_ip=l_deviceip, server_port=self.grpc_client_port,
@@ -2413,12 +2595,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_iproute,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_iproute,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=sid_list[-2],
                             out_interface=ip6tnl_tx_ifname,
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
                     else:
                         # If we are using an IP over IPv6+SRH encapsulation, we need
@@ -2434,14 +2619,17 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=self.srv6_manager.remove_srv6_explicit_path,
+                            func=self.exec_or_mark_device_inconsitent,
+                            rollback_func=self.srv6_manager.remove_srv6_explicit_path,
                             server_ip=l_deviceip,
                             server_port=self.grpc_client_port,
                             destination=subnet,
                             device=dev,
                             segments=sid_list,
                             encapmode="encap",
-                            table=tableid
+                            table=tableid,
+                            deviceid=l_slice['deviceid'],
+                            tenantid=tenantid
                         )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -2579,10 +2767,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ip_tunnel_interface,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
-                    ifname=ip6tnl_rx_ifname
+                    ifname=ip6tnl_rx_ifname,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Add the tunnel interface to the VRF
                 response = self.srv6_manager.update_vrf_device(
@@ -2598,12 +2789,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.update_vrf_device,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.update_vrf_device,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     name=overlay_name,
                     interfaces=[ip6tnl_rx_ifname],
-                    op='del_interfaces'
+                    op='del_interfaces',
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
                 # Get SID prefix length
                 public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
@@ -2623,12 +2817,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_ipaddr,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_ipaddr,
                     server_ip=r_deviceip,
                     server_port=self.grpc_client_port,
                     ip_addr=sid_list[0] + '/' + str(public_prefix_length),
                     device=ip6tnl_rx_ifname,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=r_slice['deviceid'],
+                    tenantid=tenantid
                 )
             if len(sid_list) > 1 and \
                 (srv6_sdn_controller_state.get_outgoing_sr_transparency(l_slice['deviceid'], tenantid) == 't1' or \
@@ -2682,10 +2879,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ip_tunnel_interface,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ip_tunnel_interface,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
-                        ifname=ip6tnl_rx_ifname
+                        ifname=ip6tnl_rx_ifname,
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # Add the tunnel interface to the VRF
                     # response = self.srv6_manager.update_vrf_device(
@@ -2717,12 +2917,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_ipaddr,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_ipaddr,
                         server_ip=r_deviceip,
                         server_port=self.grpc_client_port,
                         ip_addr='2001:db9::2/64',
                         device=ip6tnl_rx_ifname,
-                        family=AF_INET6
+                        family=AF_INET6,
+                        deviceid=r_slice['deviceid'],
+                        tenantid=tenantid
                     )
                     # _dev = srv6_sdn_controller_state.get_wan_interfaces(r_slice['deviceid'], tenantid)
                     # if _dev is None:
@@ -2821,12 +3024,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_iprule,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_iprule,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     table=srv6_controller_utils.LOCAL_SID_TABLE,
-                    destination=sid_family
+                    destination=sid_family,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Add a blackhole route to drop all unknown active segments
             # If the local SID table used to store the segments is the main table,
@@ -2845,12 +3051,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.remove_iproute,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.remove_iproute,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     family=AF_INET6,
                     type='blackhole',
-                    table=srv6_controller_utils.LOCAL_SID_TABLE
+                    table=srv6_controller_utils.LOCAL_SID_TABLE,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -2905,10 +3114,13 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.remove_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.remove_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
-                name=overlay_name
+                name=overlay_name,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # # Install a blackhole route in the VRF
             # response = self.srv6_manager.create_iproute(
@@ -2955,11 +3167,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.remove_srv6_local_processing_function,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.remove_srv6_local_processing_function,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 segment=sid,
-                localsid_table=srv6_controller_utils.LOCAL_SID_TABLE
+                localsid_table=srv6_controller_utils.LOCAL_SID_TABLE,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Enable NDP advertisements for the SID
             if srv6_sdn_controller_state.is_proxy_ndp_enabled(deviceid, tenantid) and \
@@ -2988,12 +3203,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # Add reverse action to the rollback stack
                 rollback.push(
-                    func=self.srv6_manager.del_proxy_ndp,
+                    func=self.exec_or_mark_device_inconsitent,
+                    rollback_func=self.srv6_manager.del_proxy_ndp,
                     server_ip=deviceip,
                     server_port=self.grpc_client_port,
                     address=sid,
                     device=dev,
-                    family=AF_INET6
+                    family=AF_INET6,
+                    deviceid=deviceid,
+                    tenantid=tenantid
                 )
             # Success, commit all performed operations
             rollback.commitAll()
@@ -3030,11 +3248,14 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_interface,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_interface,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=interface_name,
-                ospf_adv=True
+                ospf_adv=True,
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Add the interface to the VRF
             response = self.srv6_manager.update_vrf_device(
@@ -3050,12 +3271,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # Add reverse action to the rollback stack
             rollback.push(
-                func=self.srv6_manager.update_vrf_device,
+                func=self.exec_or_mark_device_inconsitent,
+                rollback_func=self.srv6_manager.update_vrf_device,
                 server_ip=deviceip,
                 server_port=self.grpc_client_port,
                 name=overlay_name,
                 interfaces=[interface_name],
-                op='del_interfaces'
+                op='del_interfaces',
+                deviceid=deviceid,
+                tenantid=tenantid
             )
             # Get the table ID
             tableid = srv6_sdn_controller_state.get_tableid(
@@ -3083,12 +3307,15 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # Add reverse action to the rollback stack
                     rollback.push(
-                        func=self.srv6_manager.remove_iproute,
+                        func=self.exec_or_mark_device_inconsitent,
+                        rollback_func=self.srv6_manager.remove_iproute,
                         server_ip=deviceip,
                         server_port=self.grpc_client_port,
                         destination=subnet,
                         gateway=gateway,
-                        table=tableid
+                        table=tableid,
+                        deviceid=deviceid,
+                        tenantid=tenantid
                     )
             # Success, commit all performed operations
             rollback.commitAll()
