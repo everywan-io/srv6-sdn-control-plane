@@ -33,6 +33,7 @@ import time
 import grpc
 import os
 import sys
+from rollbackcontext import RollbackContext
 from socket import AF_UNSPEC
 from socket import AF_INET
 from socket import AF_INET6
@@ -133,43 +134,47 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 
     def ConfigureTenant(self, request, context):
         logging.debug('Configure tenant request received: %s' % request)
-        # Extract tenant ID
-        tenantid = request.tenantid
-        # Extract tenant info
-        tenant_info = request.tenant_info
-        tenant_info = tenant_info if tenant_info != '' else None
-        # Extract VXLAN port
-        vxlan_port = request.config.vxlan_port
-        vxlan_port = vxlan_port if vxlan_port != -1 else None
-        # Parmeters validation
-        #
-        # Validate tenant ID
-        logging.debug('Validating the tenant ID: %s' % tenantid)
-        if not srv6_controller_utils.validate_tenantid(tenantid):
-            # If tenant ID is invalid, return an error message
-            err = 'Invalid tenant ID: %s' % tenantid
-            logging.warning(err)
-            return OverlayServiceReply(
-                status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        # Validate VXLAN port
-        if not srv6_controller_utils.validate_port(vxlan_port):
-            # If VXLAN port is invalid, return an error message
-            err = ('Invalid VXLAN port for the tenant: %s'
-                   % (vxlan_port, tenantid))
-            logging.warning(err)
-            return OverlayServiceReply(
-                status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        # Check if the tenant is configured
-        is_config = srv6_sdn_controller_state.is_tenant_configured(tenantid)
-        if is_config and vxlan_port is not None:
-            err = 'Cannot change the VXLAN port for a configured tenant'
-            logging.error(err)
-            return TenantReply(
-                status=Status(code=STATUS_BAD_REQUEST, reason=err))
-        # Configure the tenant
-        vxlan_port = vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
-        srv6_sdn_controller_state.configure_tenant(
-            tenantid, tenant_info, vxlan_port)
+        with RollbackContext() as rollback:
+            # Extract tenant ID
+            tenantid = request.tenantid
+            # Extract tenant info
+            tenant_info = request.tenant_info
+            tenant_info = tenant_info if tenant_info != '' else None
+            # Extract VXLAN port
+            vxlan_port = request.config.vxlan_port
+            vxlan_port = vxlan_port if vxlan_port != -1 else None
+            # Parmeters validation
+            #
+            # Validate tenant ID
+            logging.debug('Validating the tenant ID: %s' % tenantid)
+            if not srv6_controller_utils.validate_tenantid(tenantid):
+                # If tenant ID is invalid, return an error message
+                err = 'Invalid tenant ID: %s' % tenantid
+                logging.warning(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Validate VXLAN port
+            if not srv6_controller_utils.validate_port(vxlan_port):
+                # If VXLAN port is invalid, return an error message
+                err = ('Invalid VXLAN port for the tenant: %s'
+                    % (vxlan_port, tenantid))
+                logging.warning(err)
+                return OverlayServiceReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Check if the tenant is configured
+            is_config = srv6_sdn_controller_state.is_tenant_configured(tenantid)
+            if is_config and vxlan_port is not None:
+                err = 'Cannot change the VXLAN port for a configured tenant'
+                logging.error(err)
+                return TenantReply(
+                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+            # Configure the tenant
+            vxlan_port = vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
+            srv6_sdn_controller_state.configure_tenant(
+                tenantid, tenant_info, vxlan_port)
+            # TODO handle rollback?
+            # Success, commit all performed operations
+            rollback.commitAll()
         # Response
         return TenantReply(status=Status(code=STATUS_OK, reason='OK'))
 
@@ -939,475 +944,546 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 
     def CreateOverlay(self, request, context):
         logging.info('CreateOverlay request received:\n%s', request)
-        # Extract the intents from the request message
-        for intent in request.intents:
-            logging.info('Processing the intent:\n%s' % intent)
-            # Parameters extraction
-            #
-            # Extract the overlay tenant ID from the intent
-            tenantid = intent.tenantid
-            # Extract the overlay type from the intent
-            overlay_type = intent.overlay_type
-            # Extract the overlay name from the intent
-            overlay_name = intent.overlay_name
-            # Extract the interfaces
-            slices = list()
-            _devices = set()
-            for _slice in intent.slices:
-                deviceid = _slice.deviceid
-                interface_name = _slice.interface_name
-                # Add the slice to the slices set
-                slices.append(
-                    {'deviceid': deviceid, 'interface_name': interface_name})
-                # Add the device to the devices set
-                _devices.add(deviceid)
-            # Extract tunnel mode
-            tunnel_name = intent.tunnel_mode
-            # Extract tunnel info
-            tunnel_info = intent.tunnel_info
-            # Parameters validation
-            #
-            # Validate the tenant ID
-            logging.debug('Validating the tenant ID: %s' % tenantid)
-            if not srv6_controller_utils.validate_tenantid(tenantid):
-                # If tenant ID is invalid, return an error message
-                err = 'Invalid tenant ID: %s' % tenantid
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Check if the tenant is configured
-            is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
-            if is_config is None:
-                err = 'Error while checking tenant configuration'
-                logging.error(err)
-                return TenantReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            elif is_config is False:
-                err = ('Cannot create overlay for a tenant unconfigured'
-                       'Tenant not found or error during the '
-                       'connection to the db')
-                logging.warning(err)
-                return TenantReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the overlay type
-            logging.debug('Validating the overlay type: %s' % overlay_type)
-            if not srv6_controller_utils.validate_overlay_type(overlay_type):
-                # If the overlay type is invalid, return an error message
-                err = 'Invalid overlay type: %s' % overlay_type
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the overlay name
-            logging.debug('Validating the overlay name: %s' % overlay_name)
-            if not srv6_controller_utils.validate_overlay_name(overlay_name):
-                # If the overlay name is invalid, return an error message
-                err = 'Invalid overlay name: %s' % overlay_name
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Validate the tunnel mode
-            logging.debug('Validating the tunnel mode: %s' % tunnel_name)
-            if not srv6_controller_utils.validate_tunnel_mode(
-                    tunnel_name, self.supported_tunnel_modes):
-                # If the tunnel mode is invalid, return an error message
-                err = 'Invalid tunnel mode: %s' % tunnel_name
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Let's check if the overlay does not exist
-            logging.debug('Checking if the overlay name is available: %s'
-                          % overlay_name)
-            exists = srv6_sdn_controller_state.overlay_exists(overlay_name,
-                                                              tenantid)
-            if exists is True:
-                # If the overlay already exists, return an error message
-                err = ('Overlay name %s is already in use for tenant %s'
-                       % (overlay_name, tenantid))
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            elif exists is None:
-                err = 'Error validating the overlay'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(
-                deviceids=_devices, return_dict=True)
-            if devices is None:
-                err = 'Error getting devices'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            # Devices validation
-            for deviceid in devices:
-                # Let's check if the router exists
-                if deviceid not in devices:
-                    # If the device does not exist, return an error message
-                    err = 'Device not found %s' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is connected
-                if not devices[deviceid]['connected']:
-                    # If the device is not connected, return an error message
-                    err = 'The device %s is not connected' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is enabled
-                if not devices[deviceid]['enabled']:
-                    # If the device is not enabled, return an error message
-                    err = 'The device %s is not enabled' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the devices have at least a WAN interface
-                wan_found = False
-                for interface in devices[deviceid]['interfaces']:
-                    if interface['type'] == \
-                            srv6_controller_utils.InterfaceType.WAN:
-                        wan_found = True
-                if not wan_found:
-                    # No WAN interfaces found on the device
-                    err = 'No WAN interfaces found on the device %s' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Convert interfaces list to a dict representation
-            # This step simplifies future processing
-            interfaces = dict()
-            for deviceid in devices:
-                for interface in devices[deviceid]['interfaces']:
-                    interfaces[interface['name']] = interface
-                devices[deviceid]['interfaces'] = interfaces
-            # Validate the slices included in the intent
-            for _slice in slices:
-                logging.debug('Validating the slice: %s' % _slice)
-                # A slice is a tuple (deviceid, interface_name)
+        with RollbackContext() as rollback:
+            # Extract the intents from the request message
+            for intent in request.intents:
+                logging.info('Processing the intent:\n%s' % intent)
+                # Parameters extraction
                 #
-                # Extract the device ID
-                deviceid = _slice['deviceid']
-                # Extract the interface name
-                interface_name = _slice['interface_name']
-                # Let's check if the router exists
-                if deviceid not in devices:
-                    # If the device does not exist, return an error message
-                    err = 'Device not found %s' % deviceid
+                # Extract the overlay tenant ID from the intent
+                tenantid = intent.tenantid
+                # Extract the overlay type from the intent
+                overlay_type = intent.overlay_type
+                # Extract the overlay name from the intent
+                overlay_name = intent.overlay_name
+                # Extract the interfaces
+                slices = list()
+                _devices = set()
+                for _slice in intent.slices:
+                    deviceid = _slice.deviceid
+                    interface_name = _slice.interface_name
+                    # Add the slice to the slices set
+                    slices.append(
+                        {'deviceid': deviceid, 'interface_name': interface_name})
+                    # Add the device to the devices set
+                    _devices.add(deviceid)
+                # Extract tunnel mode
+                tunnel_name = intent.tunnel_mode
+                # Extract tunnel info
+                tunnel_info = intent.tunnel_info
+                # Parameters validation
+                #
+                # Validate the tenant ID
+                logging.debug('Validating the tenant ID: %s' % tenantid)
+                if not srv6_controller_utils.validate_tenantid(tenantid):
+                    # If tenant ID is invalid, return an error message
+                    err = 'Invalid tenant ID: %s' % tenantid
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is enabled
-                if not devices[deviceid]['enabled']:
-                    # If the device is not enabled, return an error message
-                    err = 'The device %s is not enabled' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is connected
-                if not devices[deviceid]['connected']:
-                    # If the device is not connected, return an error message
-                    err = 'The device %s is not connected' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Let's check if the interface exists
-                if interface_name not in devices[deviceid]['interfaces']:
-                    # If the interface does not exists, return an error
-                    # message
-                    err = 'The interface does not exist'
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the interface type is LAN
-                if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                        srv6_controller_utils.InterfaceType.LAN:
-                    # The interface type is not LAN
-                    err = ('Cannot add non-LAN interface to the overlay: %s '
-                           '(device %s)' % (interface_name, deviceid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the slice is already assigned to an overlay
-                _overlay = (srv6_sdn_controller_state
-                            .get_overlay_containing_slice(_slice, tenantid))
-                if _overlay is not None:
-                    # Slice already assigned to an overlay
-                    err = ('Cannot create overlay: the slice %s is '
-                           'already assigned to the overlay %s'
-                           % (_slice, _overlay['_id']))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check for IP addresses
-                if overlay_type == OverlayType.IPv4Overlay:
-                    addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(addrs) == 0:
-                        # No IPv4 address assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
-                               'at least one IPv4 address is required to create an IPv4 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(subnets) == 0:
-                        # No IPv4 subnet assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
-                               'at least one IPv4 subnet is required to create an IPv4 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                elif overlay_type == OverlayType.IPv6Overlay:
-                    addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(addrs) == 0:
-                        # No IPv6 address assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
-                               'at least one IPv6 address is required to create an IPv6 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(subnets) == 0:
-                        # No IPv6 subnet assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
-                               'at least one IPv6 subnet is required to create an IPv6 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            for slice1 in slices:
-                # Extract the device ID
-                deviceid_1 = slice1['deviceid']
-                # Extract the interface name
-                interface_name_1 = slice1['interface_name']
-                for slice2 in slices:
-                    if slice2 == slice1:
-                        continue
-                    # Extract the device ID
-                    deviceid_2 = slice2['deviceid']
-                    # Extract the interface name
-                    interface_name_2 = slice2['interface_name']
-                    if overlay_type == OverlayType.IPv4Overlay:
-                        subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
-                        subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
-                        for subnet1 in subnets1:
-                            subnet1 = subnet1['subnet']
-                            for subnet2 in subnets2:
-                                subnet2 = subnet2['subnet']
-                                if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
-                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
-                                           % (slice1, slice2))
-                                    logging.error(err)
-                                    return OverlayServiceReply(
-                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    elif overlay_type == OverlayType.IPv6Overlay:
-                        subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
-                        subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
-                        for subnet1 in subnets1:
-                            subnet1 = subnet1['subnet']
-                            for subnet2 in subnets2:
-                                subnet2 = subnet2['subnet']
-                                if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
-                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
-                                           % (slice1, slice2))
-                                    logging.error(err)
-                                    return OverlayServiceReply(
-                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            can_use_ipv6_addr_for_wan = True
-            can_use_ipv4_addr_for_wan = True
-            for _slice in slices:
-                addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
-                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
-                if addrs is None:
-                    can_use_ipv6_addr_for_wan = False
-                addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
-                if addrs is None:
-                    can_use_ipv4_addr_for_wan = False
-            if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
-                err = ('Cannot establish a full-mesh between all the WAN interfaces')
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
-                err = ('IPv6 transport not available: cannot create a SRv6 overlay')
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            transport_proto = 'ipv4'
-            if can_use_ipv6_addr_for_wan:
-                transport_proto = 'ipv6'
-            # For SRv6 overlays, Segment Routing transparency must be T0 or T1
-            # for each device, otherwise the SRv6 full-mesh overlay cannot be
-            # created
-            if tunnel_name == 'SRv6':
-                for _slice in slices:
-                    incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
-                    outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
-                    is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
-                    is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
-                    if incoming_sr_transparency == 'op':
-                        err = ('Device %s has incoming SR Transparency set to OP. '
-                              'SRv6 overlays are not supported for OP.' % (deviceid))
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    if outgoing_sr_transparency == 'op':
-                        err = ('Device %s has outgoing SR Transparency set to OP. '
-                              'SRv6 overlays are not supported for OP.' % (deviceid))
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    # if incoming_sr_transparency == 't1' and is_srh_forced:
-                    #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
-                    #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
-                    #     logging.error(err)
-                    #     return OverlayServiceReply(
-                    #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # All the devices must belong to the same tenant
-            for device in devices.values():
-                if device['tenantid'] != tenantid:
-                    err = ('Error while processing the intent: '
-                           'All the devices must belong to the '
-                           'same tenant %s' % tenantid)
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            logging.info('All checks passed')
-            # All checks passed
-            #
-            # Save the overlay to the controller state
-            overlayid = srv6_sdn_controller_state.create_overlay(
-                overlay_name, overlay_type, slices, tenantid, tunnel_name,
-                transport_proto=transport_proto)
-            if overlayid is None:
-                err = 'Cannot save the overlay to the controller state'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            # Get tunnel mode
-            tunnel_mode = self.tunnel_modes[tunnel_name]
-            # Let's create the overlay
-            # Create overlay data structure
-            status_code = tunnel_mode.init_overlay_data(
-                overlayid, overlay_name, tenantid, tunnel_info)
-            if status_code != STATUS_OK:
-                err = ('Cannot initialize overlay data (overlay %s, tenant %s)'
-                       % (overlay_name, tenantid))
-                logging.warning(err)
-                # Remove overlay DB status
-                if srv6_sdn_controller_state.remove_overlay(
-                        overlayid, tenantid) is not True:
-                    logging.error('Cannot remove overlay. Inconsistent data')
-                return OverlayServiceReply(
-                    status=Status(code=status_code, reason=err))
-            # Iterate on slices and add to the overlay
-            configured_slices = list()
-            for site1 in slices:
-                deviceid = site1['deviceid']
-                interface_name = site1['interface_name']
-                # Init tunnel mode on the devices
-                counter = (srv6_sdn_controller_state
-                           .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid,
-                                                            tenantid))
-                if counter == 0:
-                    status_code = tunnel_mode.init_tunnel_mode(
-                        deviceid, tenantid, tunnel_info)
-                    if status_code != STATUS_OK:
-                        err = ('Cannot initialize tunnel mode (device %s '
-                               'tenant %s)' % (deviceid, tenantid))
-                        logging.warning(err)
-                        # Remove overlay DB status
-                        if srv6_sdn_controller_state.remove_overlay(
-                                overlayid, tenantid) is not True:
-                            logging.error(
-                                'Cannot remove overlay. Inconsistent data')
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
-                elif counter is None:
-                    err = 'Cannot increase tunnel mode counter'
+                # Check if the tenant is configured
+                is_config = (srv6_sdn_controller_state
+                            .is_tenant_configured(tenantid))
+                if is_config is None:
+                    err = 'Error while checking tenant configuration'
                     logging.error(err)
-                    # Remove overlay DB status
-                    if srv6_sdn_controller_state.remove_overlay(
-                            overlayid, tenantid) is not True:
-                        logging.error(
-                            'Cannot remove overlay. Inconsistent data')
+                    return TenantReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                elif is_config is False:
+                    err = ('Cannot create overlay for a tenant unconfigured'
+                        'Tenant not found or error during the '
+                        'connection to the db')
+                    logging.warning(err)
+                    return TenantReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the overlay type
+                logging.debug('Validating the overlay type: %s' % overlay_type)
+                if not srv6_controller_utils.validate_overlay_type(overlay_type):
+                    # If the overlay type is invalid, return an error message
+                    err = 'Invalid overlay type: %s' % overlay_type
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the overlay name
+                logging.debug('Validating the overlay name: %s' % overlay_name)
+                if not srv6_controller_utils.validate_overlay_name(overlay_name):
+                    # If the overlay name is invalid, return an error message
+                    err = 'Invalid overlay name: %s' % overlay_name
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Validate the tunnel mode
+                logging.debug('Validating the tunnel mode: %s' % tunnel_name)
+                if not srv6_controller_utils.validate_tunnel_mode(
+                        tunnel_name, self.supported_tunnel_modes):
+                    # If the tunnel mode is invalid, return an error message
+                    err = 'Invalid tunnel mode: %s' % tunnel_name
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Let's check if the overlay does not exist
+                logging.debug('Checking if the overlay name is available: %s'
+                            % overlay_name)
+                exists = srv6_sdn_controller_state.overlay_exists(overlay_name,
+                                                                tenantid)
+                if exists is True:
+                    # If the overlay already exists, return an error message
+                    err = ('Overlay name %s is already in use for tenant %s'
+                        % (overlay_name, tenantid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                elif exists is None:
+                    err = 'Error validating the overlay'
+                    logging.error(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                      reason=err))
-                # Check if we have already configured the overlay on the device
-                if deviceid in _devices:
-                    # Init overlay on the devices
-                    status_code = tunnel_mode.init_overlay(overlayid,
-                                                           overlay_name,
-                                                           overlay_type,
-                                                           tenantid, deviceid,
-                                                           tunnel_info)
-                    if status_code != STATUS_OK:
-                        err = ('Cannot initialize overlay (overlay %s '
-                               'device %s, tenant %s)'
-                               % (overlay_name, deviceid, tenantid))
+                                    reason=err))
+                # Get the devices
+                devices = srv6_sdn_controller_state.get_devices(
+                    deviceids=_devices, return_dict=True)
+                if devices is None:
+                    err = 'Error getting devices'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Devices validation
+                for deviceid in devices:
+                    # Let's check if the router exists
+                    if deviceid not in devices:
+                        # If the device does not exist, return an error message
+                        err = 'Device not found %s' % deviceid
                         logging.warning(err)
-                        # Remove overlay DB status
-                        if srv6_sdn_controller_state.remove_overlay(
-                                overlayid, tenantid) is not True:
-                            logging.error(
-                                'Cannot remove overlay. Inconsistent data')
                         return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
-                    # Remove device from the to-be-configured devices set
-                    _devices.remove(deviceid)
-                # Add the interface to the overlay
-                status_code = (tunnel_mode
-                               .add_slice_to_overlay(overlayid,
-                                                     overlay_name, deviceid,
-                                                     interface_name, tenantid,
-                                                     tunnel_info))
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is connected
+                    if not devices[deviceid]['connected']:
+                        # If the device is not connected, return an error message
+                        err = 'The device %s is not connected' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is enabled
+                    if not devices[deviceid]['enabled']:
+                        # If the device is not enabled, return an error message
+                        err = 'The device %s is not enabled' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the devices have at least a WAN interface
+                    wan_found = False
+                    for interface in devices[deviceid]['interfaces']:
+                        if interface['type'] == \
+                                srv6_controller_utils.InterfaceType.WAN:
+                            wan_found = True
+                    if not wan_found:
+                        # No WAN interfaces found on the device
+                        err = 'No WAN interfaces found on the device %s' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Convert interfaces list to a dict representation
+                # This step simplifies future processing
+                interfaces = dict()
+                for deviceid in devices:
+                    for interface in devices[deviceid]['interfaces']:
+                        interfaces[interface['name']] = interface
+                    devices[deviceid]['interfaces'] = interfaces
+                # Validate the slices included in the intent
+                for _slice in slices:
+                    logging.debug('Validating the slice: %s' % _slice)
+                    # A slice is a tuple (deviceid, interface_name)
+                    #
+                    # Extract the device ID
+                    deviceid = _slice['deviceid']
+                    # Extract the interface name
+                    interface_name = _slice['interface_name']
+                    # Let's check if the router exists
+                    if deviceid not in devices:
+                        # If the device does not exist, return an error message
+                        err = 'Device not found %s' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is enabled
+                    if not devices[deviceid]['enabled']:
+                        # If the device is not enabled, return an error message
+                        err = 'The device %s is not enabled' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is connected
+                    if not devices[deviceid]['connected']:
+                        # If the device is not connected, return an error message
+                        err = 'The device %s is not connected' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Let's check if the interface exists
+                    if interface_name not in devices[deviceid]['interfaces']:
+                        # If the interface does not exists, return an error
+                        # message
+                        err = 'The interface does not exist'
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the interface type is LAN
+                    if devices[deviceid]['interfaces'][interface_name]['type'] != \
+                            srv6_controller_utils.InterfaceType.LAN:
+                        # The interface type is not LAN
+                        err = ('Cannot add non-LAN interface to the overlay: %s '
+                            '(device %s)' % (interface_name, deviceid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the slice is already assigned to an overlay
+                    _overlay = (srv6_sdn_controller_state
+                                .get_overlay_containing_slice(_slice, tenantid))
+                    if _overlay is not None:
+                        # Slice already assigned to an overlay
+                        err = ('Cannot create overlay: the slice %s is '
+                            'already assigned to the overlay %s'
+                            % (_slice, _overlay['_id']))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check for IP addresses
+                    if overlay_type == OverlayType.IPv4Overlay:
+                        addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(addrs) == 0:
+                            # No IPv4 address assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
+                                'at least one IPv4 address is required to create an IPv4 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(subnets) == 0:
+                            # No IPv4 subnet assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
+                                'at least one IPv4 subnet is required to create an IPv4 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    elif overlay_type == OverlayType.IPv6Overlay:
+                        addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(addrs) == 0:
+                            # No IPv6 address assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
+                                'at least one IPv6 address is required to create an IPv6 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(subnets) == 0:
+                            # No IPv6 subnet assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
+                                'at least one IPv6 subnet is required to create an IPv6 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                for slice1 in slices:
+                    # Extract the device ID
+                    deviceid_1 = slice1['deviceid']
+                    # Extract the interface name
+                    interface_name_1 = slice1['interface_name']
+                    for slice2 in slices:
+                        if slice2 == slice1:
+                            continue
+                        # Extract the device ID
+                        deviceid_2 = slice2['deviceid']
+                        # Extract the interface name
+                        interface_name_2 = slice2['interface_name']
+                        if overlay_type == OverlayType.IPv4Overlay:
+                            subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                            subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                            for subnet1 in subnets1:
+                                subnet1 = subnet1['subnet']
+                                for subnet2 in subnets2:
+                                    subnet2 = subnet2['subnet']
+                                    if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
+                                        err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                            % (slice1, slice2))
+                                        logging.error(err)
+                                        return OverlayServiceReply(
+                                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        elif overlay_type == OverlayType.IPv6Overlay:
+                            subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                            subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                            for subnet1 in subnets1:
+                                subnet1 = subnet1['subnet']
+                                for subnet2 in subnets2:
+                                    subnet2 = subnet2['subnet']
+                                    if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
+                                        err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                            % (slice1, slice2))
+                                        logging.error(err)
+                                        return OverlayServiceReply(
+                                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                can_use_ipv6_addr_for_wan = True
+                can_use_ipv4_addr_for_wan = True
+                for _slice in slices:
+                    addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                        deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                    if addrs is None:
+                        can_use_ipv6_addr_for_wan = False
+                    addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                        deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                    if addrs is None:
+                        can_use_ipv4_addr_for_wan = False
+                if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
+                    err = ('Cannot establish a full-mesh between all the WAN interfaces')
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
+                    err = ('IPv6 transport not available: cannot create a SRv6 overlay')
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                transport_proto = 'ipv4'
+                if can_use_ipv6_addr_for_wan:
+                    transport_proto = 'ipv6'
+                # For SRv6 overlays, Segment Routing transparency must be T0 or T1
+                # for each device, otherwise the SRv6 full-mesh overlay cannot be
+                # created
+                if tunnel_name == 'SRv6':
+                    for _slice in slices:
+                        incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
+                        outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
+                        is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
+                        is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
+                        if incoming_sr_transparency == 'op':
+                            err = ('Device %s has incoming SR Transparency set to OP. '
+                                'SRv6 overlays are not supported for OP.' % (deviceid))
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        if outgoing_sr_transparency == 'op':
+                            err = ('Device %s has outgoing SR Transparency set to OP. '
+                                'SRv6 overlays are not supported for OP.' % (deviceid))
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        # if incoming_sr_transparency == 't1' and is_srh_forced:
+                        #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
+                        #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                        #     logging.error(err)
+                        #     return OverlayServiceReply(
+                        #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # All the devices must belong to the same tenant
+                for device in devices.values():
+                    if device['tenantid'] != tenantid:
+                        err = ('Error while processing the intent: '
+                            'All the devices must belong to the '
+                            'same tenant %s' % tenantid)
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                logging.info('All checks passed')
+                # All checks passed
+                #
+                # Save the overlay to the controller state
+                overlayid = srv6_sdn_controller_state.create_overlay(
+                    overlay_name, overlay_type, slices, tenantid, tunnel_name,
+                    transport_proto=transport_proto)
+                if overlayid is None:
+                    err = 'Cannot save the overlay to the controller state'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Add reverse action to the rollback stack
+                rollback.push(
+                    func=srv6_sdn_controller_state.remove_overlay,
+                    overlayid=overlayid,
+                    tenantid=tenantid
+                )
+                # Get tunnel mode
+                tunnel_mode = self.tunnel_modes[tunnel_name]
+                # Let's create the overlay
+                # Create overlay data structure
+                status_code = tunnel_mode.init_overlay_data(
+                    overlayid, overlay_name, tenantid, tunnel_info)
                 if status_code != STATUS_OK:
-                    err = ('Cannot add slice to overlay (overlay %s, '
-                           'device %s, slice %s, tenant %s)'
-                           % (overlay_name, deviceid,
-                              interface_name, tenantid))
+                    err = ('Cannot initialize overlay data (overlay %s, tenant %s)'
+                        % (overlay_name, tenantid))
                     logging.warning(err)
-                    # Remove overlay DB status
-                    if srv6_sdn_controller_state.remove_overlay(
-                            overlayid, tenantid) is not True:
-                        logging.error(
-                            'Cannot remove overlay. Inconsistent data')
+                    # # Remove overlay DB status
+                    # if srv6_sdn_controller_state.remove_overlay(
+                    #         overlayid, tenantid) is not True:
+                    #     logging.error('Cannot remove overlay. Inconsistent data')
                     return OverlayServiceReply(
                         status=Status(code=status_code, reason=err))
-                # Create the tunnel between all the pairs of interfaces
-                for site2 in configured_slices:
-                    if site1['deviceid'] != site2['deviceid']:
-                        status_code = tunnel_mode.create_tunnel(overlayid,
-                                                                overlay_name,
-                                                                overlay_type,
-                                                                site1, site2,
-                                                                tenantid,
-                                                                tunnel_info)
+                # Add reverse action to the rollback stack
+                rollback.push(
+                    func=tunnel_mode.destroy_overlay_data,
+                    overlayid=overlayid,
+                    overlay_name=overlay_name,
+                    tenantid=tenantid,
+                    overlay_info=tunnel_info
+                )
+                # Iterate on slices and add to the overlay
+                configured_slices = list()
+                for site1 in slices:
+                    deviceid = site1['deviceid']
+                    interface_name = site1['interface_name']
+                    # Init tunnel mode on the devices
+                    counter = (srv6_sdn_controller_state
+                            .get_and_inc_tunnel_mode_counter(tunnel_name,
+                                                                deviceid,
+                                                                tenantid))
+                    if counter == 0:
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.dec_and_get_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                        status_code = tunnel_mode.init_tunnel_mode(
+                            deviceid, tenantid, tunnel_info)
                         if status_code != STATUS_OK:
-                            err = ('Cannot create tunnel (overlay %s site1 %s '
-                                   'site2 %s, tenant %s)'
-                                   % (overlay_name, site1, site2, tenantid))
+                            err = ('Cannot initialize tunnel mode (device %s '
+                                'tenant %s)' % (deviceid, tenantid))
                             logging.warning(err)
-                            # Remove overlay DB status
-                            if srv6_sdn_controller_state.remove_overlay(
-                                    overlayid, tenantid) is not True:
-                                logging.error(
-                                    'Cannot remove overlay. Inconsistent data')
+                            # # Remove overlay DB status
+                            # if srv6_sdn_controller_state.remove_overlay(
+                            #         overlayid, tenantid) is not True:
+                            #     logging.error(
+                            #         'Cannot remove overlay. Inconsistent data')
                             return OverlayServiceReply(
                                 status=Status(code=status_code, reason=err))
-                # Add the slice to the configured set
-                configured_slices.append(site1)
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=tunnel_mode.destroy_tunnel_mode,
+                            deviceid=deviceid,
+                            tenantid=tenantid,
+                            overlay_info=tunnel_info
+                        )
+                    elif counter is None:
+                        err = 'Cannot increase tunnel mode counter'
+                        logging.error(err)
+                        # # Remove overlay DB status
+                        # if srv6_sdn_controller_state.remove_overlay(
+                        #         overlayid, tenantid) is not True:
+                        #     logging.error(
+                        #         'Cannot remove overlay. Inconsistent data')
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                        reason=err))
+                    else:
+                        # Success
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.dec_and_get_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                    # Check if we have already configured the overlay on the device
+                    if deviceid in _devices:
+                        # Init overlay on the devices
+                        status_code = tunnel_mode.init_overlay(overlayid,
+                                                            overlay_name,
+                                                            overlay_type,
+                                                            tenantid, deviceid,
+                                                            tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot initialize overlay (overlay %s '
+                                'device %s, tenant %s)'
+                                % (overlay_name, deviceid, tenantid))
+                            logging.warning(err)
+                            # # Remove overlay DB status
+                            # if srv6_sdn_controller_state.remove_overlay(
+                            #         overlayid, tenantid) is not True:
+                            #     logging.error(
+                            #         'Cannot remove overlay. Inconsistent data')
+                            return OverlayServiceReply(
+                                status=Status(code=status_code, reason=err))
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=tunnel_mode.destroy_overlay,
+                            overlayid=overlayid,
+                            overlay_name=overlay_name,
+                            overlay_type=overlay_type,
+                            tenantid=tenantid,
+                            deviceid=deviceid,
+                            overlay_info=tunnel_info
+                        )
+                        # Remove device from the to-be-configured devices set
+                        _devices.remove(deviceid)
+                    # Add the interface to the overlay
+                    status_code = (tunnel_mode
+                                .add_slice_to_overlay(overlayid,
+                                                        overlay_name, deviceid,
+                                                        interface_name, tenantid,
+                                                        tunnel_info))
+                    if status_code != STATUS_OK:
+                        err = ('Cannot add slice to overlay (overlay %s, '
+                            'device %s, slice %s, tenant %s)'
+                            % (overlay_name, deviceid,
+                                interface_name, tenantid))
+                        logging.warning(err)
+                        # # Remove overlay DB status
+                        # if srv6_sdn_controller_state.remove_overlay(
+                        #         overlayid, tenantid) is not True:
+                        #     logging.error(
+                        #         'Cannot remove overlay. Inconsistent data')
+                        return OverlayServiceReply(
+                            status=Status(code=status_code, reason=err))
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=tunnel_mode.remove_slice_from_overlay,
+                        overlayid=overlayid,
+                        overlay_name=overlay_name,
+                        deviceid=deviceid,
+                        interface_name=interface_name,
+                        tenantid=tenantid,
+                        overlay_info=tunnel_info
+                    )
+                    # Create the tunnel between all the pairs of interfaces
+                    for site2 in configured_slices:
+                        if site1['deviceid'] != site2['deviceid']:
+                            status_code = tunnel_mode.create_tunnel(overlayid,
+                                                                    overlay_name,
+                                                                    overlay_type,
+                                                                    site1, site2,
+                                                                    tenantid,
+                                                                    tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                # # Remove overlay DB status
+                                # if srv6_sdn_controller_state.remove_overlay(
+                                #         overlayid, tenantid) is not True:
+                                #     logging.error(
+                                #         'Cannot remove overlay. Inconsistent data')
+                                return OverlayServiceReply(
+                                    status=Status(code=status_code, reason=err))
+                            # Add reverse action to the rollback stack
+                            rollback.push(
+                                func=tunnel_mode.remove_tunnel,
+                                overlayid=overlayid,
+                                overlay_name=overlay_name,
+                                overlay_type=overlay_type,
+                                l_slice=site1,
+                                r_slice=site2,
+                                tenantid=tenantid,
+                                overlay_info=tunnel_info
+                            )
+                    # Add the slice to the configured set
+                    configured_slices.append(site1)
+            # Success, commit all performed operations
+            rollback.commitAll()
         logging.info('All the intents have been processed successfully\n\n')
         # Create the response
         return OverlayServiceReply(
@@ -1463,188 +1539,32 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             status=Status(code=STATUS_OK, reason='OK'))
 
     def _RemoveOverlay(self, overlayid, tenantid, tunnel_info):
-        # Parameters validation
-        #
-        # Let's check if the overlay exists
-        logging.debug('Checking the overlay: %s' % overlayid)
-        overlays = srv6_sdn_controller_state.get_overlays(
-            overlayids=[overlayid])
-        if overlays is None:
-            err = 'Error getting the overlay'
-            logging.error(err)
-            return STATUS_INTERNAL_SERVER_ERROR, err
-        elif len(overlays) == 0:
-            # If the overlay does not exist, return an error message
-            err = 'The overlay %s does not exist' % overlayid
-            logging.warning(err)
-            return STATUS_BAD_REQUEST, err
-        overlay = overlays[0]
-        # Get the tenant ID
-        tenantid = overlay['tenantid']
-        # Check tenant ID
-        if tenantid != overlay['tenantid']:
-            # If the overlay does not exist, return an error message
-            err = ('The overlay %s does not belong to the tenant %s'
-                   % (overlayid, tenantid))
-            logging.warning(err)
-            return STATUS_BAD_REQUEST, err
-        # Get the overlay name
-        overlay_name = overlay['name']
-        # Get the overlay type
-        overlay_type = overlay['type']
-        # Get the tunnel mode
-        tunnel_name = overlay['tunnel_mode']
-        tunnel_mode = self.tunnel_modes[tunnel_name]
-        # Get the slices belonging to the overlay
-        slices = overlay['slices']
-        # All checks passed
-        logging.debug('Check passed')
-        # Let's remove the VPN
-        devices = [slice['deviceid'] for slice in overlay['slices']]
-        configured_slices = slices.copy()
-        for site1 in slices:
-            deviceid = site1['deviceid']
-            interface_name = site1['interface_name']
-            # Remove the tunnel between all the pairs of interfaces
-            for site2 in configured_slices:
-                if site1['deviceid'] != site2['deviceid']:
-                    status_code = tunnel_mode.remove_tunnel(
-                        overlayid, overlay_name, overlay_type, site1,
-                        site2, tenantid, tunnel_info)
-                    if status_code != STATUS_OK:
-                        err = ('Cannot create tunnel (overlay %s site1 %s '
-                               'site2 %s, tenant %s)'
-                               % (overlay_name, site1, site2, tenantid))
-                        logging.warning(err)
-                        return status_code, err
-            # Mark the site1 as unconfigured
-            configured_slices.remove(site1)
-            # Remove the interface from the overlay
-            status_code = tunnel_mode.remove_slice_from_overlay(overlayid,
-                                                                overlay_name,
-                                                                deviceid,
-                                                                interface_name,
-                                                                tenantid,
-                                                                tunnel_info)
-            if status_code != STATUS_OK:
-                err = ('Cannot remove slice from overlay (overlay %s, '
-                       'device %s, slice %s, tenant %s)'
-                       % (overlay_name, deviceid, interface_name, tenantid))
-                logging.warning(err)
-                return status_code, err
-            # Check if the overlay and the tunnel mode
-            # has already been deleted on the device
-            devices.remove(deviceid)
-            if deviceid not in devices:
-                # Destroy overlay on the devices
-                status_code = tunnel_mode.destroy_overlay(overlayid,
-                                                          overlay_name,
-                                                          overlay_type,
-                                                          tenantid,
-                                                          deviceid,
-                                                          tunnel_info)
-                if status_code != STATUS_OK:
-                    err = ('Cannot destroy overlay (overlay %s, device %s '
-                           'tenant %s)' % (overlay_name, deviceid, tenantid))
-                    logging.warning(err)
-                    return status_code, err
-            # Destroy tunnel mode on the devices
-            counter = (srv6_sdn_controller_state
-                       .dec_and_get_tunnel_mode_counter(tunnel_name,
-                                                        deviceid,
-                                                        tenantid))
-            if counter == 0:
-                status_code = tunnel_mode.destroy_tunnel_mode(
-                    deviceid, tenantid, tunnel_info)
-                if status_code != STATUS_OK:
-                    err = ('Cannot destroy tunnel mode (device %s, tenant %s)'
-                           % (deviceid, tenantid))
-                    logging.warning(err)
-                    return status_code, err
-            elif counter is None:
-                err = 'Cannot decrease tunnel mode counter'
-                logging.error(err)
-                return STATUS_INTERNAL_SERVER_ERROR, err
-        # Destroy overlay data structure
-        status_code = tunnel_mode.destroy_overlay_data(
-            overlayid, overlay_name, tenantid, tunnel_info)
-        if status_code != STATUS_OK:
-            err = ('Cannot destroy overlay data (overlay %s, tenant %s)'
-                   % (overlay_name, tenantid))
-            logging.warning(err)
-            return status_code, err
-        # Delete the overlay
-        success = srv6_sdn_controller_state.remove_overlay(overlayid, tenantid)
-        if success is None or success is False:
-            err = 'Cannot remove the overlay from the controller state'
-            logging.error(err)
-            return STATUS_INTERNAL_SERVER_ERROR, err
-        # Create the response
-        return STATUS_OK, 'OK'
-
-    """Assign an interface to a VPN"""
-
-    def AssignSliceToOverlay(self, request, context):
-        logging.info('AssignSliceToOverlay request received:\n%s' % request)
-        # Extract the intents from the request message
-        for intent in request.intents:
-            # Parameters extraction
+        with RollbackContext() as rollback:
+            # Parameters validation
             #
-            # Extract the overlay ID from the intent
-            overlayid = intent.overlayid
-            # Extract tunnel info
-            tunnel_info = intent.tunnel_info
-            # Extract tenant ID
-            tenantid = intent.tenantid
-            # Validate the tenant ID
-            logging.debug('Validating the tenant ID: %s' % tenantid)
-            if not srv6_controller_utils.validate_tenantid(tenantid):
-                # If tenant ID is invalid, return an error message
-                err = 'Invalid tenant ID: %s' % tenantid
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Check if the tenant is configured
-            is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
-            if is_config is None:
-                err = 'Error while checking tenant configuration'
-                logging.error(err)
-                return TenantReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            elif is_config is False:
-                err = ('Cannot update overlay for a tenant unconfigured. '
-                       'Tenant not found or error during the '
-                       'connection to the db')
-                logging.warning(err)
-                return TenantReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Get the overlay
+            # Let's check if the overlay exists
+            logging.debug('Checking the overlay: %s' % overlayid)
             overlays = srv6_sdn_controller_state.get_overlays(
                 overlayids=[overlayid])
             if overlays is None:
                 err = 'Error getting the overlay'
                 logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
+                return STATUS_INTERNAL_SERVER_ERROR, err
             elif len(overlays) == 0:
                 # If the overlay does not exist, return an error message
                 err = 'The overlay %s does not exist' % overlayid
                 logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Take the first overlay
+                return STATUS_BAD_REQUEST, err
             overlay = overlays[0]
+            # Get the tenant ID
+            tenantid = overlay['tenantid']
             # Check tenant ID
             if tenantid != overlay['tenantid']:
                 # If the overlay does not exist, return an error message
-                err = ('The overlay %s does not belong to the '
-                       'tenant %s' % (overlayid, tenantid))
+                err = ('The overlay %s does not belong to the tenant %s'
+                    % (overlayid, tenantid))
                 logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                return STATUS_BAD_REQUEST, err
             # Get the overlay name
             overlay_name = overlay['name']
             # Get the overlay type
@@ -1652,512 +1572,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Get the tunnel mode
             tunnel_name = overlay['tunnel_mode']
             tunnel_mode = self.tunnel_modes[tunnel_name]
+            # Get the transport proto
+            transport_proto = overlay['transport_proto']
             # Get the slices belonging to the overlay
             slices = overlay['slices']
-            # Get the devices on which the overlay has been configured
-            _devices = [_slice['deviceid'] for _slice in slices]
-            # Extract the interfaces
-            incoming_slices = list()
-            incoming_devices = set()
-            for _slice in intent.slices:
-                deviceid = _slice.deviceid
-                interface_name = _slice.interface_name
-                # Add the slice to the incoming slices set
-                incoming_slices.append(
-                    {'deviceid': deviceid, 'interface_name': interface_name})
-                # Add the device to the incoming devices set
-                # if the overlay has not been initiated on it
-                if deviceid not in _devices:
-                    incoming_devices.add(deviceid)
-            # Parameters validation
-            #
-            # Let's check if the overlay exists
-            logging.debug('Checking the overlay: %s' % overlay_name)
-            # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(
-                deviceids=list(incoming_devices) + _devices, return_dict=True)
-            if devices is None:
-                err = 'Error getting devices'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            # Devices validation
-            for deviceid in devices:
-                # Let's check if the router exists
-                if deviceid not in devices:
-                    # If the device does not exist, return an error message
-                    err = 'Device not found %s' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is enabled
-                if not devices[deviceid]['enabled']:
-                    # If the device is not enabled, return an error message
-                    err = 'The device %s is not enabled' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is connected
-                if not devices[deviceid]['connected']:
-                    # If the device is not connected, return an error message
-                    err = 'The device %s is not connected' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the devices have at least a WAN interface
-                wan_found = False
-                for interface in devices[deviceid]['interfaces']:
-                    if interface['type'] == \
-                            srv6_controller_utils.InterfaceType.WAN:
-                        wan_found = True
-                if not wan_found:
-                    # No WAN interfaces found on the device
-                    err = 'No WAN interfaces found on the device %s' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Convert interfaces list to a dict representation
-            # This step simplifies future processing
-            interfaces = dict()
-            for deviceid in devices:
-                for interface in devices[deviceid]['interfaces']:
-                    interfaces[interface['name']] = interface
-                devices[deviceid]['interfaces'] = interfaces
-            # Iterate on the interfaces and extract the
-            # interfaces to be assigned
-            # to the overlay and validate them
-            for _slice in incoming_slices:
-                logging.debug('Validating the slice: %s' % _slice)
-                # A slice is a tuple (deviceid, interface_name)
-                #
-                # Extract the device ID
-                deviceid = _slice['deviceid']
-                # Extract the interface name
-                interface_name = _slice['interface_name']
-                # Let's check if the interface exists
-                if interface_name not in devices[deviceid]['interfaces']:
-                    # If the interface does not exists, return an error
-                    # message
-                    err = 'The interface does not exist'
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the interface type is LAN
-                if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                        srv6_controller_utils.InterfaceType.LAN:
-                    # The interface type is not LAN
-                    err = ('Cannot add non-LAN interface to the overlay: %s '
-                           '(device %s)' % (interface_name, deviceid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the slice is already assigned to an overlay
-                _overlay = (srv6_sdn_controller_state
-                            .get_overlay_containing_slice(_slice, tenantid))
-                if _overlay is not None:
-                    # Slice already assigned to an overlay
-                    err = ('Cannot create overlay: the slice %s is '
-                           'already assigned to the overlay %s'
-                           % (_slice, _overlay['_id']))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check for IP addresses
-                if overlay_type == OverlayType.IPv4Overlay:
-                    addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(addrs) == 0:
-                        # No IPv4 address assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
-                               'at least one IPv4 address is required to create an IPv4 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(subnets) == 0:
-                        # No IPv4 subnet assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
-                               'at least one IPv4 subnet is required to create an IPv4 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                elif overlay_type == OverlayType.IPv6Overlay:
-                    addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(addrs) == 0:
-                        # No IPv6 address assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
-                               'at least one IPv6 address is required to create an IPv6 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
-                    if len(subnets) == 0:
-                        # No IPv6 subnet assigned to the interface
-                        err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
-                               'at least one IPv6 subnet is required to create an IPv6 Overlay'
-                               % _slice)
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            for slice1 in slices + incoming_slices:
-                # Extract the device ID
-                deviceid_1 = slice1['deviceid']
-                # Extract the interface name
-                interface_name_1 = slice1['interface_name']
-                for slice2 in slices + incoming_slices:
-                    if slice2 == slice1:
-                        continue
-                    # Extract the device ID
-                    deviceid_2 = slice2['deviceid']
-                    # Extract the interface name
-                    interface_name_2 = slice2['interface_name']
-                    if overlay_type == OverlayType.IPv4Overlay:
-                        subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
-                        subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
-                        for subnet1 in subnets1:
-                            subnet1 = subnet1['subnet']
-                            for subnet2 in subnets2:
-                                subnet2 = subnet2['subnet']
-                                if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
-                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
-                                           % (slice1, slice2))
-                                    logging.error(err)
-                                    return OverlayServiceReply(
-                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    elif overlay_type == OverlayType.IPv6Overlay:
-                        subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
-                        subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
-                        for subnet1 in subnets1:
-                            subnet1 = subnet1['subnet']
-                            for subnet2 in subnets2:
-                                subnet2 = subnet2['subnet']
-                                if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
-                                    err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
-                                           % (slice1, slice2))
-                                    logging.error(err)
-                                    return OverlayServiceReply(
-                                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            can_use_ipv6_addr_for_wan = True
-            can_use_ipv4_addr_for_wan = True
-            for _slice in slices + incoming_slices:
-                addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
-                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
-                if addrs is None:
-                    can_use_ipv6_addr_for_wan = False
-                addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
-                    deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
-                if addrs is None:
-                    can_use_ipv4_addr_for_wan = False
-            if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
-                err = ('Cannot establish a full-mesh between all the WAN interfaces')
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
-                err = ('IPv6 transport not available: cannot create a SRv6 overlay')
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # For SRv6 overlays, Segment Routing transparency must be T0 or T1
-            # for each device, otherwise the SRv6 full-mesh overlay cannot be
-            # created
-            if tunnel_name == 'SRv6':
-                for _slice in incoming_slices:
-                    incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
-                    outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
-                    is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
-                    is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
-                    if incoming_sr_transparency == 'op':
-                        err = ('Device %s has incoming SR Transparency set to OP. '
-                              'SRv6 overlays are not supported for OP.' % (deviceid))
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    if outgoing_sr_transparency == 'op':
-                        err = ('Device %s has outgoing SR Transparency set to OP. '
-                              'SRv6 overlays are not supported for OP.' % (deviceid))
-                        logging.error(err)
-                        return OverlayServiceReply(
-                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                    # if incoming_sr_transparency == 't1' and is_srh_forced:
-                    #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
-                    #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
-                    #     logging.error(err)
-                    #     return OverlayServiceReply(
-                    #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # All the devices must belong to the same tenant
-            for device in devices.values():
-                if device['tenantid'] != tenantid:
-                    err = 'Error while processing the intent: '
-                    'All the devices must belong to the '
-                    'same tenant %s' % tenantid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            logging.info('All checks passed')
             # All checks passed
-            #
-            # Let's assign the interface to the overlay
-            configured_slices = slices
-            for site1 in incoming_slices:
-                deviceid = site1['deviceid']
-                interface_name = site1['interface_name']
-                # Init tunnel mode on the devices
-                counter = (srv6_sdn_controller_state
-                           .get_and_inc_tunnel_mode_counter(tunnel_name,
-                                                            deviceid,
-                                                            tenantid))
-                if counter == 0:
-                    status_code = tunnel_mode.init_tunnel_mode(
-                        deviceid, tenantid, tunnel_info)
-                    if status_code != STATUS_OK:
-                        err = ('Cannot initialize tunnel mode (device %s '
-                               'tenant %s)' % (deviceid, tenantid))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
-                elif counter is None:
-                    err = 'Cannot increase tunnel mode counter'
-                    logging.error(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                      reason=err))
-                # Check if we have already configured the overlay on the device
-                if deviceid in incoming_devices:
-                    # Init overlay on the devices
-                    status_code = tunnel_mode.init_overlay(overlayid,
-                                                           overlay_name,
-                                                           overlay_type,
-                                                           tenantid, deviceid,
-                                                           tunnel_info)
-                    if status_code != STATUS_OK:
-                        err = ('Cannot initialize overlay (overlay %s '
-                               'device %s, tenant %s)'
-                               % (overlay_name, deviceid, tenantid))
-                        logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
-                    # Remove device from the to-be-configured devices set
-                    incoming_devices.remove(deviceid)
-                # Add the interface to the overlay
-                status_code = tunnel_mode.add_slice_to_overlay(overlayid,
-                                                               overlay_name,
-                                                               deviceid,
-                                                               interface_name,
-                                                               tenantid,
-                                                               tunnel_info)
-                if status_code != STATUS_OK:
-                    err = ('Cannot add slice to overlay (overlay %s, '
-                           'device %s, slice %s, tenant %s)'
-                           % (overlay_name, deviceid,
-                              interface_name, tenantid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=status_code, reason=err))
-                # Create the tunnel between all the pairs of interfaces
-                for site2 in configured_slices:
-                    if site1['deviceid'] != site2['deviceid']:
-                        status_code = tunnel_mode.create_tunnel(overlayid,
-                                                                overlay_name,
-                                                                overlay_type,
-                                                                site1, site2,
-                                                                tenantid,
-                                                                tunnel_info)
-                        if status_code != STATUS_OK:
-                            err = ('Cannot create tunnel (overlay %s site1 %s '
-                                   'site2 %s, tenant %s)'
-                                   % (overlay_name, site1, site2, tenantid))
-                            logging.warning(err)
-                            return OverlayServiceReply(
-                                status=Status(code=status_code, reason=err))
-                # Add the slice to the configured set
-                configured_slices.append(site1)
-            # Save the overlay to the state
-            success = srv6_sdn_controller_state.add_many_slices_to_overlay(
-                overlayid, tenantid, incoming_slices)
-            if success is None or success is False:
-                err = 'Cannot update overlay in controller state'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-        logging.info('All the intents have been processed successfully\n\n')
-        # Create the response
-        return OverlayServiceReply(
-            status=Status(code=STATUS_OK, reason='OK'))
-
-    """Remove an interface from a VPN"""
-
-    def RemoveSliceFromOverlay(self, request, context):
-        logging.info('RemoveSliceFromOverlay request received:\n%s' % request)
-        # Extract the intents from the request message
-        for intent in request.intents:
-            # Parameters extraction
-            #
-            # Extract the overlay ID from the intent
-            overlayid = intent.overlayid
-            # Extract tunnel info
-            tunnel_info = intent.tunnel_info
-            # Extract tenant ID
-            tenantid = intent.tenantid
-            # Validate the tenant ID
-            logging.debug('Validating the tenant ID: %s' % tenantid)
-            if not srv6_controller_utils.validate_tenantid(tenantid):
-                # If tenant ID is invalid, return an error message
-                err = 'Invalid tenant ID: %s' % tenantid
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Check if the tenant is configured
-            is_config = (srv6_sdn_controller_state
-                         .is_tenant_configured(tenantid))
-            if is_config is None:
-                err = 'Error while checking tenant configuration'
-                logging.error(err)
-                return TenantReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            elif is_config is False:
-                err = ('Cannot update overlay for a tenant unconfigured'
-                       'Tenant not found or error during the '
-                       'connection to the db')
-                logging.warning(err)
-                return TenantReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Let's check if the overlay exists
-            logging.debug('Checking the overlay: %s' % overlayid)
-            overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
-                overlayid])
-            if overlays is None:
-                err = 'Error getting the overlay'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            elif len(overlays) == 0:
-                # If the overlay does not exist, return an error message
-                err = 'The overlay %s does not exist' % overlayid
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Take the first overlay
-            overlay = overlays[0]
-            # Check tenant ID
-            if tenantid != overlay['tenantid']:
-                # If the overlay does not exist, return an error message
-                err = 'The overlay %s does not belong to the '
-                'tenant %s' % (overlayid, tenantid)
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # Get the overlay name
-            overlay_name = overlay['name']
-            # Get the overlay type
-            overlay_type = overlay['type']
-            # Get the tunnel mode
-            tunnel_name = overlay['tunnel_mode']
-            tunnel_mode = self.tunnel_modes[tunnel_name]
-            # Get the slices belonging to the overlay
-            slices = overlay['slices']
-            # Extract the interfaces
-            incoming_slices = list()
-            incoming_devices = set()
-            for _slice in intent.slices:
-                deviceid = _slice.deviceid
-                interface_name = _slice.interface_name
-                # Add the slice to the incoming slices set
-                incoming_slices.append(
-                    {'deviceid': deviceid, 'interface_name': interface_name})
-                # Add the device to the incoming devices set
-                # if the overlay has not been initiated on it
-                if deviceid not in incoming_devices:
-                    incoming_devices.add(deviceid)
-            # Get the devices
-            devices = srv6_sdn_controller_state.get_devices(
-                deviceids=incoming_devices, return_dict=True)
-            if devices is None:
-                err = 'Error getting devices'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
-            # Convert interfaces list to a dict representation
-            # This step simplifies future processing
-            interfaces = dict()
-            for deviceid in devices:
-                for interface in devices[deviceid]['interfaces']:
-                    interfaces[interface['name']] = interface
-                devices[deviceid]['interfaces'] = interfaces
-            # Parameters validation
-            #
-            # Iterate on the interfaces
-            # and extract the interfaces to be removed from the VPN
-            for _slice in incoming_slices:
-                logging.debug('Validating the slice: %s' % _slice)
-                # A slice is a tuple (deviceid, interface_name)
-                #
-                # Extract the device ID
-                deviceid = _slice['deviceid']
-                # Extract the interface name
-                interface_name = _slice['interface_name']
-                # Let's check if the router exists
-                if deviceid not in devices:
-                    # If the device does not exist, return an error message
-                    err = 'Device not found %s' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is connected
-                if not devices[deviceid]['connected']:
-                    # If the device is not connected, return an error message
-                    err = 'The device %s is not connected' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Check if the device is enabled
-                if not devices[deviceid]['enabled']:
-                    # If the device is not enabled, return an error message
-                    err = 'The device %s is not enabled' % deviceid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Let's check if the interface exists
-                if interface_name not in devices[deviceid]['interfaces']:
-                    # If the interface does not exists, return an error
-                    # message
-                    err = 'The interface does not exist'
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-                # Let's check if the interface is assigned to the given overlay
-                if _slice not in overlay['slices']:
-                    # The interface is not assigned to the overlay,
-                    # return an error message
-                    err = ('The interface is not assigned to the overlay %s, '
-                           '(name %s, tenantid %s)'
-                           % (overlayid, overlay_name, tenantid))
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            # All the devices must belong to the same tenant
-            for device in devices.values():
-                if device['tenantid'] != tenantid:
-                    err = 'Error while processing the intent: '
-                    'All the devices must belong to the '
-                    'same tenant %s' % tenantid
-                    logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
-            logging.debug('All checks passed')
-            # All checks passed
-            #
-            # Let's remove the interface from the VPN
-            _devices = [slice['deviceid'] for slice in overlay['slices']]
+            logging.debug('Check passed')
+            # Let's remove the VPN
+            devices = [slice['deviceid'] for slice in overlay['slices']]
             configured_slices = slices.copy()
-            for site1 in incoming_slices:
+            for site1 in slices:
                 deviceid = site1['deviceid']
                 interface_name = site1['interface_name']
                 # Remove the tunnel between all the pairs of interfaces
@@ -2168,73 +1592,885 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             site2, tenantid, tunnel_info)
                         if status_code != STATUS_OK:
                             err = ('Cannot create tunnel (overlay %s site1 %s '
-                                   'site2 %s, tenant %s)'
-                                   % (overlay_name, site1, site2, tenantid))
+                                'site2 %s, tenant %s)'
+                                % (overlay_name, site1, site2, tenantid))
                             logging.warning(err)
-                            return OverlayServiceReply(
-                                status=Status(code=status_code, reason=err))
+                            return status_code, err
                 # Mark the site1 as unconfigured
                 configured_slices.remove(site1)
                 # Remove the interface from the overlay
-                status_code = tunnel_mode.remove_slice_from_overlay(
-                    overlayid, overlay_name, deviceid,
-                    interface_name, tenantid, tunnel_info)
+                status_code = tunnel_mode.remove_slice_from_overlay(overlayid,
+                                                                    overlay_name,
+                                                                    deviceid,
+                                                                    interface_name,
+                                                                    tenantid,
+                                                                    tunnel_info)
                 if status_code != STATUS_OK:
                     err = ('Cannot remove slice from overlay (overlay %s, '
-                           'device %s, slice %s, tenant %s)'
-                           % (overlay_name, deviceid,
-                              interface_name, tenantid))
+                        'device %s, slice %s, tenant %s)'
+                        % (overlay_name, deviceid, interface_name, tenantid))
                     logging.warning(err)
-                    return OverlayServiceReply(
-                        status=Status(code=status_code, reason=err))
+                    return status_code, err
                 # Check if the overlay and the tunnel mode
                 # has already been deleted on the device
-                _devices.remove(deviceid)
-                if deviceid not in _devices:
+                devices.remove(deviceid)
+                if deviceid not in devices:
                     # Destroy overlay on the devices
                     status_code = tunnel_mode.destroy_overlay(overlayid,
-                                                              overlay_name,
-                                                              overlay_type,
-                                                              tenantid,
-                                                              deviceid,
-                                                              tunnel_info)
+                                                            overlay_name,
+                                                            overlay_type,
+                                                            tenantid,
+                                                            deviceid,
+                                                            tunnel_info)
                     if status_code != STATUS_OK:
                         err = ('Cannot destroy overlay (overlay %s, device %s '
-                               'tenant %s)'
-                               % (overlay_name, deviceid, tenantid))
+                            'tenant %s)' % (overlay_name, deviceid, tenantid))
                         logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
+                        return status_code, err
                 # Destroy tunnel mode on the devices
                 counter = (srv6_sdn_controller_state
-                           .dec_and_get_tunnel_mode_counter(tunnel_name,
+                        .dec_and_get_tunnel_mode_counter(tunnel_name,
                                                             deviceid,
                                                             tenantid))
                 if counter == 0:
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=srv6_sdn_controller_state.get_and_inc_tunnel_mode_counter,
+                        tunnel_name=tunnel_name,
+                        deviceid=deviceid,
+                        tenantid=tenantid
+                    )
                     status_code = tunnel_mode.destroy_tunnel_mode(
                         deviceid, tenantid, tunnel_info)
                     if status_code != STATUS_OK:
-                        err = ('Cannot destroy tunnel mode (device %s '
-                               'tenant %s)' % (deviceid, tenantid))
+                        err = ('Cannot destroy tunnel mode (device %s, tenant %s)'
+                            % (deviceid, tenantid))
                         logging.warning(err)
-                        return OverlayServiceReply(
-                            status=Status(code=status_code, reason=err))
+                        return status_code, err
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=tunnel_mode.init_tunnel_mode,
+                        deviceid=deviceid,
+                        tenantid=tenantid,
+                        overlay_info=tunnel_info
+                    )
                 elif counter is None:
                     err = 'Cannot decrease tunnel mode counter'
                     logging.error(err)
+                    return STATUS_INTERNAL_SERVER_ERROR, err
+                else:
+                    # Success
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=srv6_sdn_controller_state.get_and_inc_tunnel_mode_counter,
+                        tunnel_name=tunnel_name,
+                        deviceid=deviceid,
+                        tenantid=tenantid
+                    )
+            # Destroy overlay data structure
+            status_code = tunnel_mode.destroy_overlay_data(
+                overlayid, overlay_name, tenantid, tunnel_info)
+            if status_code != STATUS_OK:
+                err = ('Cannot destroy overlay data (overlay %s, tenant %s)'
+                    % (overlay_name, tenantid))
+                logging.warning(err)
+                return status_code, err
+            # Add reverse action to the rollback stack
+            rollback.push(
+                func=srv6_sdn_controller_state.init_overlay_data,
+                overlayid=overlayid,
+                overlay_name=overlay_name,
+                tenantid=tenantid,
+                overlay_info=tunnel_info
+            )
+            # Delete the overlay
+            success = srv6_sdn_controller_state.remove_overlay(overlayid, tenantid)
+            if success is None or success is False:
+                err = 'Cannot remove the overlay from the controller state'
+                logging.error(err)
+                return STATUS_INTERNAL_SERVER_ERROR, err
+            # Add reverse action to the rollback stack
+            rollback.push(
+                func=srv6_sdn_controller_state.create_overlay,
+                name=overlay_name,
+                type=overlay_type,
+                slices=slices,
+                tenantid=tenantid,
+                tunnel_mode=tunnel_name,
+                transport_proto=transport_proto
+            )
+            # Success, commit all performed operations
+            rollback.commitAll()
+        # Create the response
+        return STATUS_OK, 'OK'
+
+    """Assign an interface to a VPN"""
+
+    def AssignSliceToOverlay(self, request, context):
+        logging.info('AssignSliceToOverlay request received:\n%s' % request)
+        with RollbackContext() as rollback:
+            # Extract the intents from the request message
+            for intent in request.intents:
+                # Parameters extraction
+                #
+                # Extract the overlay ID from the intent
+                overlayid = intent.overlayid
+                # Extract tunnel info
+                tunnel_info = intent.tunnel_info
+                # Extract tenant ID
+                tenantid = intent.tenantid
+                # Validate the tenant ID
+                logging.debug('Validating the tenant ID: %s' % tenantid)
+                if not srv6_controller_utils.validate_tenantid(tenantid):
+                    # If tenant ID is invalid, return an error message
+                    err = 'Invalid tenant ID: %s' % tenantid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the tenant is configured
+                is_config = (srv6_sdn_controller_state
+                            .is_tenant_configured(tenantid))
+                if is_config is None:
+                    err = 'Error while checking tenant configuration'
+                    logging.error(err)
+                    return TenantReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                elif is_config is False:
+                    err = ('Cannot update overlay for a tenant unconfigured. '
+                        'Tenant not found or error during the '
+                        'connection to the db')
+                    logging.warning(err)
+                    return TenantReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Get the overlay
+                overlays = srv6_sdn_controller_state.get_overlays(
+                    overlayids=[overlayid])
+                if overlays is None:
+                    err = 'Error getting the overlay'
+                    logging.error(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                      reason=err))
-            # Save the overlay to the state
-            success = (srv6_sdn_controller_state
-                       .remove_many_slices_from_overlay(
-                           overlayid, tenantid, incoming_slices))
-            if success is None or success is False:
-                err = 'Cannot update overlay in controller state'
-                logging.error(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
-                                  reason=err))
+                                    reason=err))
+                elif len(overlays) == 0:
+                    # If the overlay does not exist, return an error message
+                    err = 'The overlay %s does not exist' % overlayid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Take the first overlay
+                overlay = overlays[0]
+                # Check tenant ID
+                if tenantid != overlay['tenantid']:
+                    # If the overlay does not exist, return an error message
+                    err = ('The overlay %s does not belong to the '
+                        'tenant %s' % (overlayid, tenantid))
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Get the overlay name
+                overlay_name = overlay['name']
+                # Get the overlay type
+                overlay_type = overlay['type']
+                # Get the tunnel mode
+                tunnel_name = overlay['tunnel_mode']
+                tunnel_mode = self.tunnel_modes[tunnel_name]
+                # Get the slices belonging to the overlay
+                slices = overlay['slices']
+                # Get the devices on which the overlay has been configured
+                _devices = [_slice['deviceid'] for _slice in slices]
+                # Extract the interfaces
+                incoming_slices = list()
+                incoming_devices = set()
+                for _slice in intent.slices:
+                    deviceid = _slice.deviceid
+                    interface_name = _slice.interface_name
+                    # Add the slice to the incoming slices set
+                    incoming_slices.append(
+                        {'deviceid': deviceid, 'interface_name': interface_name})
+                    # Add the device to the incoming devices set
+                    # if the overlay has not been initiated on it
+                    if deviceid not in _devices:
+                        incoming_devices.add(deviceid)
+                # Parameters validation
+                #
+                # Let's check if the overlay exists
+                logging.debug('Checking the overlay: %s' % overlay_name)
+                # Get the devices
+                devices = srv6_sdn_controller_state.get_devices(
+                    deviceids=list(incoming_devices) + _devices, return_dict=True)
+                if devices is None:
+                    err = 'Error getting devices'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Devices validation
+                for deviceid in devices:
+                    # Let's check if the router exists
+                    if deviceid not in devices:
+                        # If the device does not exist, return an error message
+                        err = 'Device not found %s' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is enabled
+                    if not devices[deviceid]['enabled']:
+                        # If the device is not enabled, return an error message
+                        err = 'The device %s is not enabled' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is connected
+                    if not devices[deviceid]['connected']:
+                        # If the device is not connected, return an error message
+                        err = 'The device %s is not connected' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the devices have at least a WAN interface
+                    wan_found = False
+                    for interface in devices[deviceid]['interfaces']:
+                        if interface['type'] == \
+                                srv6_controller_utils.InterfaceType.WAN:
+                            wan_found = True
+                    if not wan_found:
+                        # No WAN interfaces found on the device
+                        err = 'No WAN interfaces found on the device %s' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Convert interfaces list to a dict representation
+                # This step simplifies future processing
+                interfaces = dict()
+                for deviceid in devices:
+                    for interface in devices[deviceid]['interfaces']:
+                        interfaces[interface['name']] = interface
+                    devices[deviceid]['interfaces'] = interfaces
+                # Iterate on the interfaces and extract the
+                # interfaces to be assigned
+                # to the overlay and validate them
+                for _slice in incoming_slices:
+                    logging.debug('Validating the slice: %s' % _slice)
+                    # A slice is a tuple (deviceid, interface_name)
+                    #
+                    # Extract the device ID
+                    deviceid = _slice['deviceid']
+                    # Extract the interface name
+                    interface_name = _slice['interface_name']
+                    # Let's check if the interface exists
+                    if interface_name not in devices[deviceid]['interfaces']:
+                        # If the interface does not exists, return an error
+                        # message
+                        err = 'The interface does not exist'
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the interface type is LAN
+                    if devices[deviceid]['interfaces'][interface_name]['type'] != \
+                            srv6_controller_utils.InterfaceType.LAN:
+                        # The interface type is not LAN
+                        err = ('Cannot add non-LAN interface to the overlay: %s '
+                            '(device %s)' % (interface_name, deviceid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the slice is already assigned to an overlay
+                    _overlay = (srv6_sdn_controller_state
+                                .get_overlay_containing_slice(_slice, tenantid))
+                    if _overlay is not None:
+                        # Slice already assigned to an overlay
+                        err = ('Cannot create overlay: the slice %s is '
+                            'already assigned to the overlay %s'
+                            % (_slice, _overlay['_id']))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check for IP addresses
+                    if overlay_type == OverlayType.IPv4Overlay:
+                        addrs = srv6_sdn_controller_state.get_ipv4_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(addrs) == 0:
+                            # No IPv4 address assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv4 addresses; '
+                                'at least one IPv4 address is required to create an IPv4 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        subnets = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(subnets) == 0:
+                            # No IPv4 subnet assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv4 subnets; '
+                                'at least one IPv4 subnet is required to create an IPv4 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    elif overlay_type == OverlayType.IPv6Overlay:
+                        addrs = srv6_sdn_controller_state.get_ipv6_addresses(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(addrs) == 0:
+                            # No IPv6 address assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv6 addresses; '
+                                'at least one IPv6 address is required to create an IPv6 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        subnets = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid, tenantid=tenantid, interface_name=interface_name)
+                        if len(subnets) == 0:
+                            # No IPv6 subnet assigned to the interface
+                            err = ('Cannot create overlay: the slice %s has no IPv6 subnets; '
+                                'at least one IPv6 subnet is required to create an IPv6 Overlay'
+                                % _slice)
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                for slice1 in slices + incoming_slices:
+                    # Extract the device ID
+                    deviceid_1 = slice1['deviceid']
+                    # Extract the interface name
+                    interface_name_1 = slice1['interface_name']
+                    for slice2 in slices + incoming_slices:
+                        if slice2 == slice1:
+                            continue
+                        # Extract the device ID
+                        deviceid_2 = slice2['deviceid']
+                        # Extract the interface name
+                        interface_name_2 = slice2['interface_name']
+                        if overlay_type == OverlayType.IPv4Overlay:
+                            subnets1 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                            subnets2 = srv6_sdn_controller_state.get_ipv4_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                            for subnet1 in subnets1:
+                                subnet1 = subnet1['subnet']
+                                for subnet2 in subnets2:
+                                    subnet2 = subnet2['subnet']
+                                    if IPv4Network(subnet1).overlaps(IPv4Network(subnet2)):
+                                        err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                            % (slice1, slice2))
+                                        logging.error(err)
+                                        return OverlayServiceReply(
+                                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        elif overlay_type == OverlayType.IPv6Overlay:
+                            subnets1 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_1, tenantid=tenantid, interface_name=interface_name_1)
+                            subnets2 = srv6_sdn_controller_state.get_ipv6_subnets(deviceid=deviceid_2, tenantid=tenantid, interface_name=interface_name_2)
+                            for subnet1 in subnets1:
+                                subnet1 = subnet1['subnet']
+                                for subnet2 in subnets2:
+                                    subnet2 = subnet2['subnet']
+                                    if IPv6Network(subnet1).overlaps(IPv6Network(subnet2)):
+                                        err = ('Cannot create overlay: the slices %s and %s have overlapping subnets'
+                                            % (slice1, slice2))
+                                        logging.error(err)
+                                        return OverlayServiceReply(
+                                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                can_use_ipv6_addr_for_wan = True
+                can_use_ipv4_addr_for_wan = True
+                for _slice in slices + incoming_slices:
+                    addrs = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+                        deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                    if addrs is None:
+                        can_use_ipv6_addr_for_wan = False
+                    addrs = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+                        deviceid=_slice['deviceid'], tenantid=tenantid, interface_name=_slice['interface_name'])
+                    if addrs is None:
+                        can_use_ipv4_addr_for_wan = False
+                if not can_use_ipv6_addr_for_wan and not can_use_ipv4_addr_for_wan:
+                    err = ('Cannot establish a full-mesh between all the WAN interfaces')
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
+                    err = ('IPv6 transport not available: cannot create a SRv6 overlay')
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # For SRv6 overlays, Segment Routing transparency must be T0 or T1
+                # for each device, otherwise the SRv6 full-mesh overlay cannot be
+                # created
+                if tunnel_name == 'SRv6':
+                    for _slice in incoming_slices:
+                        incoming_sr_transparency = srv6_sdn_controller_state.get_incoming_sr_transparency(_slice['deviceid'], tenantid)
+                        outgoing_sr_transparency = srv6_sdn_controller_state.get_outgoing_sr_transparency(_slice['deviceid'], tenantid)
+                        is_ip6tnl_forced = srv6_sdn_controller_state.is_ip6tnl_forced(_slice['deviceid'], tenantid)
+                        is_srh_forced = srv6_sdn_controller_state.is_srh_forced(_slice['deviceid'], tenantid)
+                        if incoming_sr_transparency == 'op':
+                            err = ('Device %s has incoming SR Transparency set to OP. '
+                                'SRv6 overlays are not supported for OP.' % (deviceid))
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        if outgoing_sr_transparency == 'op':
+                            err = ('Device %s has outgoing SR Transparency set to OP. '
+                                'SRv6 overlays are not supported for OP.' % (deviceid))
+                            logging.error(err)
+                            return OverlayServiceReply(
+                                status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        # if incoming_sr_transparency == 't1' and is_srh_forced:
+                        #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
+                        #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                        #     logging.error(err)
+                        #     return OverlayServiceReply(
+                        #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # All the devices must belong to the same tenant
+                for device in devices.values():
+                    if device['tenantid'] != tenantid:
+                        err = 'Error while processing the intent: '
+                        'All the devices must belong to the '
+                        'same tenant %s' % tenantid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                logging.info('All checks passed')
+                # All checks passed
+                #
+                # Let's assign the interface to the overlay
+                configured_slices = slices
+                for site1 in incoming_slices:
+                    deviceid = site1['deviceid']
+                    interface_name = site1['interface_name']
+                    # Init tunnel mode on the devices
+                    counter = (srv6_sdn_controller_state
+                            .get_and_inc_tunnel_mode_counter(tunnel_name,
+                                                                deviceid,
+                                                                tenantid))
+                    if counter == 0:
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.dec_and_get_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                        status_code = tunnel_mode.init_tunnel_mode(
+                            deviceid, tenantid, tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot initialize tunnel mode (device %s '
+                                'tenant %s)' % (deviceid, tenantid))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=status_code, reason=err))
+                    elif counter is None:
+                        err = 'Cannot increase tunnel mode counter'
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                        reason=err))
+                    else:
+                        # Success
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.dec_and_get_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                    # Check if we have already configured the overlay on the device
+                    if deviceid in incoming_devices:
+                        # Init overlay on the devices
+                        status_code = tunnel_mode.init_overlay(overlayid,
+                                                            overlay_name,
+                                                            overlay_type,
+                                                            tenantid, deviceid,
+                                                            tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot initialize overlay (overlay %s '
+                                'device %s, tenant %s)'
+                                % (overlay_name, deviceid, tenantid))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=status_code, reason=err))
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=tunnel_mode.destroy_overlay,
+                            overlayid=overlayid,
+                            overlay_name=overlay_name,
+                            overlay_type=overlay_type,
+                            tenantid=tenantid,
+                            deviceid=deviceid,
+                            overlay_info=tunnel_info
+                        )
+                        # Remove device from the to-be-configured devices set
+                        incoming_devices.remove(deviceid)
+                    # Add the interface to the overlay
+                    status_code = tunnel_mode.add_slice_to_overlay(overlayid,
+                                                                overlay_name,
+                                                                deviceid,
+                                                                interface_name,
+                                                                tenantid,
+                                                                tunnel_info)
+                    if status_code != STATUS_OK:
+                        err = ('Cannot add slice to overlay (overlay %s, '
+                            'device %s, slice %s, tenant %s)'
+                            % (overlay_name, deviceid,
+                                interface_name, tenantid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=status_code, reason=err))
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=tunnel_mode.remove_slice_from_overlay,
+                        overlayid=overlayid,
+                        overlay_name=overlay_name,
+                        deviceid=deviceid,
+                        interface_name=interface_name,
+                        tenantid=tenantid,
+                        overlay_info=tunnel_info
+                    )
+                    # Create the tunnel between all the pairs of interfaces
+                    for site2 in configured_slices:
+                        if site1['deviceid'] != site2['deviceid']:
+                            status_code = tunnel_mode.create_tunnel(overlayid,
+                                                                    overlay_name,
+                                                                    overlay_type,
+                                                                    site1, site2,
+                                                                    tenantid,
+                                                                    tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return OverlayServiceReply(
+                                    status=Status(code=status_code, reason=err))
+                            # Add reverse action to the rollback stack
+                            rollback.push(
+                                func=tunnel_mode.remove_tunnel,
+                                overlayid=overlayid,
+                                overlay_name=overlay_name,
+                                overlay_type=overlay_type,
+                                l_slice=site1,
+                                r_slice=site2,
+                                tenantid=tenantid,
+                                overlay_info=tunnel_info
+                            )
+                    # Add the slice to the configured set
+                    configured_slices.append(site1)
+                # Save the overlay to the state
+                success = srv6_sdn_controller_state.add_many_slices_to_overlay(
+                    overlayid, tenantid, incoming_slices)
+                if success is None or success is False:
+                    err = 'Cannot update overlay in controller state'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Add reverse action to the rollback stack
+                rollback.push(
+                    func=srv6_sdn_controller_state.remove_many_slices_from_overlay,
+                    overlayid=overlayid,
+                    tenantid=tenantid,
+                    slices=incoming_slices
+                )
+            # Success, commit all performed operations
+            rollback.commitAll()
+        logging.info('All the intents have been processed successfully\n\n')
+        # Create the response
+        return OverlayServiceReply(
+            status=Status(code=STATUS_OK, reason='OK'))
+
+    """Remove an interface from a VPN"""
+
+    def RemoveSliceFromOverlay(self, request, context):
+        logging.info('RemoveSliceFromOverlay request received:\n%s' % request)
+        with RollbackContext() as rollback:
+            # Extract the intents from the request message
+            for intent in request.intents:
+                # Parameters extraction
+                #
+                # Extract the overlay ID from the intent
+                overlayid = intent.overlayid
+                # Extract tunnel info
+                tunnel_info = intent.tunnel_info
+                # Extract tenant ID
+                tenantid = intent.tenantid
+                # Validate the tenant ID
+                logging.debug('Validating the tenant ID: %s' % tenantid)
+                if not srv6_controller_utils.validate_tenantid(tenantid):
+                    # If tenant ID is invalid, return an error message
+                    err = 'Invalid tenant ID: %s' % tenantid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Check if the tenant is configured
+                is_config = (srv6_sdn_controller_state
+                            .is_tenant_configured(tenantid))
+                if is_config is None:
+                    err = 'Error while checking tenant configuration'
+                    logging.error(err)
+                    return TenantReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                elif is_config is False:
+                    err = ('Cannot update overlay for a tenant unconfigured'
+                        'Tenant not found or error during the '
+                        'connection to the db')
+                    logging.warning(err)
+                    return TenantReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Let's check if the overlay exists
+                logging.debug('Checking the overlay: %s' % overlayid)
+                overlays = srv6_sdn_controller_state.get_overlays(overlayids=[
+                    overlayid])
+                if overlays is None:
+                    err = 'Error getting the overlay'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                elif len(overlays) == 0:
+                    # If the overlay does not exist, return an error message
+                    err = 'The overlay %s does not exist' % overlayid
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Take the first overlay
+                overlay = overlays[0]
+                # Check tenant ID
+                if tenantid != overlay['tenantid']:
+                    # If the overlay does not exist, return an error message
+                    err = 'The overlay %s does not belong to the '
+                    'tenant %s' % (overlayid, tenantid)
+                    logging.warning(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # Get the overlay name
+                overlay_name = overlay['name']
+                # Get the overlay type
+                overlay_type = overlay['type']
+                # Get the tunnel mode
+                tunnel_name = overlay['tunnel_mode']
+                tunnel_mode = self.tunnel_modes[tunnel_name]
+                # Get the slices belonging to the overlay
+                slices = overlay['slices']
+                # Extract the interfaces
+                incoming_slices = list()
+                incoming_devices = set()
+                for _slice in intent.slices:
+                    deviceid = _slice.deviceid
+                    interface_name = _slice.interface_name
+                    # Add the slice to the incoming slices set
+                    incoming_slices.append(
+                        {'deviceid': deviceid, 'interface_name': interface_name})
+                    # Add the device to the incoming devices set
+                    # if the overlay has not been initiated on it
+                    if deviceid not in incoming_devices:
+                        incoming_devices.add(deviceid)
+                # Get the devices
+                devices = srv6_sdn_controller_state.get_devices(
+                    deviceids=incoming_devices, return_dict=True)
+                if devices is None:
+                    err = 'Error getting devices'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Convert interfaces list to a dict representation
+                # This step simplifies future processing
+                interfaces = dict()
+                for deviceid in devices:
+                    for interface in devices[deviceid]['interfaces']:
+                        interfaces[interface['name']] = interface
+                    devices[deviceid]['interfaces'] = interfaces
+                # Parameters validation
+                #
+                # Iterate on the interfaces
+                # and extract the interfaces to be removed from the VPN
+                for _slice in incoming_slices:
+                    logging.debug('Validating the slice: %s' % _slice)
+                    # A slice is a tuple (deviceid, interface_name)
+                    #
+                    # Extract the device ID
+                    deviceid = _slice['deviceid']
+                    # Extract the interface name
+                    interface_name = _slice['interface_name']
+                    # Let's check if the router exists
+                    if deviceid not in devices:
+                        # If the device does not exist, return an error message
+                        err = 'Device not found %s' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is connected
+                    if not devices[deviceid]['connected']:
+                        # If the device is not connected, return an error message
+                        err = 'The device %s is not connected' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Check if the device is enabled
+                    if not devices[deviceid]['enabled']:
+                        # If the device is not enabled, return an error message
+                        err = 'The device %s is not enabled' % deviceid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Let's check if the interface exists
+                    if interface_name not in devices[deviceid]['interfaces']:
+                        # If the interface does not exists, return an error
+                        # message
+                        err = 'The interface does not exist'
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                    # Let's check if the interface is assigned to the given overlay
+                    if _slice not in overlay['slices']:
+                        # The interface is not assigned to the overlay,
+                        # return an error message
+                        err = ('The interface is not assigned to the overlay %s, '
+                            '(name %s, tenantid %s)'
+                            % (overlayid, overlay_name, tenantid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                # All the devices must belong to the same tenant
+                for device in devices.values():
+                    if device['tenantid'] != tenantid:
+                        err = 'Error while processing the intent: '
+                        'All the devices must belong to the '
+                        'same tenant %s' % tenantid
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                logging.debug('All checks passed')
+                # All checks passed
+                #
+                # Let's remove the interface from the VPN
+                _devices = [slice['deviceid'] for slice in overlay['slices']]
+                configured_slices = slices.copy()
+                for site1 in incoming_slices:
+                    deviceid = site1['deviceid']
+                    interface_name = site1['interface_name']
+                    # Remove the tunnel between all the pairs of interfaces
+                    for site2 in configured_slices:
+                        if site1['deviceid'] != site2['deviceid']:
+                            status_code = tunnel_mode.remove_tunnel(
+                                overlayid, overlay_name, overlay_type, site1,
+                                site2, tenantid, tunnel_info)
+                            if status_code != STATUS_OK:
+                                err = ('Cannot create tunnel (overlay %s site1 %s '
+                                    'site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid))
+                                logging.warning(err)
+                                return OverlayServiceReply(
+                                    status=Status(code=status_code, reason=err))
+                            # Add reverse action to the rollback stack
+                            rollback.push(
+                                func=tunnel_mode.create_tunnel,
+                                overlayid=overlayid,
+                                overlay_name=overlay_name,
+                                overlay_type=overlay_type,
+                                l_slice=site1,
+                                r_slice=site2,
+                                tenantid=tenantid,
+                                overlay_info=tunnel_info
+                            )
+                    # Mark the site1 as unconfigured
+                    configured_slices.remove(site1)
+                    # Remove the interface from the overlay
+                    status_code = tunnel_mode.remove_slice_from_overlay(
+                        overlayid, overlay_name, deviceid,
+                        interface_name, tenantid, tunnel_info)
+                    if status_code != STATUS_OK:
+                        err = ('Cannot remove slice from overlay (overlay %s, '
+                            'device %s, slice %s, tenant %s)'
+                            % (overlay_name, deviceid,
+                                interface_name, tenantid))
+                        logging.warning(err)
+                        return OverlayServiceReply(
+                            status=Status(code=status_code, reason=err))
+                    # Add reverse action to the rollback stack
+                    rollback.push(
+                        func=tunnel_mode.add_slice_to_overlay,
+                        overlayid=overlayid,
+                        overlay_name=overlay_name,
+                        deviceid=deviceid,
+                        interface_name=interface_name,
+                        tenantid=tenantid,
+                        overlay_info=tunnel_info
+                    )
+                    # Check if the overlay and the tunnel mode
+                    # has already been deleted on the device
+                    _devices.remove(deviceid)
+                    if deviceid not in _devices:
+                        # Destroy overlay on the devices
+                        status_code = tunnel_mode.destroy_overlay(overlayid,
+                                                                overlay_name,
+                                                                overlay_type,
+                                                                tenantid,
+                                                                deviceid,
+                                                                tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot destroy overlay (overlay %s, device %s '
+                                'tenant %s)'
+                                % (overlay_name, deviceid, tenantid))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=status_code, reason=err))
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=tunnel_mode.init_overlay,
+                            overlayid=overlayid,
+                            overlay_name=overlay_name,
+                            overlay_type=overlay_type,
+                            tenantid=tenantid,
+                            deviceid=deviceid,
+                            overlay_info=tunnel_info
+                        )
+                    # Destroy tunnel mode on the devices
+                    counter = (srv6_sdn_controller_state
+                            .dec_and_get_tunnel_mode_counter(tunnel_name,
+                                                                deviceid,
+                                                                tenantid))
+                    if counter == 0:
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.get_and_inc_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                        status_code = tunnel_mode.destroy_tunnel_mode(
+                            deviceid, tenantid, tunnel_info)
+                        if status_code != STATUS_OK:
+                            err = ('Cannot destroy tunnel mode (device %s '
+                                'tenant %s)' % (deviceid, tenantid))
+                            logging.warning(err)
+                            return OverlayServiceReply(
+                                status=Status(code=status_code, reason=err))
+                    elif counter is None:
+                        err = 'Cannot decrease tunnel mode counter'
+                        logging.error(err)
+                        return OverlayServiceReply(
+                            status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                        reason=err))
+                    else:
+                        # Success
+                        # Add reverse action to the rollback stack
+                        rollback.push(
+                            func=srv6_sdn_controller_state.get_and_inc_tunnel_mode_counter,
+                            tunnel_name=tunnel_name,
+                            deviceid=deviceid,
+                            tenantid=tenantid
+                        )
+                # Save the overlay to the state
+                success = (srv6_sdn_controller_state
+                        .remove_many_slices_from_overlay(
+                            overlayid, tenantid, incoming_slices))
+                if success is None or success is False:
+                    err = 'Cannot update overlay in controller state'
+                    logging.error(err)
+                    return OverlayServiceReply(
+                        status=Status(code=STATUS_INTERNAL_SERVER_ERROR,
+                                    reason=err))
+                # Add reverse action to the rollback stack
+                rollback.push(
+                    func=srv6_sdn_controller_state.add_many_slices_to_overlay,
+                    overlayid=overlayid,
+                    tenantid=tenantid,
+                    slices=incoming_slices
+                )
+            # Success, commit all performed operations
+            rollback.commitAll()
         logging.info('All the intents have been processed successfully\n\n')
         # Create the response
         return OverlayServiceReply(
@@ -2481,7 +2717,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             # Push the new configuration
             if err == STATUS_OK:
                 logging.debug('The device %s has been configured successfully'
-                              % deviceid)
+                            % deviceid)
             else:
                 err = 'The device %s rejected the configuration' % deviceid
                 logging.error(err)
