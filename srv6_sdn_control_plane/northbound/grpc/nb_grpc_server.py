@@ -2614,6 +2614,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 tenantid=tenantid, is_initialized=False)
             self.stamp_controller.storage.set_reflector_inizialized(node_id=deviceid,
                 tenantid=tenantid, is_initialized=False)
+        return STATUS_OK
 
     def device_reconciliation(self, deviceid, tenantid):
         logging.debug('Device Reconcliation started')
