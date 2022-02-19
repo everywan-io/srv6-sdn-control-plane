@@ -1677,7 +1677,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 return status_code, err
             # Add reverse action to the rollback stack
             rollback.push(
-                func=srv6_sdn_controller_state.init_overlay_data,
+                func=tunnel_mode.init_overlay_data,
                 overlayid=overlayid,
                 overlay_name=overlay_name,
                 tenantid=tenantid,
