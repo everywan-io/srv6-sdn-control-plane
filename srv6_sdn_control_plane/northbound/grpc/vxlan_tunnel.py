@@ -405,7 +405,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_slice_from_overlay(self, overlayid, overlay_name, routerid,
-                                  interface_name, tenantid, overlay_info):
+                                  interface_name, tenantid, overlay_info, ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
         # retrive table ID
@@ -455,7 +455,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info):
+                      local_site, remote_site, tenantid, overlay_info, ignore_errors=False):
         # get devices ID
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
@@ -646,7 +646,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, routerid, overlay_info):
+                        overlay_type, tenantid, routerid, overlay_info, ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(routerid, tenantid)
         # get VNI
@@ -706,7 +706,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay_data(self, overlayid,
-                             overlay_name, tenantid, overlay_info):
+                             overlay_name, tenantid, overlay_info, ignore_errors=False):
         # release VNI
         srv6_sdn_controller_state.release_vni(overlay_name, tenantid)
         # release tableid
@@ -719,7 +719,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info):
+    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info, ignore_errors=False):
         # release VTEP IP address if no more VTEP on the EDGE device
         srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
         srv6_sdn_controller_state.release_vtep_ipv6(routerid, tenantid)
