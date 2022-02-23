@@ -49,6 +49,7 @@ setup(
         'cryptography>=3.0',
         'pycparser>=2.20',
         'bcrypt>=3.1.7',
-        'pynacl>=1.4.0'
+        'pynacl>=1.4.0',
+        'rollbackcontext==0.1.post2'
     ]
 )
