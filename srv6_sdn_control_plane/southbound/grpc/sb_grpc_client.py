@@ -1245,7 +1245,6 @@ class SRv6Manager:
         channel.close()
         # Return the response
         return response
-        
 
 
 class NetworkEventsListener:
@@ -1378,7 +1377,7 @@ if __name__ == "__main__":
     srv6_manager.addfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
     srv6_manager.create_ipaddr('10.0.14.45',12345, '10.100.0.1/24', 'vxlan100', '')
     srv6_manager.create_ipaddr('10.0.16.49',12345, '10.100.0.2/24', 'vxlan100', '')
-    
+
     srv6_manager.create_vrf_device('10.0.14.45', 12345, 'vrf1', 1, ['vxlan100', 'ewED1-eth1'])
     srv6_manager.create_vrf_device('10.0.16.49', 12345, 'vrf1', 1, ['vxlan100', 'ewED2-eth1'])
 
