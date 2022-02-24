@@ -131,7 +131,7 @@ class TenantIDAllocator:
                 tenantid = self.last_allocated_tenantid
 
             # If tenant ID is valid
-            if validate_tenantid(tenantid) == True:
+            if validate_tenantid(tenantid) is True:
                 # Assigne tenant ID to the token
                 self.token_to_tenantid[token] = str(tenantid)
                 return str(tenantid)
