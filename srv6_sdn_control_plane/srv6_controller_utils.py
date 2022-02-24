@@ -18,10 +18,6 @@ from ipaddress import IPv4Network, IPv6Network
 from ipaddress import AddressValueError
 # NetworkX dependencies
 from networkx.readwrite import json_graph
-# ipaddress dependencies
-from ipaddress import IPv6Interface
-from ipaddress import IPv6Network
-from ipaddress import IPv4Address
 
 # Main Routing Table
 MAIN_ROUTING_TABLE = 254
