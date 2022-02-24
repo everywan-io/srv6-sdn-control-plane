@@ -65,6 +65,7 @@ OSPF_DB_PATH = '/tmp/ospf_db'
 # Convert str to unicode
 LOOPBACK_PREFIX = text_type(LOOPBACK_PREFIX)
 
+
 def print_and_die(message, code=-2):
     print(message)
     exit(code)
