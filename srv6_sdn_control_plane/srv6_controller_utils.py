@@ -290,7 +290,7 @@ def validate_tunnel_mode(tunnel_mode, supported_tunnel_modes):
 def validate_port(port):
     return port >= 0 and port <= 65535
 
- 
+
 def validate_interface_type(interface_type):
     return interface_type in supported_interface_types
 
