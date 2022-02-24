@@ -5,8 +5,6 @@ from __future__ import print_function
 # General imports
 import configparser
 import time
-import os
-import sys
 import json
 import threading
 import logging
@@ -15,7 +13,7 @@ from argparse import ArgumentParser
 from threading import Thread
 from threading import Lock
 # ipaddress dependencies
-from ipaddress import IPv6Interface, IPv4Address
+from ipaddress import IPv6Interface
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
@@ -871,7 +869,7 @@ class SRv6Controller(object):
             self.start_network_events_listeners()
             # Wait 'period' seconds between two extractions
             try:
-                time.sleep(period)
+                time.sleep(self.period)
             except KeyboardInterrupt:
                 if self.VERBOSE:
                     print('*** Stopping Topology Information Extraction')
