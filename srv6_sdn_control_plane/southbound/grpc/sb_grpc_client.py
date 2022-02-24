@@ -9,11 +9,8 @@ from six import text_type
 import grpc
 import json
 import sys
-import os
 import logging
 from socket import AF_INET, AF_INET6
-from threading import Thread
-from srv6_sdn_proto.status_codes_pb2 import SbStatusCode
 
 
 ################## Setup these variables ##################
