@@ -2732,10 +2732,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             srv6_sdn_controller_state.reset_tunnel_mode_counter(tunnel_name=tunnel_name, deviceid=deviceid, tenantid=tenantid)
         srv6_sdn_controller_state.reset_created_tunnels(deviceid=deviceid, tenantid=tenantid)
         if self.stamp_controller is not None:
-            self.stamp_controller.storage.set_sender_inizialized(node_id=deviceid,
-                tenantid=tenantid, is_initialized=False)
-            self.stamp_controller.storage.set_reflector_inizialized(node_id=deviceid,
-                tenantid=tenantid, is_initialized=False)
+            if self.stamp_controller.storage.get_stamp_node(
+                    node_id=deviceid, tenantid=tenantid) is not None:
+                self.stamp_controller.storage.set_sender_inizialized(node_id=deviceid,
+                    tenantid=tenantid, is_initialized=False)
+                self.stamp_controller.storage.set_reflector_inizialized(node_id=deviceid,
+                    tenantid=tenantid, is_initialized=False)
         return STATUS_OK
 
     def device_reconciliation(self, deviceid, tenantid):
