@@ -101,7 +101,7 @@ def build_topo_graph(routers, stub_networks, transit_networks):
         # Add the node to the graph
         G.add_node(routerid, routerid=routerid, fillcolor='red',
                    style='filled', shape='ellipse',
-                   loopbacknet=loopbacknet, loopbackip=loopbackip, 
+                   loopbacknet=loopbacknet, loopbackip=loopbackip,
                    type='router')
     # Add stub networks to the graph
     for net in stub_networks.keys():
