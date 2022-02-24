@@ -695,7 +695,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=srv6_sdn_controller_state.create_ipaddr,
+                                    rollback_func=self.srv6_manager.create_ipaddr,
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=addr,
