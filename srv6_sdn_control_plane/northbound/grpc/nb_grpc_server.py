@@ -680,7 +680,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 nets.append(str(IPv6Interface(addr).network))
                                 response = self.srv6_manager.remove_ipaddr(
                                     devices[deviceid]['mgmtip'],
-                                    self.grpc_client_port, addrs=addr,
+                                    self.grpc_client_port, ip_addr=addr,
                                     net=str(IPv6Interface(addr).network),
                                     device=interface.name, family=AF_UNSPEC
                                 )
