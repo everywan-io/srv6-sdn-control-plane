@@ -51,6 +51,9 @@ setup(
         'bcrypt>=3.1.7',
         'pynacl>=1.4.0',
         #'rollbackcontext==0.1.post2',
-        'rollbackcontext-0.1-3 @ git+https://github.com/cscarpitta/rollbackcontext@porting-to-python3'
+        'rollbackcontext'
+    ],
+    dependency_links=[
+        'git+https://github.com/cscarpitta/rollbackcontext@porting-to-python3#egg=rollbackcontext'
     ]
 )
