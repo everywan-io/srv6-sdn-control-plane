@@ -3,25 +3,20 @@
 
 # General imports
 from __future__ import absolute_import, division, print_function
-from srv6_generators import SIDAllocator
 from sshutil.cmd import SSHCommand
-import sys
 import logging
 import telnetlib
 import socket
 import json
 import time
-import os
 import random
 from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv4Interface, IPv6Interface
 from ipaddress import IPv4Network, IPv6Network
-from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 # NetworkX dependencies
-import networkx as nx
 from networkx.readwrite import json_graph
 # ipaddress dependencies
 from ipaddress import IPv6Interface
