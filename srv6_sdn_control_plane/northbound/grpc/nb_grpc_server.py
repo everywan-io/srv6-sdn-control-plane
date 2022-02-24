@@ -1033,6 +1033,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                    'Error while updating the controller state')
             logging.error(err)
             return STATUS_INTERNAL_SERVER_ERROR, err
+        # Remove node from STAMP inventory
+        stamp_node = self.stamp_controller.storage.get_stamp_node(node_id=deviceid, tenantid=tenantid)
+        if stamp_node is not None:
+            try:
+                self.stamp_controller.remove_stamp_node(node_id=deviceid, tenantid=tenantid)
+            except Exception as err:  # TODO replace with a more specific exception
+                self.stamp_controller.storage.remove_stamp_node(node_id=deviceid, tenantid=tenantid)
         # Success
         logging.info('Device unregistered successfully\n\n')
         return STATUS_OK, 'OK'
