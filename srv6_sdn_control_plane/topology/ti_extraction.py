@@ -32,7 +32,6 @@ import time
 import telnetlib
 import re
 import socket
-import sys
 import errno
 import logging
 from argparse import ArgumentParser
