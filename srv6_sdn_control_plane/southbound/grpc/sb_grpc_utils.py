@@ -3,6 +3,7 @@ from ipaddress import IPv4Interface, IPv6Interface
 from ipaddress import AddressValueError
 from socket import AF_INET, AF_INET6
 
+
 # Utiliy function to check if the IP
 # is a valid IPv6 address
 def validate_ipv6_address(ip):
@@ -25,6 +26,7 @@ def validate_ipv4_address(ip):
         return True
     except AddressValueError:
         return False
+
 
 # Utiliy function to get the IP address family
 def getAddressFamily(ip):
