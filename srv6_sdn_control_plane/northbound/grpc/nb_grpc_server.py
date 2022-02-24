@@ -678,7 +678,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             for addr in interfaces[interface.name]['ipv6_addrs']:
                                 addrs.append(addr)
                                 nets.append(str(IPv6Interface(addr).network))
-                                response = self.srv6_manager.remove_many_ipaddr(
+                                response = self.srv6_manager.remove_ipaddr(
                                     devices[deviceid]['mgmtip'],
                                     self.grpc_client_port, addrs=addr,
                                     net=str(IPv6Interface(addr).network),
@@ -725,7 +725,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=srv6_sdn_controller_state.remove_ipaddr,
+                                    rollback_func=self.srv6_manager.remove_ipaddr,
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=ipv6_addr,
