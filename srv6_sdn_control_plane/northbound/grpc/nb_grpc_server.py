@@ -550,28 +550,29 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     deviceid = device.id
                     # Configure information
                     try:
-                        self.stamp_controller.remove_stamp_node(
-                            node_id=deviceid,
-                        )
-                        stamp_node = self.stamp_controller.get_stamp_node(node_id=device['deviceid'], tenantid=tenantid)
-                        # Add reverse action to the rollback stack
-                        rollback.push(
-                            func=exec_or_mark_device_inconsitent,
-                            rollback_func=self.stamp_controller.add_stamp_node,
-                            node_id=stamp_node['node_id'],
-                            node_name=stamp_node['node_name'],
-                            grpc_ip=stamp_node['grpc_ip'],
-                            grpc_port=stamp_node['grpc_port'],
-                            ip=stamp_node['ip'],
-                            sender_port=stamp_node['sender_port'],
-                            reflector_port=stamp_node['reflector_port'],
-                            interfaces=stamp_node['interfaces'],
-                            stamp_source_ipv6_address=stamp_node['stamp_source_ipv6_address'],
-                            is_sender=stamp_node['is_sender'],
-                            is_reflector=stamp_node['is_reflector'],
-                            deviceid=deviceid,
-                            tenantid=tenantid
-                        )
+                        stamp_node = self.stamp_controller.storage.get_stamp_node(node_id=deviceid, tenantid=tenantid)
+                        if stamp_node is not None:
+                            self.stamp_controller.remove_stamp_node(
+                                node_id=deviceid,
+                            )
+                            # Add reverse action to the rollback stack
+                            rollback.push(
+                                func=exec_or_mark_device_inconsitent,
+                                rollback_func=self.stamp_controller.add_stamp_node,
+                                node_id=stamp_node.node_id,
+                                node_name=stamp_node.node_name,
+                                grpc_ip=stamp_node.grpc_ip,
+                                grpc_port=stamp_node.grpc_port,
+                                ip=stamp_node.ip,
+                                sender_port=stamp_node.sender_udp_port,
+                                reflector_port=stamp_node.reflector_udp_port,
+                                interfaces=stamp_node.interfaces,
+                                stamp_source_ipv6_address=stamp_node.stamp_source_ipv6_address,
+                                is_sender=stamp_node.is_sender,
+                                is_reflector=stamp_node.is_reflector,
+                                deviceid=deviceid,
+                                tenantid=tenantid
+                            )
                     except NodeIdNotFoundError:
                         logging.debug(f'STAMP Node {deviceid} does not exist. '
                                     'Nothing to do.')
