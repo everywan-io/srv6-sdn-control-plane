@@ -334,7 +334,7 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             _id = int(IPv4Address(adv_router))
             # Generate the loopback prefix of the router
             loopback_prefix = IPv6Network(int(IPv6Address
-                                          (LOOPBACK_PREFIX)) | _id << 96)
+                                              (LOOPBACK_PREFIX)) | _id << 96)
             loopback_prefix = (IPv6Network(loopback_prefix)
                                .supernet(new_prefix=64))
             if IPv6Network(net).subnet_of(loopback_prefix):
@@ -342,7 +342,7 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
                 routerid_to_loopbacknet[adv_router] = net
                 # The loopback IP address is the first address of the loopback net
                 loopbackip = str(next(IPv6Network(net)
-                                 .hosts()))
+                                      .hosts()))
                 # Update mapping router ID to loopback IPs
                 routerid_to_loopbackip[adv_router] = loopbackip
                 # Remove it from stub networks
@@ -385,7 +385,7 @@ def topology_information_extraction(nodes, period, topo_file, topo_graph, ospf6d
     while (True):
         # Extract the topology information
         routers, stub_networks, transit_networks = \
-                        connect_and_extract_topology(nodes, OSPF_DB_PATH, ospf6d_pwd)
+            connect_and_extract_topology(nodes, OSPF_DB_PATH, ospf6d_pwd)
         # Build the topology graph
         G = build_topo_graph(routers, stub_networks, transit_networks)
         # Dump relevant information of the network graph
