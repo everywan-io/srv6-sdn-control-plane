@@ -24,6 +24,9 @@
 
 from __future__ import absolute_import, division, print_function
 
+# SRv6 dependencies
+from srv6_generators import SIDAllocator
+
 # General imports
 from sshutil.cmd import SSHCommand
 import sys
@@ -60,10 +63,10 @@ RESERVED_GRE_KEYS = []
 #PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-#if PROTO_FOLDER == '':
+# if PROTO_FOLDER == '':
 #    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
 #    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
+# if not os.path.exists(PROTO_FOLDER):
 #    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
 #          'points to a non existing folder\n')
 #    sys.exit(-2)
@@ -81,12 +84,9 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
 WAIT_TOPOLOGY_INTERVAL = 1
 
-# SRv6 dependencies
-from srv6_generators import SIDAllocator
 
 # Logger reference
 logger = logging.getLogger(__name__)
-
 
 
 # GRE key Allocator
@@ -146,6 +146,7 @@ class GREKeyAllocator:
         else:
             # The VPN has not an associated GRE key
             return -1
+
 
 class ControllerStateGRE:
     """This class maintains the state of the SRv6 controller and provides some
