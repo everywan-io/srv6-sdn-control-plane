@@ -39,7 +39,7 @@ import errno
 #SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
 
 # Add path of gRPC APIs
-#sys.path.append(SB_GRPC_CLIENT_PATH)
+# sys.path.append(SB_GRPC_CLIENT_PATH)
 
 # SRv6 dependencies
 from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import SRv6Manager
@@ -58,7 +58,7 @@ def interface_discovery(router, port, verbose=False):
     # Extract interfaces
     if verbose:
         print('\n*********** Extracting interfaces from %s ***********'
-               % router)
+              % router)
     try:
         interfaces = srv6_manager.get_interface(router, port)
     except grpc.RpcError as e:
@@ -83,7 +83,8 @@ def interface_discovery_many(routers, verbose=False):
         data = router.split('-')
         router = data[0]
         port = data[1]
-        router_to_interfaces[router] = interface_discovery(router, port, verbose)
+        router_to_interfaces[router] = interface_discovery(
+            router, port, verbose)
     # Print interfaces
     if verbose:
         pp = pprint.PrettyPrinter()
@@ -162,7 +163,7 @@ if __name__ == '__main__':
     # Check interfaces file, dataplane and gRPC client paths
     if SOUTHBOUND_INTERFACE not in SUPPORTED_SB_INTERFACES:
         print('Error: %s interface not yet supported or invalid\n'
-                'Supported southbound interfaces: %s' % SUPPORTED_SB_INTERFACES)
+              'Supported southbound interfaces: %s' % SUPPORTED_SB_INTERFACES)
         sys.exit(-2)
     # Extract interface info
     if len(nodes) > 0:
