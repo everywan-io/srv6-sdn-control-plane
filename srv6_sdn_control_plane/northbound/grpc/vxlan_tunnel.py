@@ -51,8 +51,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -67,7 +68,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot add interface %s to the VRF %s in %s' % (interface_name, vrf_name, mgmt_ip_site)
+                'Cannot add interface %s to the VRF %s in %s',
+                interface_name,
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create routes for subnets
@@ -90,7 +94,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot set route for %s (gateway %s) in %s ' % (subnet, gateway, mgmt_ip_site)
+                        'Cannot set route for %s (gateway %s) in %s ',
+                        subnet,
+                        gateway,
+                        mgmt_ip_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
@@ -120,8 +127,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # transport protocol
         transport_proto = srv6_sdn_controller_state.get_overlay(
@@ -233,7 +241,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning(
-                    'Cannot add FDB entry %s for VTEP %s in %s' % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site)
+                    'Cannot add FDB entry %s for VTEP %s in %s',
+                    wan_ip_remote_site,
+                    vtep_name,
+                    mgmt_ip_local_site
                 )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
@@ -250,7 +261,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning(
-                    'Cannot add FDB entry %s for VTEP %s in %s' % (wan_ip_local_site, vtep_name, mgmt_ip_remote_site)
+                    'Cannot add FDB entry %s for VTEP %s in %s',
+                    wan_ip_local_site,
+                    vtep_name,
+                    mgmt_ip_remote_site
                 )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
@@ -269,7 +283,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot set route for %s in %s ' % (lan_sub_remote_site, mgmt_ip_local_site)
+                        'Cannot set route for %s in %s ',
+                        lan_sub_remote_site,
+                        mgmt_ip_local_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
@@ -288,7 +304,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot set route for %s in %s ' % (lan_sub_local_site, mgmt_ip_remote_site)
+                        'Cannot set route for %s in %s ',
+                        lan_sub_local_site,
+                        mgmt_ip_remote_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
@@ -379,8 +397,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -420,7 +439,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot create VTEP %s in %s' % (vtep_name, mgmt_ip_site)
+                'Cannot create VTEP %s in %s',
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # set VTEP IP address
@@ -434,7 +455,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot set IP %s for VTEP %s in %s' % (vtep_ip_site, vtep_name, mgmt_ip_site)
+                'Cannot set IP %s for VTEP %s in %s',
+                vtep_ip_site,
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # create VRF and add the VTEP interface
@@ -448,7 +472,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot create VRF %s in %s' % (vrf_name, mgmt_ip_site)
+                'Cannot create VRF %s in %s',
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
@@ -469,8 +495,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Cannot get a new table ID for the overlay %s' % overlayid
+            logger.error(
+                'Cannot get a new table ID for the overlay %s',
+                overlayid
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
@@ -506,8 +533,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # Remove IP routes from the VRF
         # This step is optional, because the routes are
@@ -533,7 +561,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot remove route for %s (gateway %s) in %s ' % (subnet, gateway, mgmt_ip_site)
+                        'Cannot remove route for %s (gateway %s) in %s ',
+                        subnet,
+                        gateway,
+                        mgmt_ip_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # retrive VRF name
@@ -549,7 +580,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot remove interface %s from VRF %s in %s' % (interface_name, vrf_name, mgmt_ip_site)
+                'Cannot remove interface %s from VRF %s in %s',
+                interface_name,
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
@@ -611,8 +645,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
@@ -660,7 +695,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning(
-                            'Cannot remove route to %s in %s' % (lan_sub_local_site, mgmt_ip_remote_site)
+                            'Cannot remove route to %s in %s',
+                            lan_sub_local_site,
+                            mgmt_ip_remote_site
                         )
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
@@ -684,7 +721,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning(
-                            'Cannot remove route to %s in %s' % (lan_sub_remote_site, mgmt_ip_local_site)
+                            'Cannot remove route to %s in %s',
+                            lan_sub_remote_site,
+                            mgmt_ip_local_site
                         )
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
@@ -703,7 +742,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot remove FDB entry %s in %s' % (wan_ip_local_site, mgmt_ip_remote_site)
+                        'Cannot remove FDB entry %s in %s',
+                        wan_ip_local_site,
+                        mgmt_ip_remote_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary
@@ -723,7 +764,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     if response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning(
-                            'Cannot remove FDB entry %s in %s' % (wan_ip_remote_site, mgmt_ip_local_site)
+                            'Cannot remove FDB entry %s in %s',
+                            wan_ip_remote_site,
+                            mgmt_ip_local_site
                         )
                         return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                     # update local dictionary
@@ -806,8 +849,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -835,7 +879,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot remove the address %s of VTEP %s in %s' % (vtep_ip_site, vtep_name, mgmt_ip_site)
+                'Cannot remove the address %s of VTEP %s in %s',
+                vtep_ip_site,
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # remove VTEP
@@ -847,7 +894,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot remove VTEP %s in %s' % (vtep_name, mgmt_ip_site)
+                'Cannot remove VTEP %s in %s',
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # remove VRF device
@@ -859,7 +908,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot remove VRF %s in %s' % (vrf_name, mgmt_ip_site)
+                'Cannot remove VRF %s in %s',
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
@@ -873,8 +924,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         success = srv6_sdn_controller_state.release_tableid(
             overlayid, tenantid)
         if success is not True:
-            logging.error(
-                'Error while releasing table ID associated to the overlay %s (tenant %s)' % (overlayid, tenantid)
+            logger.error(
+                'Error while releasing table ID associated to the overlay %s (tenant %s)',
+                overlayid,
+                tenantid
             )
         # Success
         return NbStatusCode.STATUS_OK
@@ -890,7 +943,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         raise NotImplementedError
 
     def add_slice_to_overlay_reconciliation(self, overlayid, overlay_name,
-                             routerid, interface_name, tenantid, overlay_info):
+                                            routerid, interface_name, tenantid, overlay_info):
         # Get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
             routerid, tenantid
@@ -900,8 +953,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -916,7 +970,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot add interface %s to the VRF %s in %s' % (interface_name, vrf_name, mgmt_ip_site)
+                'Cannot add interface %s to the VRF %s in %s',
+                interface_name,
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create routes for subnets
@@ -939,14 +996,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot set route for %s (gateway %s) in %s ' % (subnet, gateway, mgmt_ip_site)
+                        'Cannot set route for %s (gateway %s) in %s ',
+                        subnet,
+                        gateway,
+                        mgmt_ip_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
     def create_tunnel_reconciliation_l(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info):
+                                       local_site, remote_site, tenantid, overlay_info):
         # get devices ID
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
@@ -969,8 +1029,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VTEP IP remote site and local site
         if overlay_type == OverlayType.IPv6Overlay:
@@ -1057,7 +1118,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             if response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning(
-                    'Cannot add FDB entry %s for VTEP %s in %s' % (wan_ip_remote_site, vtep_name, mgmt_ip_local_site)
+                    'Cannot add FDB entry %s for VTEP %s in %s',
+                    wan_ip_remote_site,
+                    vtep_name,
+                    mgmt_ip_local_site
                 )
                 return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
             # update local dictionary
@@ -1076,7 +1140,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 if response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
-                        'Cannot set route for %s in %s ' % (lan_sub_remote_site, mgmt_ip_local_site)
+                        'Cannot set route for %s in %s ',
+                        lan_sub_remote_site,
+                        mgmt_ip_local_site
                     )
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
                 # update local dictionary with the new subnet in overlay
@@ -1119,12 +1185,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel_reconciliation_r(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info):
+                                       local_site, remote_site, tenantid, overlay_info):
         # Nothing to do
         return NbStatusCode.STATUS_OK
 
     def init_overlay_reconciliation(self, overlayid, overlay_name,
-                     overlay_type, tenantid, routerid, overlay_info):
+                                    overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
         mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
             routerid, tenantid
@@ -1138,8 +1204,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid
         )
         if tableid is None:
-            logging.error(
-                'Error while getting table ID assigned to the overlay %s' % overlayid
+            logger.error(
+                'Error while getting table ID assigned to the overlay %s',
+                overlayid
             )
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
@@ -1179,7 +1246,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot create VTEP %s in %s' % (vtep_name, mgmt_ip_site)
+                'Cannot create VTEP %s in %s',
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # set VTEP IP address
@@ -1193,7 +1262,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot set IP %s for VTEP %s in %s' % (vtep_ip_site, vtep_name, mgmt_ip_site)
+                'Cannot set IP %s for VTEP %s in %s',
+                vtep_ip_site,
+                vtep_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # create VRF and add the VTEP interface
@@ -1207,14 +1279,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
-                'Cannot create VRF %s in %s' % (vrf_name, mgmt_ip_site)
+                'Cannot create VRF %s in %s',
+                vrf_name,
+                mgmt_ip_site
             )
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Success
         return NbStatusCode.STATUS_OK
 
     def init_overlay_data_reconciliation(self, overlayid,
-                          overlay_name, tenantid, overlay_info):
+                                         overlay_name, tenantid, overlay_info):
         # Success
         return NbStatusCode.STATUS_OK
 
