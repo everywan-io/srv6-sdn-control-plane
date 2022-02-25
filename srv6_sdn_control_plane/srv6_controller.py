@@ -19,10 +19,16 @@ import networkx as nx
 from networkx.readwrite import json_graph
 import srv6_sdn_control_plane.srv6_controller_utils as utils
 # SRv6 dependencies
-from srv6_sdn_control_plane.interface_discovery.interface_discovery import interface_discovery
-from srv6_sdn_control_plane.topology.ti_extraction import draw_topo
-from srv6_sdn_control_plane.topology.ti_extraction import connect_and_extract_topology
-from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
+from srv6_sdn_control_plane.interface_discovery.interface_discovery import (
+    interface_discovery
+)
+from srv6_sdn_control_plane.topology.ti_extraction import (
+    draw_topo,
+    connect_and_extract_topology
+)
+from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import (
+    NetworkEventsListener
+)
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 # pymerang dependencies
@@ -691,8 +697,12 @@ class SRv6Controller(object):
                 # Convert links
                 json_topology['links'] = [
                     {
-                        'source_id': json_topology['nodes'][link['source']]['id'],
-                        'target_id': json_topology['nodes'][link['target']]['id'],
+                        'source_id': json_topology['nodes'][
+                            link['source']
+                        ]['id'],
+                        'target_id': json_topology['nodes'][
+                            link['target']
+                        ]['id'],
                         'source': link['source'],
                         'target': link['target'],
                         'source_ip': link['source_ip'],
@@ -731,14 +741,16 @@ class SRv6Controller(object):
             print(('*** Routers: %s' % list(self.topoInfo['routers'].keys())))
             print(('*** Nets: %s' % list(self.topoInfo['nets'].keys())))
         # Topology graph
-        #G = nx.Graph()
+        # G = nx.Graph()
         # Build topology graph
         with self.topo_graph_lock:
             # Remove all nodes and edges from the graph
             self.G.clear()
             # Build nodes list
             # Add routers to the graph
-            for routerid, router_info in list(self.topoInfo['routers'].items()):
+            for routerid, router_info in list(
+                self.topoInfo['routers'].items()
+            ):
                 # Extract loopback net
                 loopbacknet = router_info.get('loopbacknet')
                 # Extract loopback IP
@@ -851,7 +863,8 @@ class SRv6Controller(object):
                 # No graph to draw
                 continue
             # Wait for minimum interval between two topology dumps
-            wait = self.last_dump_timestamp + self.min_interval_between_topo_dumps - time.time()
+            wait = self.last_dump_timestamp + \
+                self.min_interval_between_topo_dumps - time.time()
             if wait > 0:
                 time.sleep(wait)
             with self.topo_graph_lock:
@@ -943,11 +956,11 @@ class SRv6Controller(object):
         )
         server.serve()
 
-    def start_nb_server(self, grpc_server_ip, grpc_server_port, grpc_client_port,
-                        nb_secure, server_key, server_certificate, sb_secure,
-                        client_certificate, southbound_interface, topo_graph,
-                        vpn_dict, devices, vpn_file, controller_state,
-                        verbose):
+    def start_nb_server(self, grpc_server_ip, grpc_server_port,
+                        grpc_client_port, nb_secure, server_key,
+                        server_certificate, sb_secure, client_certificate,
+                        southbound_interface, topo_graph, vpn_dict, devices,
+                        vpn_file, controller_state, verbose):
         nb_server, nb_interface_ref = nb_grpc_server.create_server(
             grpc_server_ip=grpc_server_ip,
             grpc_server_port=grpc_server_port,
@@ -1106,7 +1119,8 @@ def parseArguments():
         action='store',
         dest='sb_interface',
         default=DEFAULT_SB_INTERFACE,
-        help='Select a southbound interface from this list: %s' % SUPPORTED_SB_INTERFACES
+        help='Select a southbound interface from this list: %s'
+        % SUPPORTED_SB_INTERFACES
     )
     # Northbound interface
     parser.add_argument(
@@ -1114,7 +1128,8 @@ def parseArguments():
         action='store',
         dest='nb_interface',
         default=DEFAULT_NB_INTERFACE,
-        help='Select a northbound interface from this list: %s' % SUPPORTED_NB_INTERFACES
+        help='Select a northbound interface from this list: %s'
+        % SUPPORTED_NB_INTERFACES
     )
     # IP address of the northbound gRPC server
     parser.add_argument(
@@ -1436,12 +1451,14 @@ def _main():
     if sb_interface not in SUPPORTED_SB_INTERFACES:
         utils.print_and_die(
             'Error: %s interface not yet supported or invalid\n'
-            'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES)
+            'Supported southbound interfaces: %s' %
+            (sb_interface, SUPPORTED_SB_INTERFACES)
         )
     if nb_interface not in SUPPORTED_NB_INTERFACES:
         utils.print_and_die(
             'Error: %s interface not yet supported or invalid\n'
-            'Supported northbound interfaces: %s' % (nb_interface, SUPPORTED_NB_INTERFACES)
+            'Supported northbound interfaces: %s' %
+            (nb_interface, SUPPORTED_NB_INTERFACES)
         )
     # Create a new SRv6 controller
     srv6_controller = SRv6Controller(
