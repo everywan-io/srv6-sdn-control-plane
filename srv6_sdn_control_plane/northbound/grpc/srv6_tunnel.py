@@ -33,6 +33,7 @@ from srv6_sdn_control_plane.northbound.grpc import srv6_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
+from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
