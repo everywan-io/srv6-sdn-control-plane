@@ -351,7 +351,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     interfaces=[ip6tnl_rx_ifname],
                     op='del_interfaces',
                     deviceid=r_slice['deviceid'],
-                    tenantid=tenantidf
+                    tenantid=tenantid
                 )
                 # Get SID prefix length
                 public_prefix_length = srv6_sdn_controller_state.get_public_prefix_length(
