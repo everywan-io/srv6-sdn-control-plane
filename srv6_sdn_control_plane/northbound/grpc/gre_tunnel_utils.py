@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -30,17 +31,17 @@ import logging
 # Reserved GRE keys
 RESERVED_GRE_KEYS = []
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Path of the proto files
-#PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
+# PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
 
-###########################################################
+# ###########################################################
 
 
 # Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+# script_path = os.path.dirname(os.path.abspath(__file__))
+# PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
 # if PROTO_FOLDER == '':
@@ -135,7 +136,7 @@ class ControllerStateGRE:
 
     def __init__(self, controller_state):
         # Create Table IDs allocator
-        #self.tableid_allocator = controller_state.tableid_allocator
+        # self.tableid_allocator = controller_state.tableid_allocator
         self.tableid_allocator = None
         # Create GRE keys allocator
         self.gre_key_allocator = GREKeyAllocator()
@@ -162,8 +163,12 @@ class ControllerStateGRE:
 
     # Get a new GRE key
     def get_new_gre_key(self, vpn_name, tenantid, local_router, remote_router):
-        return self.gre_key_allocator.get_new_gre_key(vpn_name, tenantid, local_router, remote_router)
+        return self.gre_key_allocator.get_new_gre_key(
+            vpn_name, tenantid, local_router, remote_router
+        )
 
     # Get a new table ID
     def get_gre_key(self, vpn_name, local_router, remote_router):
-        return self.gre_key_allocator.get_gre_key(vpn_name, local_router, remote_router)
+        return self.gre_key_allocator.get_gre_key(
+            vpn_name, local_router, remote_router
+        )
