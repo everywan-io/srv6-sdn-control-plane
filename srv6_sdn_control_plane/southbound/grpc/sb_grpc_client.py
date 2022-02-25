@@ -89,7 +89,8 @@ class SRv6Manager:
         if secure is True:
             if certificate is None:
                 print(
-                    'Error: "certificate" variable cannot be None in secure mode'
+                    'Error: "certificate" variable cannot be None in secure '
+                    'mode'
                 )
                 sys.exit(-2)
             self.CERTIFICATE = certificate
@@ -177,7 +178,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def create_srv6_explicit_path_from_json(self, server_ip, server_port, data):
+    def create_srv6_explicit_path_from_json(self, server_ip, server_port,
+                                            data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
@@ -264,7 +266,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def remove_srv6_explicit_path_from_json(self, server_ip, server_port, data):
+    def remove_srv6_explicit_path_from_json(self, server_ip, server_port,
+                                            data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
@@ -344,23 +347,25 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def get_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                           action, device, localsid_table,
-                                           nexthop="", table=-1,
-                                           interface="", segments=[]):
+    def get_srv6_local_processing_function(self, server_ip, server_port,
+                                           segment, action, device,
+                                           localsid_table, nexthop="",
+                                           table=-1, interface="",
+                                           segments=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                              action, device, localsid_table,
-                                              nexthop="", table=-1,
-                                              interface="", segments=[]):
+    def update_srv6_local_processing_function(self, server_ip, server_port,
+                                              segment, action, device,
+                                              localsid_table, nexthop="",
+                                              table=-1, interface="",
+                                              segments=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                              localsid_table, action="",
-                                              nexthop="", table=-1,
+    def remove_srv6_local_processing_function(self, server_ip, server_port,
+                                              segment, localsid_table,
+                                              action="", nexthop="", table=-1,
                                               interface="", segments=[],
                                               device=""):
         # Create message request
@@ -401,7 +406,8 @@ class SRv6Manager:
 
     # CRUD VRF Device
 
-    def create_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
+    def create_vrf_device(self, server_ip, server_port, name, table,
+                          interfaces=[]):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -431,11 +437,13 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def get_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
+    def get_vrf_device(self, server_ip, server_port, name, table,
+                       interfaces=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[], op=None):
+    def update_vrf_device(self, server_ip, server_port, name, table=-1,
+                          interfaces=[], op=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -451,7 +459,12 @@ class SRv6Manager:
         # Create a new interfaces
         device.interfaces.extend(interfaces)
         # Operation
-        if op not in [None, 'replace_interfaces', 'add_interfaces', 'del_interfaces']:
+        if op not in [
+            None,
+            'replace_interfaces',
+            'add_interfaces',
+            'del_interfaces'
+        ]:
             print('Invalid operation type: %s' % op)
             return None
         if op is not None:
@@ -537,8 +550,9 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def update_interface(self, server_ip, server_port, ifindex=None, name=None, macaddr=None,
-                         ipaddrs=None, state=None, ospf_adv=None):
+    def update_interface(self, server_ip, server_port, ifindex=None,
+                         name=None, macaddr=None, ipaddrs=None, state=None,
+                         ospf_adv=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -679,9 +693,9 @@ class SRv6Manager:
 
     # CRUD IP Route
 
-    def create_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def create_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
@@ -728,16 +742,16 @@ class SRv6Manager:
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def update_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def remove_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
@@ -823,7 +837,8 @@ class SRv6Manager:
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='', family=-1):
+    def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='',
+                      family=-1):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -925,7 +940,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def remove_gre_interface(self, server_ip, server_port, name, local=None, remote=None):
+    def remove_gre_interface(self, server_ip, server_port, name, local=None,
+                             remote=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1092,8 +1108,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port,
-                    vxlan_group=None):
+    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id,
+                    vxlan_port, vxlan_group=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1209,7 +1225,8 @@ class SRv6Manager:
         return response
 
     def create_ip_tunnel_interface(self, server_ip, server_port, ifname,
-                                   local_addr='', remote_addr='', tunnel_type='ipip'):
+                                   local_addr='', remote_addr='',
+                                   tunnel_type='ipip'):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1284,7 +1301,8 @@ class NetworkEventsListener:
         if secure is True:
             if certificate is None:
                 print(
-                    'Error: "certificate" variable cannot be None in secure mode'
+                    'Error: "certificate" variable cannot be None in secure '
+                    'mode'
                 )
                 sys.exit(-2)
             self.CERTIFICATE = certificate
