@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -340,7 +341,8 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             if IPv6Network(net).subnet_of(loopback_prefix):
                 # The net is the loopback network of adv_router
                 routerid_to_loopbacknet[adv_router] = net
-                # The loopback IP address is the first address of the loopback net
+                # The loopback IP address is the first address of the loopback
+                # net
                 loopbackip = str(next(IPv6Network(net)
                                       .hosts()))
                 # Update mapping router ID to loopback IPs
@@ -380,7 +382,8 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
     return routers_dict, stub_networks, transit_networks
 
 
-def topology_information_extraction(nodes, period, topo_file, topo_graph, ospf6d_pwd):
+def topology_information_extraction(nodes, period, topo_file, topo_graph,
+                                    ospf6d_pwd):
     # Topology Information Extraction
     while (True):
         # Extract the topology information
