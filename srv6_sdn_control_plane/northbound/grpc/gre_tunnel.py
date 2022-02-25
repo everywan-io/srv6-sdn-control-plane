@@ -25,27 +25,18 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
-from six import text_type
-from argparse import ArgumentParser
-from concurrent import futures
 import logging
-import time
-import grpc
-import os
-import sys
 from socket import AF_UNSPEC
 from socket import AF_INET
 from socket import AF_INET6
 # ipaddress dependencies
 from ipaddress import IPv6Interface, IPv4Interface
-from ipaddress import IPv6Network, IPv4Network, IPv4Address
 # SRv6 dependencies
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.northbound.grpc import gre_tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
-from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import gre_interface_pb2
 
