@@ -8,7 +8,9 @@ from bson.objectid import ObjectId
 from srv6_sdn_control_plane.northbound.grpc import tunnel_mode
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
 from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
-from srv6_sdn_controller_state import srv6_sdn_controller_state
+from srv6_sdn_controller_state import (
+    srv6_sdn_controller_state as storage_helper
+)
 from srv6_sdn_proto.status_codes_pb2 import NbStatusCode, SbStatusCode
 from socket import AF_INET, AF_INET6
 
@@ -34,7 +36,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Create SRv6 Manager
         self.srv6_manager = sb_grpc_client.SRv6Manager()
         # Get connection to MongoDB
-        client = srv6_sdn_controller_state.get_mongodb_session()
+        client = storage_helper.get_mongodb_session()
         # Get the database
         db = client.EveryWan
         # Get collection
@@ -43,11 +45,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def add_slice_to_overlay(self, overlayid, overlay_name,
                              routerid, interface_name, tenantid, overlay_info):
         # Get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -76,7 +78,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create routes for subnets
         # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = storage_helper.get_ip_subnets(
             routerid, tenantid, interface_name
         )
         for subnet in subnets:
@@ -109,21 +111,21 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
         # get management IP address for local and remote site
-        mgmt_ip_local_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_local_site = storage_helper.get_router_mgmtip(
             local_site['deviceid'], tenantid
         )
-        mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_remote_site = storage_helper.get_router_mgmtip(
             remote_site['deviceid'], tenantid
         )
         # get subnet for local and remote site
-        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_remote_sites = storage_helper.get_ip_subnets(
             id_remote_site, tenantid, remote_site['interface_name']
         )
-        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_local_sites = storage_helper.get_ip_subnets(
             id_local_site, tenantid, local_site['interface_name']
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -132,54 +134,54 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 overlayid
             )
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # get VTEP IP remote site and local site
         if transport_proto == 'ipv6':
-            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_remote_site = storage_helper.get_vtep_ipv6(
                 id_remote_site, tenantid
             )
-            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_local_site = storage_helper.get_vtep_ipv6(
                 id_local_site, tenantid
             )
         elif transport_proto == 'ipv4':
-            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_remote_site = storage_helper.get_vtep_ip(
                 id_remote_site, tenantid
             )
-            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_local_site = storage_helper.get_vtep_ip(
                 id_local_site, tenantid
             )
         else:
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = storage_helper.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
-        wan_intf_local_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_local_site = storage_helper.get_wan_interfaces(
             id_local_site, tenantid
         )[0]
-        wan_intf_remote_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_remote_site = storage_helper.get_wan_interfaces(
             id_remote_site, tenantid
         )[0]
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # get external IP address for loal site and remote site
         if transport_proto == 'ipv6':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv6_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv6_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         elif transport_proto == 'ipv4':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv4_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv4_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         else:
@@ -385,15 +387,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay(self, overlayid, overlay_name,
                      overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # Get vxlan port set by user
-        vxlan_port_site = srv6_sdn_controller_state.get_tenant_vxlan_port(
+        vxlan_port_site = storage_helper.get_tenant_vxlan_port(
             tenantid
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -404,26 +406,26 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface
-        wan_intf_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_site = storage_helper.get_wan_interfaces(
             routerid, tenantid
         )[0]
         # get VNI for the overlay
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = storage_helper.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_site = storage_helper.get_vtep_ipv6(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_site = storage_helper.get_vtep_ip(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # crete VTEP interface
@@ -483,15 +485,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay_data(self, overlayid,
                           overlay_name, tenantid, overlay_info):
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(
+        vni = storage_helper.get_vni(
             overlay_name, tenantid
         )
         if vni == -1:
-            vni = srv6_sdn_controller_state.get_new_vni(
+            vni = storage_helper.get_new_vni(
                 overlay_name, tenantid
             )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_new_tableid(
+        tableid = storage_helper.get_new_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -505,18 +507,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def init_tunnel_mode(self, routerid, tenantid, overlay_info):
         # get VTEP IP address for site1
-        vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+        vtep_ip_site = storage_helper.get_vtep_ip(
             routerid, tenantid
         )
         if vtep_ip_site == -1:
-            vtep_ip_site = srv6_sdn_controller_state.get_new_vtep_ip(
+            vtep_ip_site = storage_helper.get_new_vtep_ip(
                 routerid, tenantid
             )
-        vtep_ipv6_site = srv6_sdn_controller_state.get_vtep_ipv6(
+        vtep_ipv6_site = storage_helper.get_vtep_ipv6(
             routerid, tenantid
         )
         if vtep_ipv6_site == -1:
-            vtep_ipv6_site = srv6_sdn_controller_state.get_new_vtep_ipv6(
+            vtep_ipv6_site = storage_helper.get_new_vtep_ipv6(
                 routerid, tenantid
             )
         # Success
@@ -525,11 +527,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def remove_slice_from_overlay(self, overlayid, overlay_name, routerid,
                                   interface_name, tenantid, overlay_info, ignore_errors=False):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # retrive table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -544,7 +546,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # to the add_slice_to_overlay function
         #
         # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = storage_helper.get_ip_subnets(
             routerid, tenantid, interface_name
         )
         for subnet in subnets:
@@ -595,53 +597,53 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(
+        vni = storage_helper.get_vni(
             overlay_name, tenantid
         )
         # get management IP local and remote site
-        mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_remote_site = storage_helper.get_router_mgmtip(
             id_remote_site, tenantid
         )
-        mgmt_ip_local_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_local_site = storage_helper.get_router_mgmtip(
             id_local_site, tenantid
         )
         # get WAN interface name for local site and remote site
-        wan_intf_local_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_local_site = storage_helper.get_wan_interfaces(
             id_local_site, tenantid
         )[0]
-        wan_intf_remote_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_remote_site = storage_helper.get_wan_interfaces(
             id_remote_site, tenantid
         )[0]
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # get external IP address for local site and remote site
         if transport_proto == 'ipv6':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv6_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv6_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         elif transport_proto == 'ipv4':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv4_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv4_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         else:
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get local and remote subnet
-        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_local_sites = storage_helper.get_ip_subnets(
             id_local_site, tenantid, local_site['interface_name']
         )
-        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_remote_sites = storage_helper.get_ip_subnets(
             id_remote_site, tenantid, remote_site['interface_name']
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -839,13 +841,13 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def destroy_overlay(self, overlayid, overlay_name,
                         overlay_type, tenantid, routerid, overlay_info, ignore_errors=False):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = storage_helper.get_vni(overlay_name, tenantid)
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -859,12 +861,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_site = storage_helper.get_vtep_ipv6(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_site = storage_helper.get_vtep_ip(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET
@@ -919,9 +921,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def destroy_overlay_data(self, overlayid,
                              overlay_name, tenantid, overlay_info, ignore_errors=False):
         # release VNI
-        srv6_sdn_controller_state.release_vni(overlay_name, tenantid)
+        storage_helper.release_vni(overlay_name, tenantid)
         # release tableid
-        success = srv6_sdn_controller_state.release_tableid(
+        success = storage_helper.release_tableid(
             overlayid, tenantid)
         if success is not True:
             logger.error(
@@ -934,8 +936,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
 
     def destroy_tunnel_mode(self, routerid, tenantid, overlay_info, ignore_errors=False):
         # release VTEP IP address if no more VTEP on the EDGE device
-        srv6_sdn_controller_state.release_vtep_ip(routerid, tenantid)
-        srv6_sdn_controller_state.release_vtep_ipv6(routerid, tenantid)
+        storage_helper.release_vtep_ip(routerid, tenantid)
+        storage_helper.release_vtep_ipv6(routerid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -945,11 +947,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def add_slice_to_overlay_reconciliation(self, overlayid, overlay_name,
                                             routerid, interface_name, tenantid, overlay_info):
         # Get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -978,7 +980,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # Create routes for subnets
         # get subnet for local and remote site
-        subnets = srv6_sdn_controller_state.get_ip_subnets(
+        subnets = storage_helper.get_ip_subnets(
             routerid, tenantid, interface_name
         )
         for subnet in subnets:
@@ -1011,21 +1013,21 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
         # get management IP address for local and remote site
-        mgmt_ip_local_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_local_site = storage_helper.get_router_mgmtip(
             local_site['deviceid'], tenantid
         )
-        mgmt_ip_remote_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_remote_site = storage_helper.get_router_mgmtip(
             remote_site['deviceid'], tenantid
         )
         # get subnet for local and remote site
-        lan_sub_remote_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_remote_sites = storage_helper.get_ip_subnets(
             id_remote_site, tenantid, remote_site['interface_name']
         )
-        lan_sub_local_sites = srv6_sdn_controller_state.get_ip_subnets(
+        lan_sub_local_sites = storage_helper.get_ip_subnets(
             id_local_site, tenantid, local_site['interface_name']
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -1035,47 +1037,47 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             )
         # get VTEP IP remote site and local site
         if overlay_type == OverlayType.IPv6Overlay:
-            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_remote_site = storage_helper.get_vtep_ipv6(
                 id_remote_site, tenantid
             )
-            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_local_site = storage_helper.get_vtep_ipv6(
                 id_local_site, tenantid
             )
         else:
-            vtep_ip_remote_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_remote_site = storage_helper.get_vtep_ip(
                 id_remote_site, tenantid
             )
-            vtep_ip_local_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_local_site = storage_helper.get_vtep_ip(
                 id_local_site, tenantid
             )
         # get VNI
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = storage_helper.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
-        wan_intf_local_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_local_site = storage_helper.get_wan_interfaces(
             id_local_site, tenantid
         )[0]
-        wan_intf_remote_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_remote_site = storage_helper.get_wan_interfaces(
             id_remote_site, tenantid
         )[0]
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # get external IP address for loal site and remote site
         if transport_proto == 'ipv6':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv6_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv6_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv6_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         elif transport_proto == 'ipv4':
-            wan_ip_local_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_local_site = storage_helper.get_ext_ipv4_addresses(
                 id_local_site, tenantid, wan_intf_local_site
             )[0].split("/")[0]
-            wan_ip_remote_site = srv6_sdn_controller_state.get_ext_ipv4_addresses(
+            wan_ip_remote_site = storage_helper.get_ext_ipv4_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         else:
@@ -1192,15 +1194,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def init_overlay_reconciliation(self, overlayid, overlay_name,
                                     overlay_type, tenantid, routerid, overlay_info):
         # get device management IP address
-        mgmt_ip_site = srv6_sdn_controller_state.get_router_mgmtip(
+        mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
         )
         # Get vxlan port set by user
-        vxlan_port_site = srv6_sdn_controller_state.get_tenant_vxlan_port(
+        vxlan_port_site = storage_helper.get_tenant_vxlan_port(
             tenantid
         )
         # get table ID
-        tableid = srv6_sdn_controller_state.get_tableid(
+        tableid = storage_helper.get_tableid(
             overlayid, tenantid
         )
         if tableid is None:
@@ -1211,26 +1213,26 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VRF name
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface
-        wan_intf_site = srv6_sdn_controller_state.get_wan_interfaces(
+        wan_intf_site = storage_helper.get_wan_interfaces(
             routerid, tenantid
         )[0]
         # get VNI for the overlay
-        vni = srv6_sdn_controller_state.get_vni(overlay_name, tenantid)
+        vni = storage_helper.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ipv6(
+            vtep_ip_site = storage_helper.get_vtep_ipv6(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
-            vtep_ip_site = srv6_sdn_controller_state.get_vtep_ip(
+            vtep_ip_site = storage_helper.get_vtep_ip(
                 routerid, tenantid
             )
             vtep_ip_family = AF_INET
         # transport protocol
-        transport_proto = srv6_sdn_controller_state.get_overlay(
+        transport_proto = storage_helper.get_overlay(
             overlayid=overlayid, tenantid=tenantid
         )['transport_proto']
         # crete VTEP interface
