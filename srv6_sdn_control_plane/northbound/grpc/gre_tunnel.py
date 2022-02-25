@@ -116,7 +116,7 @@ class GRETunnel(tunnel_mode.TunnelMode):
             type = gre_interface_pb2.IP6GRE
             family = AF_INET6
         else:
-            print('Type not supported')
+            logger.error('Type not supported')
             return
 
         routerid = remote_site.routerid
@@ -176,7 +176,7 @@ class GRETunnel(tunnel_mode.TunnelMode):
             for addr in ipv6_addrs:
                 addrs.append(addr)
                 nets.append(str(IPv6Interface(addr).network))
-            print('remove ip addr', addrs, nets, local_site.interface_name)
+
             response = self.srv6_manager.remove_many_ipaddr(
                 local_router,
                 self.grpc_client_port,
@@ -218,8 +218,6 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 net = IPv6Interface(local_site.interface_ip).network.__str__()
             else:
                 logging.warning('Invalid IP address')
-
-            print('FamILY', family)
 
             response = self.srv6_manager.create_ipaddr(
                 local_router,
