@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,7 +72,8 @@ class GRETunnel(tunnel_mode.TunnelMode):
             controller_state
         )
 
-    def _add_site_to_overlay(self, overlay_name, tenantid, local_site, remote_site, overlay_info):
+    def _add_site_to_overlay(self, overlay_name, tenantid, local_site,
+                             remote_site, overlay_info):
         # Get the VPN type
         overlay_type = self.controller_state_gre.overlay_type[overlay_name]
 
@@ -84,17 +86,19 @@ class GRETunnel(tunnel_mode.TunnelMode):
 
         tableid = self.controller_state_gre.get_tableid(overlay_name)
 
+        vrf_interfaces = self.controller_state_gre.vrf_interfaces
+
         vrf_name = 'vrf-%s' % overlay_name
-        if local_router not in self.controller_state_gre.vrf_interfaces:
-            self.controller_state_gre.vrf_interfaces[local_router] = dict()
-        if vrf_name not in self.controller_state_gre.vrf_interfaces[local_router]:
+        if local_router not in vrf_interfaces:
+            vrf_interfaces[local_router] = dict()
+        if vrf_name not in vrf_interfaces[local_router]:
             self.srv6_manager.create_vrf_device(
                 local_router,
                 self.grpc_client_port,
                 name=vrf_name,
                 table=tableid
             )
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name] = set(
+            vrf_interfaces[local_router][vrf_name] = set(
             )
 
         gre_key = self.controller_state_gre.get_gre_key(
@@ -115,10 +119,9 @@ class GRETunnel(tunnel_mode.TunnelMode):
             print('Type not supported')
             return
 
-        #routerid = int(IPv4Address(remote_site.routerid))
         routerid = remote_site.routerid
         gre_name = 'gre-%s-%s-%s' % (overlay_name, routerid[:3], gre_key)
-        if gre_name not in self.controller_state_gre.vrf_interfaces[local_router][vrf_name]:
+        if gre_name not in vrf_interfaces[local_router][vrf_name]:
             self.srv6_manager.create_gre_interface(
                 local_router,
                 self.grpc_client_port,
@@ -134,14 +137,16 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 name=vrf_name,
                 interfaces=[gre_name]
             )
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(
+            vrf_interfaces[local_router][vrf_name].add(
                 gre_name
             )
-        if local_site.interface_name not in self.controller_state_gre.vrf_interfaces[local_router][vrf_name]:
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(
+        if local_site.interface_name not in vrf_interfaces[
+            local_router
+        ][vrf_name]:
+            vrf_interfaces[local_router][vrf_name].add(
                 local_site.interface_name
             )
-            interfaces = self.controller_state_gre.vrf_interfaces[local_router][vrf_name]
+            interfaces = vrf_interfaces[local_router][vrf_name]
             self.srv6_manager.update_vrf_device(
                 local_router,
                 self.grpc_client_port,
@@ -203,9 +208,13 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 logger.warning('Cannot disable OSPF advertisements')
                 return status_codes_pb2.STATUS_INTERNAL_ERROR
             # Add IP address to the interface
-            if srv6_controller_utils.getAddressFamily(local_site.interface_ip) == AF_INET:
+            if srv6_controller_utils.getAddressFamily(
+                local_site.interface_ip
+            ) == AF_INET:
                 net = IPv4Interface(local_site.interface_ip).network.__str__()
-            elif srv6_controller_utils.getAddressFamily(local_site.interface_ip) == AF_INET6:
+            elif srv6_controller_utils.getAddressFamily(
+                local_site.interface_ip
+            ) == AF_INET6:
                 net = IPv6Interface(local_site.interface_ip).network.__str__()
             else:
                 logging.warning('Invalid IP address')
@@ -228,11 +237,16 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 return status_codes_pb2.STATUS_INTERNAL_ERROR
 
         for subnet in remote_site.subnets:
-            self.srv6_manager.create_iproute(local_router, self.grpc_client_port,
-                                             destination=subnet, out_interface=gre_name,
-                                             table=tableid)
+            self.srv6_manager.create_iproute(
+                local_router,
+                self.grpc_client_port,
+                destination=subnet,
+                out_interface=gre_name,
+                table=tableid
+            )
 
-    def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid, overlay_info):
+    def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid,
+                           overlay_info):
         self.controller_state_gre.get_new_tableid(overlay_name, tenantid)
 
         self.controller_state_gre.overlay_type[overlay_name] = overlay_type
@@ -248,7 +262,9 @@ class GRETunnel(tunnel_mode.TunnelMode):
         raise NotImplementedError
 
     def add_site_to_overlay(self, overlay_name, tenantid, site, overlay_info):
-        tunneled_interfaces = self.controller_state_gre.interfaces_in_vpn[overlay_name]
+        tunneled_interfaces = self.controller_state_gre.interfaces_in_vpn[
+            overlay_name
+        ]
         for site2 in tunneled_interfaces:
             self._add_site_to_overlay(
                 overlay_name, tenantid, site, site2, overlay_info
@@ -259,7 +275,8 @@ class GRETunnel(tunnel_mode.TunnelMode):
 
         self.controller_state_gre.interfaces_in_vpn[overlay_name].add(site)
 
-    def remove_site_from_overlay(self, overlay_name, tenantid, site, overlay_info):
+    def remove_site_from_overlay(self, overlay_name, tenantid, site,
+                                 overlay_info):
         raise NotImplementedError
 
     def get_overlays(self):
