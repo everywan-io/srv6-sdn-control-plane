@@ -45,12 +45,12 @@ from ipaddress import IPv6Network
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Loopback prefix used by the routers
 LOOPBACK_PREFIX = 'fcff::'
 
-###########################################################
+# ###########################################################
 
 
 # Default topology file
@@ -505,8 +505,8 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO)
     # Debug settings
-    #SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
-    #logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
+    # SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
+    # logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     # Get topology filename
