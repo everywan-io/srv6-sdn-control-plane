@@ -70,7 +70,7 @@ supported_interface_types = [
 
 
 def generate_token():
-    # Example of token: J4Ie2QKOHz3IVSQs8yA1ahAKfl1ySrtVxGVuT6NkuElGfC8cm55rFhyzkc79pjSLOsr7zKOu7rkMgNMyEHlze4iXVNoX1AtifuieNrrW4rrCroScpGdQqHMETJU46okS
+    # Example of token: J4Ie2QKOHz3IVSQs8yA1ahAKfl1ySrtVxGVuT6NkuElGfC8cm55rFhyzkc79pjSLOsr7zKOu7rkMgNMyEHlze4iXVNoX1AtifuieNrrW4rrCroScpGdQqHMETJU46okS  # noqa: E501
     seq = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
     token = ''
     for _ in range(0, 128):
@@ -189,7 +189,9 @@ class TableIDAllocator:
             else:
                 # If not, get a new table ID
                 self.last_allocated_tableid[tenantid] += 1
-                while self.last_allocated_tableid[tenantid] in RESERVED_TABLEIDS:
+                while self.last_allocated_tableid[
+                    tenantid
+                ] in RESERVED_TABLEIDS:
                     # Skip reserved table IDs
                     self.last_allocated_tableid[tenantid] += 1
                 tableid = self.last_allocated_tableid[tenantid]
@@ -348,7 +350,8 @@ supported_overlay_types = [OverlayType.IPv4Overlay, OverlayType.IPv6Overlay]
 '''
 class VPN:
     # tableid=-1):
-    def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid, tunnel_mode):
+    def __init__(self, tunnel_id, vpn_name, vpn_type, interfaces, tenantid,
+                 tunnel_mode):
         # Tunnel ID
         self.id = tunnel_id
         # VPN name
@@ -373,7 +376,8 @@ class VPN:
 
     def removeInterface(self, routerid, interface_name):
         for interface in self.interfaces.copy():
-            if interface.routerid == routerid and interface.interface_name == interface_name:
+            if interface.routerid == routerid and \
+                    interface.interface_name == interface_name:
                 self.interfaces.remove(interface)
                 return True
         return False
@@ -387,7 +391,8 @@ class VPN:
 
     def getInterface(self, routerid, interface_name):
         for interface in self.interfaces:
-            if interface.routerid == routerid and interface.interface_name == interface_name:
+            if interface.routerid == routerid and \
+                    interface.interface_name == interface_name:
                 return interface
         return None
 
