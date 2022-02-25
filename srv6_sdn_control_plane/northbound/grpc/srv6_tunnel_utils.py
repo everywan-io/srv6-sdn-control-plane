@@ -29,7 +29,6 @@ import logging
 from ipaddress import IPv6Interface
 from ipaddress import IPv6Network
 # SRv6 dependencies
-#from srv6_sdn_control_plane.northbound.grpc import nb_grpc_utils
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 
 ZEBRA_PORT = 2601
