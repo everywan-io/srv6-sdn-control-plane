@@ -68,9 +68,9 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
         self.controller_state_srv6 = \
             srv6_tunnel_utils.ControllerStateSRv6(controller_state)
 
-    def exec_or_mark_device_inconsitent(self, deviceid, tenantid, *args, **kwargs):
+    def exec_or_mark_device_inconsitent(self, rollback_func, deviceid, tenantid, *args, **kwargs):
         try:
-            if func(*args, **kwargs) != SbStatusCode.STATUS_SUCCESS:
+            if rollback_func(*args, **kwargs) != SbStatusCode.STATUS_SUCCESS:
                 # Change device state to reboot required
                 success = srv6_sdn_controller_state.change_device_state(
                     deviceid=deviceid, tenantid=tenantid,
