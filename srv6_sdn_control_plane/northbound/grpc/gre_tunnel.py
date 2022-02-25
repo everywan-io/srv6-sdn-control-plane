@@ -76,14 +76,20 @@ class GRETunnel(tunnel_mode.TunnelMode):
         # Initialize controller state
         self.controller_state = controller_state
         # Initialize controller state
-        self.controller_state_gre = gre_tunnel_utils.ControllerStateGRE(controller_state)
+        self.controller_state_gre = gre_tunnel_utils.ControllerStateGRE(
+            controller_state
+        )
 
     def _add_site_to_overlay(self, overlay_name, tenantid, local_site, remote_site, overlay_info):
         # Get the VPN type
         overlay_type = self.controller_state_gre.overlay_type[overlay_name]
 
-        local_router = self.controller_state.get_router_mgmtip(local_site.routerid, tenantid)
-        remote_router = self.controller_state.get_router_mgmtip(remote_site.routerid, tenantid)
+        local_router = self.controller_state.get_router_mgmtip(
+            local_site.routerid, tenantid
+        )
+        remote_router = self.controller_state.get_router_mgmtip(
+            remote_site.routerid, tenantid
+        )
 
         tableid = self.controller_state_gre.get_tableid(overlay_name)
 
@@ -92,15 +98,21 @@ class GRETunnel(tunnel_mode.TunnelMode):
             self.controller_state_gre.vrf_interfaces[local_router] = dict()
         if vrf_name not in self.controller_state_gre.vrf_interfaces[local_router]:
             self.srv6_manager.create_vrf_device(
-                local_router, self.grpc_client_port,
-                name=vrf_name, table=tableid
+                local_router,
+                self.grpc_client_port,
+                name=vrf_name,
+                table=tableid
             )
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name] = set()
-        
+            self.controller_state_gre.vrf_interfaces[local_router][vrf_name] = set(
+            )
 
-        gre_key = self.controller_state_gre.get_gre_key(overlay_name, local_router, remote_router)
+        gre_key = self.controller_state_gre.get_gre_key(
+            overlay_name, local_router, remote_router
+        )
         if gre_key == -1:
-            gre_key = self.controller_state_gre.get_new_gre_key(overlay_name, tenantid, local_router, remote_router)
+            gre_key = self.controller_state_gre.get_new_gre_key(
+                overlay_name, tenantid, local_router, remote_router
+            )
 
         if overlay_type == OverlayType.IPv4Overlay:
             type = gre_interface_pb2.GRE
@@ -112,28 +124,36 @@ class GRETunnel(tunnel_mode.TunnelMode):
             print('Type not supported')
             return
 
-
         #routerid = int(IPv4Address(remote_site.routerid))
         routerid = remote_site.routerid
         gre_name = 'gre-%s-%s-%s' % (overlay_name, routerid[:3], gre_key)
         if gre_name not in self.controller_state_gre.vrf_interfaces[local_router][vrf_name]:
             self.srv6_manager.create_gre_interface(
-                local_router, self.grpc_client_port,
-                name=gre_name, local=local_router,
-                remote=remote_router, key=gre_key,
+                local_router,
+                self.grpc_client_port,
+                name=gre_name,
+                local=local_router,
+                remote=remote_router,
+                key=gre_key,
                 type=type
             )
             self.srv6_manager.update_vrf_device(
-                local_router, self.grpc_client_port,
+                local_router,
+                self.grpc_client_port,
                 name=vrf_name,
                 interfaces=[gre_name]
             )
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(gre_name)
+            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(
+                gre_name
+            )
         if local_site.interface_name not in self.controller_state_gre.vrf_interfaces[local_router][vrf_name]:
-            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(local_site.interface_name)
+            self.controller_state_gre.vrf_interfaces[local_router][vrf_name].add(
+                local_site.interface_name
+            )
             interfaces = self.controller_state_gre.vrf_interfaces[local_router][vrf_name]
             self.srv6_manager.update_vrf_device(
-                local_router, self.grpc_client_port,
+                local_router,
+                self.grpc_client_port,
                 name=vrf_name,
                 interfaces=interfaces
             )
@@ -162,8 +182,12 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 nets.append(str(IPv6Interface(addr).network))
             print('remove ip addr', addrs, nets, local_site.interface_name)
             response = self.srv6_manager.remove_many_ipaddr(
-                local_router, self.grpc_client_port, addrs=addrs, nets=nets,
-                device=local_site.interface_name, family=AF_UNSPEC
+                local_router,
+                self.grpc_client_port,
+                addrs=addrs,
+                nets=nets,
+                device=local_site.interface_name,
+                family=AF_UNSPEC
             )
             if response != status_codes_pb2.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
@@ -173,11 +197,16 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 return status_codes_pb2.STATUS_INTERNAL_ERROR
             # Don't advertise the private customer network
             response = self.srv6_manager.update_interface(
-                local_router, self.grpc_client_port, name=local_site.interface_name, ospf_adv=False
+                local_router,
+                self.grpc_client_port,
+                name=local_site.interface_name,
+                ospf_adv=False
             )
             if response == status_codes_pb2.STATUS_UNREACHABLE_OSPF6D:
                 # If the operation has failed, report an error message
-                logger.warning('Cannot disable OSPF advertisements: ospf6d not running')
+                logger.warning(
+                    'Cannot disable OSPF advertisements: ospf6d not running'
+                )
             elif response != status_codes_pb2.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning('Cannot disable OSPF advertisements')
@@ -191,10 +220,14 @@ class GRETunnel(tunnel_mode.TunnelMode):
                 logging.warning('Invalid IP address')
 
             print('FamILY', family)
-            
+
             response = self.srv6_manager.create_ipaddr(
-                local_router, self.grpc_client_port, ip_addr=local_site.interface_ip,
-                device=local_site.interface_name, net=net, family=family
+                local_router,
+                self.grpc_client_port,
+                ip_addr=local_site.interface_ip,
+                device=local_site.interface_name,
+                net=net,
+                family=family
             )
             if response != status_codes_pb2.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
@@ -208,7 +241,6 @@ class GRETunnel(tunnel_mode.TunnelMode):
                                              destination=subnet, out_interface=gre_name,
                                              table=tableid)
 
-
     def create_overlay_net(self, overlay_name, overlay_type, sites, tenantid, overlay_info):
         self.controller_state_gre.get_new_tableid(overlay_name, tenantid)
 
@@ -217,7 +249,9 @@ class GRETunnel(tunnel_mode.TunnelMode):
         self.controller_state_gre.interfaces_in_vpn[overlay_name] = set()
 
         for site in sites:
-            self.add_site_to_overlay(overlay_name, tenantid, site, overlay_info)
+            self.add_site_to_overlay(
+                overlay_name, tenantid, site, overlay_info
+            )
 
     def remove_overlay_net(self, overlay_name, tenantid, overlay_info):
         raise NotImplementedError
@@ -225,9 +259,13 @@ class GRETunnel(tunnel_mode.TunnelMode):
     def add_site_to_overlay(self, overlay_name, tenantid, site, overlay_info):
         tunneled_interfaces = self.controller_state_gre.interfaces_in_vpn[overlay_name]
         for site2 in tunneled_interfaces:
-            self._add_site_to_overlay(overlay_name, tenantid, site, site2, overlay_info)
-            self._add_site_to_overlay(overlay_name, tenantid, site2, site, overlay_info)
-            
+            self._add_site_to_overlay(
+                overlay_name, tenantid, site, site2, overlay_info
+            )
+            self._add_site_to_overlay(
+                overlay_name, tenantid, site2, site, overlay_info
+            )
+
         self.controller_state_gre.interfaces_in_vpn[overlay_name].add(site)
 
     def remove_site_from_overlay(self, overlay_name, tenantid, site, overlay_info):
