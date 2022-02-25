@@ -321,14 +321,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             {
                 '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
-                'created_tunnel.tunnel_key': {'$ne': tunnel_local.get('tunnel_key')}
+                'created_tunnel.tunnel_key': {
+                    '$ne': tunnel_local.get('tunnel_key')
+                }
             },
             {
                 '$push': {
                     'created_tunnel': {
                         'tunnel_key': tunnel_local.get('tunnel_key'),
                         'reach_subnets': tunnel_local.get('reach_subnets'),
-                        'fdb_entry_config': tunnel_local.get('fdb_entry_config')
+                        'fdb_entry_config': tunnel_local.get(
+                            'fdb_entry_config'
+                        )
                     }
                 }
             }
@@ -338,12 +342,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 {
                     '_id': ObjectId(overlayid),
                     'tenantid': tenantid,
-                    'created_tunnel.tunnel_key': tunnel_local.get('tunnel_key')
+                    'created_tunnel.tunnel_key': tunnel_local.get(
+                        'tunnel_key'
+                    )
                 },
                 {
                     '$set': {
-                        'created_tunnel.$.reach_subnets': tunnel_local.get('reach_subnets'),
-                        'created_tunnel.$.fdb_entry_config': tunnel_local.get('fdb_entry_config')
+                        'created_tunnel.$.reach_subnets': tunnel_local.get(
+                            'reach_subnets'
+                        ),
+                        'created_tunnel.$.fdb_entry_config': tunnel_local.get(
+                            'fdb_entry_config'
+                        )
                     }
                 },
                 upsert=True
@@ -353,14 +363,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             {
                 '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
-                'created_tunnel.tunnel_key': {'$ne': tunnel_remote.get('tunnel_key')}
+                'created_tunnel.tunnel_key': {
+                    '$ne': tunnel_remote.get('tunnel_key')
+                }
             },
             {
                 '$push': {
                     'created_tunnel': {
                         'tunnel_key': tunnel_remote.get('tunnel_key'),
                         'reach_subnets': tunnel_remote.get('reach_subnets'),
-                        'fdb_entry_config': tunnel_remote.get('fdb_entry_config')
+                        'fdb_entry_config': tunnel_remote.get(
+                            'fdb_entry_config'
+                        )
                     }
                 }
             }
@@ -375,8 +389,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 },
                 {
                     '$set': {
-                        'created_tunnel.$.reach_subnets': tunnel_remote.get('reach_subnets'),
-                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get('fdb_entry_config')
+                        'created_tunnel.$.reach_subnets': tunnel_remote.get(
+                            'reach_subnets'
+                        ),
+                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get(
+                            'fdb_entry_config'
+                        )
                     }
                 },
                 upsert=True
@@ -525,7 +543,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_slice_from_overlay(self, overlayid, overlay_name, routerid,
-                                  interface_name, tenantid, overlay_info, ignore_errors=False):
+                                  interface_name, tenantid, overlay_info,
+                                  ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
@@ -592,7 +611,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info, ignore_errors=False):
+                      local_site, remote_site, tenantid, overlay_info,
+                      ignore_errors=False):
         # get devices ID
         id_local_site = local_site['deviceid']
         id_remote_site = remote_site['deviceid']
@@ -815,8 +835,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 },
                 {
                     '$set': {
-                        'created_tunnel.$.reach_subnets': tunnel_local.get('reach_subnets'),
-                        'created_tunnel.$.fdb_entry_config': tunnel_local.get('fdb_entry_config')
+                        'created_tunnel.$.reach_subnets': tunnel_local.get(
+                            'reach_subnets'
+                        ),
+                        'created_tunnel.$.fdb_entry_config': tunnel_local.get(
+                            'fdb_entry_config'
+                        )
                     }
                 }
             )
@@ -825,12 +849,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 {
                     '_id': ObjectId(overlayid),
                     'tenantid': tenantid,
-                    'created_tunnel.tunnel_key': tunnel_remote.get('tunnel_key')
+                    'created_tunnel.tunnel_key': tunnel_remote.get(
+                        'tunnel_key'
+                    )
                 },
                 {
                     '$set': {
-                        'created_tunnel.$.reach_subnets': tunnel_remote.get('reach_subnets'),
-                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get('fdb_entry_config')
+                        'created_tunnel.$.reach_subnets': tunnel_remote.get(
+                            'reach_subnets'
+                        ),
+                        'created_tunnel.$.fdb_entry_config': tunnel_remote.get(
+                            'fdb_entry_config'
+                        )
                     }
                 }
             )
@@ -839,7 +869,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, routerid, overlay_info, ignore_errors=False):
+                        overlay_type, tenantid, routerid, overlay_info,
+                        ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
@@ -919,7 +950,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay_data(self, overlayid,
-                             overlay_name, tenantid, overlay_info, ignore_errors=False):
+                             overlay_name, tenantid, overlay_info,
+                             ignore_errors=False):
         # release VNI
         storage_helper.release_vni(overlay_name, tenantid)
         # release tableid
@@ -927,14 +959,16 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             overlayid, tenantid)
         if success is not True:
             logger.error(
-                'Error while releasing table ID associated to the overlay %s (tenant %s)',
+                'Error while releasing table ID associated to the overlay %s '
+                '(tenant %s)',
                 overlayid,
                 tenantid
             )
         # Success
         return NbStatusCode.STATUS_OK
 
-    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info, ignore_errors=False):
+    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info,
+                            ignore_errors=False):
         # release VTEP IP address if no more VTEP on the EDGE device
         storage_helper.release_vtep_ip(routerid, tenantid)
         storage_helper.release_vtep_ipv6(routerid, tenantid)
@@ -945,7 +979,8 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         raise NotImplementedError
 
     def add_slice_to_overlay_reconciliation(self, overlayid, overlay_name,
-                                            routerid, interface_name, tenantid, overlay_info):
+                                            routerid, interface_name, tenantid,
+                                            overlay_info):
         # Get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
@@ -1007,8 +1042,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel_reconciliation_l(self, overlayid, overlay_name, overlay_type,
-                                       local_site, remote_site, tenantid, overlay_info):
+    def create_tunnel_reconciliation_l(self, overlayid, overlay_name,
+                                       overlay_type, local_site, remote_site,
+                                       tenantid, overlay_info):
         # get devices ID
         id_remote_site = remote_site['deviceid']
         id_local_site = local_site['deviceid']
@@ -1016,15 +1052,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         mgmt_ip_local_site = storage_helper.get_router_mgmtip(
             local_site['deviceid'], tenantid
         )
-        mgmt_ip_remote_site = storage_helper.get_router_mgmtip(
-            remote_site['deviceid'], tenantid
-        )
         # get subnet for local and remote site
         lan_sub_remote_sites = storage_helper.get_ip_subnets(
             id_remote_site, tenantid, remote_site['interface_name']
-        )
-        lan_sub_local_sites = storage_helper.get_ip_subnets(
-            id_local_site, tenantid, local_site['interface_name']
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -1040,24 +1070,15 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             vtep_ip_remote_site = storage_helper.get_vtep_ipv6(
                 id_remote_site, tenantid
             )
-            vtep_ip_local_site = storage_helper.get_vtep_ipv6(
-                id_local_site, tenantid
-            )
         else:
             vtep_ip_remote_site = storage_helper.get_vtep_ip(
                 id_remote_site, tenantid
-            )
-            vtep_ip_local_site = storage_helper.get_vtep_ip(
-                id_local_site, tenantid
             )
         # get VNI
         vni = storage_helper.get_vni(overlay_name, tenantid)
         # get VTEP name
         vtep_name = 'vxlan-%s' % (vni)
         # get WAN interface name for local site and remote site
-        wan_intf_local_site = storage_helper.get_wan_interfaces(
-            id_local_site, tenantid
-        )[0]
         wan_intf_remote_site = storage_helper.get_wan_interfaces(
             id_remote_site, tenantid
         )[0]
@@ -1067,16 +1088,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         )['transport_proto']
         # get external IP address for loal site and remote site
         if transport_proto == 'ipv6':
-            wan_ip_local_site = storage_helper.get_ext_ipv6_addresses(
-                id_local_site, tenantid, wan_intf_local_site
-            )[0].split("/")[0]
             wan_ip_remote_site = storage_helper.get_ext_ipv6_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
         elif transport_proto == 'ipv4':
-            wan_ip_local_site = storage_helper.get_ext_ipv4_addresses(
-                id_local_site, tenantid, wan_intf_local_site
-            )[0].split("/")[0]
             wan_ip_remote_site = storage_helper.get_ext_ipv4_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
             )[0].split("/")[0]
@@ -1084,7 +1099,6 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # DB key creation, one per tunnel direction
         key_local_to_remote = '%s-%s' % (id_local_site, id_remote_site)
-        key_remote_to_local = '%s-%s' % (id_remote_site, id_local_site)
         # get tunnel dictionaries from DB
         dictionary_local = self.overlays.find_one(
             {
@@ -1157,14 +1171,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             {
                 '_id': ObjectId(overlayid),
                 'tenantid': tenantid,
-                'created_tunnel.tunnel_key': {'$ne': tunnel_local.get('tunnel_key')}
+                'created_tunnel.tunnel_key': {
+                    '$ne': tunnel_local.get('tunnel_key')
+                }
             },
             {
                 '$push': {
                     'created_tunnel': {
                         'tunnel_key': tunnel_local.get('tunnel_key'),
                         'reach_subnets': tunnel_local.get('reach_subnets'),
-                        'fdb_entry_config': tunnel_local.get('fdb_entry_config')
+                        'fdb_entry_config': tunnel_local.get(
+                            'fdb_entry_config'
+                        )
                     }
                 }
             }
@@ -1178,21 +1196,27 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 },
                 {
                     '$set': {
-                        'created_tunnel.$.reach_subnets': tunnel_local.get('reach_subnets'),
-                        'created_tunnel.$.fdb_entry_config': tunnel_local.get('fdb_entry_config')
+                        'created_tunnel.$.reach_subnets': tunnel_local.get(
+                            'reach_subnets'
+                        ),
+                        'created_tunnel.$.fdb_entry_config': tunnel_local.get(
+                            'fdb_entry_config'
+                        )
                     }
                 },
                 upsert=True)
         # Success
         return NbStatusCode.STATUS_OK
 
-    def create_tunnel_reconciliation_r(self, overlayid, overlay_name, overlay_type,
-                                       local_site, remote_site, tenantid, overlay_info):
+    def create_tunnel_reconciliation_r(self, overlayid, overlay_name,
+                                       overlay_type, local_site, remote_site,
+                                       tenantid, overlay_info):
         # Nothing to do
         return NbStatusCode.STATUS_OK
 
     def init_overlay_reconciliation(self, overlayid, overlay_name,
-                                    overlay_type, tenantid, routerid, overlay_info):
+                                    overlay_type, tenantid, routerid,
+                                    overlay_info):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             routerid, tenantid
@@ -1290,10 +1314,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def init_overlay_data_reconciliation(self, overlayid,
-                                         overlay_name, tenantid, overlay_info):
+                                         overlay_name, tenantid,
+                                         overlay_info):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def init_tunnel_mode_reconciliation(self, routerid, tenantid, overlay_info):
+    def init_tunnel_mode_reconciliation(self, routerid, tenantid,
+                                        overlay_info):
         # Success
         return NbStatusCode.STATUS_OK
