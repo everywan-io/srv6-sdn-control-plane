@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -32,11 +33,12 @@ import pprint
 import sys
 import errno
 
-# Path to the southbound gRPC-based client#SB_GRPC_CLIENT_PATH = '../southbound/grpc'
+# Path to the southbound gRPC-based client
+# #SB_GRPC_CLIENT_PATH = '../southbound/grpc'
 
 # Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
+# script_path = os.path.dirname(os.path.abspath(__file__))
+# SB_GRPC_CLIENT_PATH = os.path.join(script_path, SB_GRPC_CLIENT_PATH)
 
 # Add path of gRPC APIs
 # sys.path.append(SB_GRPC_CLIENT_PATH)
@@ -57,8 +59,9 @@ def interface_discovery(router, port, verbose=False):
     srv6_manager = SRv6Manager()
     # Extract interfaces
     if verbose:
-        print('\n*********** Extracting interfaces from %s ***********'
-              % router)
+        print(
+            '\n*********** Extracting interfaces from %s ***********' % router
+        )
     try:
         interfaces = srv6_manager.get_interface(router, port)
     except grpc.RpcError as e:
@@ -74,7 +77,7 @@ def interface_discovery(router, port, verbose=False):
 
 def interface_discovery_many(routers, verbose=False):
     # Get a reference to SRv6Manager
-    srv6_manager = SRv6Manager()
+    # srv6_manager = SRv6Manager()
     # Mapping router to interfaces list
     router_to_interfaces = dict()
     # Extract interfaces
@@ -97,7 +100,8 @@ def dump_interfaces(interfaces, output_filename):
     if output_filename is None or output_filename == '':
         print('Error: no valid output_filename provided to dump_interfaces()')
         return
-    # Check if the parent folder of DEFAULT_INTERFACES_FILE exists, if not create it
+    # Check if the parent folder of DEFAULT_INTERFACES_FILE exists, if not
+    # create it
     if not os.path.exists(os.path.dirname(output_filename)):
         try:
             os.makedirs(os.path.dirname(output_filename))
@@ -132,7 +136,8 @@ def parseArguments():
     )
     # Southbound interface
     parser.add_argument(
-        '-s', '--sb-interface', action='store', dest='sb_interface', default='grpc',
+        '-s', '--sb-interface', action='store', dest='sb_interface',
+        default='grpc',
         help='Southbound interface used to interact with the nodes, chosen '
         'from this list [grpc]'
     )
