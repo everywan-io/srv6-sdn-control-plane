@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -154,7 +155,8 @@ class ControllerStateSRv6:
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
             # - Public IPv6 address
-            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private
+            #   range
             sid_prefix = storage_helper.get_sid_prefix(
                 deviceid, tenantid
             )
@@ -194,7 +196,8 @@ class ControllerStateSRv6:
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
             # - Public IPv6 address
-            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private
+            #   range
             sid_prefix = storage_helper.get_sid_prefix(
                 deviceid, tenantid
             )
@@ -232,7 +235,8 @@ class ControllerStateSRv6:
             # We have not a public subnet from which we can allocate SIDs, so
             # we are forced to use two SIDs:
             # - Public IPv6 address
-            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private range
+            # - Decap SID (e.g. End.DT4 or End.DT6) allocated from the private
+            #   range
             wan_interface = storage_helper.get_wan_interfaces(
                 deviceid, tenantid
             )[0]
