@@ -26,23 +26,28 @@ class TunnelMode(object):
         pass
 
     def destroy_overlay_data(self, overlayid,
-                             overlay_name, tenantid, overlay_info, ignore_errors=False):
+                             overlay_name, tenantid, overlay_info,
+                             ignore_errors=False):
         pass
 
-    def destroy_tunnel_mode(self, deviceid, tenantid, overlay_info, ignore_errors=False):
+    def destroy_tunnel_mode(self, deviceid, tenantid, overlay_info,
+                            ignore_errors=False):
         pass
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, deviceid, overlay_info, ignore_errors=False):
+                        overlay_type, tenantid, deviceid, overlay_info,
+                        ignore_errors=False):
         pass
 
     def remove_slice_from_overlay(self, overlayid, overlay_name,
                                   deviceid, interface_name,
-                                  tenantid, overlay_info, ignore_errors=False):
+                                  tenantid, overlay_info,
+                                  ignore_errors=False):
         pass
 
     def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      l_slice, r_slice, tenantid, overlay_info, ignore_errors=False):
+                      l_slice, r_slice, tenantid, overlay_info,
+                      ignore_errors=False):
         pass
 
     def get_overlays(self):

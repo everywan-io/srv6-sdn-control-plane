@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +55,7 @@ ENABLE_STAMP_SUPPORT = True
 
 if ENABLE_STAMP_SUPPORT:
     from srv6_delay_measurement import nb_controller_api
-    from srv6_delay_measurement.nb_controller_api import STAMPError
+    # from srv6_delay_measurement.nb_controller_api import STAMPError
 
 
 # ENCAP = {
@@ -656,7 +657,9 @@ class NorthboundInterface:
     def register_stamp_reflector(self, *args, **kwargs):
         if self.stamp_nb_interface is None:
             raise NotImplementedError("STAMP Support not enabled")
-        return self.stamp_nb_interface.register_stamp_reflector(*args, **kwargs)
+        return self.stamp_nb_interface.register_stamp_reflector(
+            *args, **kwargs
+        )
 
     def unregister_stamp_node(self, *args, **kwargs):
         if self.stamp_nb_interface is None:
@@ -863,6 +866,6 @@ if __name__ == '__main__':
     InventoryService = InventoryService()
     response = InventoryService.configure_tenant('11.3.192.117', 54321, 40000, '')
     print('Risponse tenant cration: %s --- %s --- %s' % (response[0], response[1], response[2]))
-    response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')
+    response2 = InventoryService.remove_tenant('11.3.192.117', 54321, 'mG4rESBHVO5byMoKq2CJifPZHLjqeYpAYRYrEEenNQe17BzfZRNLY3XVLvaSezdtEzWmz1sq14RIsBWsRoXLZuRffSztIJ3kywqDp1YAdEpMAwCMuTYa6jlIb4F8a5TI')  # noqa: E501
     print('Response remove tenat: %s' % response2)
     '''

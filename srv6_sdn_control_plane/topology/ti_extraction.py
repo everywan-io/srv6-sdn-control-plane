@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -32,7 +33,6 @@ import time
 import telnetlib
 import re
 import socket
-import sys
 import errno
 import logging
 from argparse import ArgumentParser
@@ -45,12 +45,12 @@ from ipaddress import IPv6Network
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Loopback prefix used by the routers
 LOOPBACK_PREFIX = 'fcff::'
 
-###########################################################
+# ###########################################################
 
 
 # Default topology file
@@ -65,6 +65,7 @@ DOT_FILE_TOPO_GRAPH = '/tmp/topology.dot'
 OSPF_DB_PATH = '/tmp/ospf_db'
 # Convert str to unicode
 LOOPBACK_PREFIX = text_type(LOOPBACK_PREFIX)
+
 
 def print_and_die(message, code=-2):
     print(message)
@@ -102,7 +103,7 @@ def build_topo_graph(routers, stub_networks, transit_networks):
         # Add the node to the graph
         G.add_node(routerid, routerid=routerid, fillcolor='red',
                    style='filled', shape='ellipse',
-                   loopbacknet=loopbacknet, loopbackip=loopbackip, 
+                   loopbacknet=loopbacknet, loopbackip=loopbackip,
                    type='router')
     # Add stub networks to the graph
     for net in stub_networks.keys():
@@ -334,15 +335,16 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
             _id = int(IPv4Address(adv_router))
             # Generate the loopback prefix of the router
             loopback_prefix = IPv6Network(int(IPv6Address
-                                          (LOOPBACK_PREFIX)) | _id << 96)
+                                              (LOOPBACK_PREFIX)) | _id << 96)
             loopback_prefix = (IPv6Network(loopback_prefix)
                                .supernet(new_prefix=64))
             if IPv6Network(net).subnet_of(loopback_prefix):
                 # The net is the loopback network of adv_router
                 routerid_to_loopbacknet[adv_router] = net
-                # The loopback IP address is the first address of the loopback net
+                # The loopback IP address is the first address of the loopback
+                # net
                 loopbackip = str(next(IPv6Network(net)
-                                 .hosts()))
+                                      .hosts()))
                 # Update mapping router ID to loopback IPs
                 routerid_to_loopbackip[adv_router] = loopbackip
                 # Remove it from stub networks
@@ -380,12 +382,13 @@ def connect_and_extract_topology(ips_ports, ospfdb_path=OSPF_DB_PATH,
     return routers_dict, stub_networks, transit_networks
 
 
-def topology_information_extraction(nodes, period, topo_file, topo_graph, ospf6d_pwd):
+def topology_information_extraction(nodes, period, topo_file, topo_graph,
+                                    ospf6d_pwd):
     # Topology Information Extraction
     while (True):
         # Extract the topology information
         routers, stub_networks, transit_networks = \
-                        connect_and_extract_topology(nodes, OSPF_DB_PATH, ospf6d_pwd)
+            connect_and_extract_topology(nodes, OSPF_DB_PATH, ospf6d_pwd)
         # Build the topology graph
         G = build_topo_graph(routers, stub_networks, transit_networks)
         # Dump relevant information of the network graph
@@ -502,8 +505,8 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO)
     # Debug settings
-    #SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
-    #logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
+    # SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
+    # logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     # Get topology filename

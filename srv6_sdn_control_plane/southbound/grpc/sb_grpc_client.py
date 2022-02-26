@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/python
 
 from __future__ import absolute_import, division, print_function
@@ -9,23 +7,20 @@ from six import text_type
 import grpc
 import json
 import sys
-import os
 import logging
 from socket import AF_INET, AF_INET6
-from threading import Thread
-from srv6_sdn_proto.status_codes_pb2 import SbStatusCode
 
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Path of the proto files
-#PROTO_FOLDER = "../../../srv6-sdn-proto/"
+# PROTO_FOLDER = "../../../srv6-sdn-proto/"
 
-###########################################################
+# ###########################################################
 
 # Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+# script_path = os.path.dirname(os.path.abspath(__file__))
+# PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
 # if PROTO_FOLDER == '':
@@ -54,8 +49,9 @@ from srv6_sdn_proto import ip_tunnel_interface_pb2
 
 # Network event types
 EVENT_TYPES = {
-    'CONNECTION_ESTABLISHED': (network_events_listener_pb2.NetworkEvent
-                               .CONNECTION_ESTABLISHED),
+    'CONNECTION_ESTABLISHED': (
+        network_events_listener_pb2.NetworkEvent.CONNECTION_ESTABLISHED
+    ),
     'INTF_UP': network_events_listener_pb2.NetworkEvent.INTF_UP,
     'INTF_DOWN': network_events_listener_pb2.NetworkEvent.INTF_DOWN,
     'INTF_DEL': network_events_listener_pb2.NetworkEvent.INTF_DEL,
@@ -73,8 +69,9 @@ DEFAULT_CERTIFICATE = 'cert_client.pem'
 def parse_grpc_error(e):
     status_code = e.code()
     details = e.details()
-    logging.error('gRPC client reported an error: %s, %s'
-                  % (status_code, details))
+    logging.error(
+        'gRPC client reported an error: %s, %s' % (status_code, details)
+    )
     if grpc.StatusCode.UNAVAILABLE == status_code:
         code = SbStatusCode.STATUS_GRPC_SERVICE_UNAVAILABLE
     elif grpc.StatusCode.UNAUTHENTICATED == status_code:
@@ -91,8 +88,10 @@ class SRv6Manager:
         self.SECURE = secure
         if secure is True:
             if certificate is None:
-                print('Error: "certificate" variable cannot be None '
-                      'in secure mode')
+                print(
+                    'Error: "certificate" variable cannot be None in secure '
+                    'mode'
+                )
                 sys.exit(-2)
             self.CERTIFICATE = certificate
 
@@ -113,13 +112,13 @@ class SRv6Manager:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
-                                          grpc_client_credentials)
+            channel = grpc.secure_channel(
+                ip_address, grpc_client_credentials
+            )
         else:
             channel = grpc.insecure_channel(ip_address)
 
-        return (srv6_manager_pb2_grpc
-                .SRv6ManagerStub(channel), channel)
+        return (srv6_manager_pb2_grpc.SRv6ManagerStub(channel), channel)
 
     # Shutdown device
     def shutdown_device(self, server_ip, server_port):
@@ -128,7 +127,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Shutdown the device
             response = srv6_stub.ShutdownDevice(srv6_request)
             # Create the response
@@ -165,7 +165,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Add the SRv6 path
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -177,7 +178,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def create_srv6_explicit_path_from_json(self, server_ip, server_port, data):
+    def create_srv6_explicit_path_from_json(self, server_ip, server_port,
+                                            data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
@@ -202,7 +204,8 @@ class SRv6Manager:
                 try:
                     # Get the reference of the stub
                     srv6_stub, channel = self.get_grpc_session(
-                        server_ip, server_port)
+                        server_ip, server_port
+                    )
                     # Add the SRv6 path
                     response = srv6_stub.Create(srv6_request)
                     # Create the response
@@ -250,7 +253,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove the SRv6 path
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -262,15 +266,15 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def remove_srv6_explicit_path_from_json(self, server_ip, server_port, data):
+    def remove_srv6_explicit_path_from_json(self, server_ip, server_port,
+                                            data):
         json_data = json.loads(data)
         # Iterate over the array and delete one by one all the paths
         for data in json_data:
             # Create message request
             srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
             # Set the type of the carried entity
-            srv6_request.entity_type = (srv6_manager_pb2
-                                        .SRv6ExplicitPath)
+            srv6_request.entity_type = srv6_manager_pb2.SRv6ExplicitPath
             # Create a new SRv6 explicit path request
             path_request = srv6_request.srv6_ep_request
             for jpath in data['paths']:
@@ -286,7 +290,8 @@ class SRv6Manager:
                 try:
                     # Get the reference of the stub
                     srv6_stub, channel = self.get_grpc_session(
-                        server_ip, server_port)
+                        server_ip, server_port
+                    )
                     # Remove the SRv6 path
                     response = srv6_stub.Remove(srv6_request)
                     # Create the response
@@ -309,8 +314,7 @@ class SRv6Manager:
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
-        srv6_request.entity_type = (srv6_manager_pb2
-                                    .SRv6LocalProcessingFunction)
+        srv6_request.entity_type = srv6_manager_pb2.SRv6LocalProcessingFunction
         # Create a new SRv6 Lccal Processing Function request
         function_request = srv6_request.srv6_lpf_request
         # Create a new local processing function
@@ -330,7 +334,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create the SRv6 local processing function
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -342,30 +347,31 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def get_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                           action, device, localsid_table,
-                                           nexthop="", table=-1,
-                                           interface="", segments=[]):
+    def get_srv6_local_processing_function(self, server_ip, server_port,
+                                           segment, action, device,
+                                           localsid_table, nexthop="",
+                                           table=-1, interface="",
+                                           segments=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                              action, device, localsid_table,
-                                              nexthop="", table=-1,
-                                              interface="", segments=[]):
+    def update_srv6_local_processing_function(self, server_ip, server_port,
+                                              segment, action, device,
+                                              localsid_table, nexthop="",
+                                              table=-1, interface="",
+                                              segments=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_srv6_local_processing_function(self, server_ip, server_port, segment,
-                                              localsid_table, action="",
-                                              nexthop="", table=-1,
+    def remove_srv6_local_processing_function(self, server_ip, server_port,
+                                              segment, localsid_table,
+                                              action="", nexthop="", table=-1,
                                               interface="", segments=[],
                                               device=""):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
-        srv6_request.entity_type = (srv6_manager_pb2
-                                    .SRv6LocalProcessingFunction)
+        srv6_request.entity_type = srv6_manager_pb2.SRv6LocalProcessingFunction
         # Create a new SRv6 Lccal Processing Function request
         function_request = srv6_request.srv6_lpf_request
         # Create a new local processing function
@@ -385,7 +391,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove SRv6 local processing function
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -399,7 +406,8 @@ class SRv6Manager:
 
     # CRUD VRF Device
 
-    def create_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
+    def create_vrf_device(self, server_ip, server_port, name, table,
+                          interfaces=[]):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -416,7 +424,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create VRF device
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -428,11 +437,13 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def get_vrf_device(self, server_ip, server_port, name, table, interfaces=[]):
+    def get_vrf_device(self, server_ip, server_port, name, table,
+                       interfaces=[]):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_vrf_device(self, server_ip, server_port, name, table=-1, interfaces=[], op=None):
+    def update_vrf_device(self, server_ip, server_port, name, table=-1,
+                          interfaces=[], op=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -448,7 +459,12 @@ class SRv6Manager:
         # Create a new interfaces
         device.interfaces.extend(interfaces)
         # Operation
-        if op not in [None, 'replace_interfaces', 'add_interfaces', 'del_interfaces']:
+        if op not in [
+            None,
+            'replace_interfaces',
+            'add_interfaces',
+            'del_interfaces'
+        ]:
             print('Invalid operation type: %s' % op)
             return None
         if op is not None:
@@ -456,7 +472,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Update VRF device
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -482,7 +499,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove the VRF device
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -503,8 +521,9 @@ class SRv6Manager:
 
     def get_interface(self, server_ip, server_port, interfaces=[]):
         # Get the reference of the stub
-        srv6_stub, channel = (self
-                              .get_grpc_session(server_ip, server_port))
+        srv6_stub, channel = self.get_grpc_session(
+            server_ip, server_port
+        )
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -518,7 +537,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create interface
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -530,8 +550,9 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def update_interface(self, server_ip, server_port, ifindex=None, name=None, macaddr=None,
-                         ipaddrs=None, state=None, ospf_adv=None):
+    def update_interface(self, server_ip, server_port, ifindex=None,
+                         name=None, macaddr=None, ipaddrs=None, state=None,
+                         ospf_adv=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -556,7 +577,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create interface
             response = srv6_stub.Update(srv6_request)
             # Create the response
@@ -602,7 +624,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create IP rule
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -655,7 +678,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP rule
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -669,9 +693,9 @@ class SRv6Manager:
 
     # CRUD IP Route
 
-    def create_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def create_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
@@ -698,7 +722,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create IP Route
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -717,16 +742,16 @@ class SRv6Manager:
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def update_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def update_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_iproute(self, server_ip, server_port, family=-1, tos="", type="",
-                       table=-1, proto=-1, destination="", dst_len=-1,
-                       scope=-1, preferred_source="", src_len=-1,
+    def remove_iproute(self, server_ip, server_port, family=-1, tos="",
+                       type="", table=-1, proto=-1, destination="",
+                       dst_len=-1, scope=-1, preferred_source="", src_len=-1,
                        in_interface="", out_interface="", gateway=""):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
@@ -753,7 +778,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP Route
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -788,7 +814,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create IP Address
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -810,7 +837,8 @@ class SRv6Manager:
         print('Not yet implemented')
         return SbStatusCode.STATUS_INTERNAL_ERROR
 
-    def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='', family=-1):
+    def remove_ipaddr(self, server_ip, server_port, ip_addr, device, net='',
+                      family=-1):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -827,7 +855,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP Address
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -864,7 +893,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP Address
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -897,7 +927,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create GRE interface
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -909,7 +940,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def remove_gre_interface(self, server_ip, server_port, name, local=None, remote=None):
+    def remove_gre_interface(self, server_ip, server_port, name, local=None,
+                             remote=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -925,7 +957,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove GRE interface
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -957,7 +990,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create IP neigh
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -987,7 +1021,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP neigh
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1023,7 +1058,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create IP neigh
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1059,7 +1095,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove IP neigh
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1071,8 +1108,8 @@ class SRv6Manager:
         # Return the response
         return response
 
-    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id, vxlan_port,
-                    vxlan_group=None):
+    def createVxLAN(self, server_ip, server_port, ifname, vxlan_link, vxlan_id,
+                    vxlan_port, vxlan_group=None):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1091,7 +1128,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Add vxlan
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1117,7 +1155,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove VXLAN
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1144,7 +1183,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Create FDB entries
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1171,7 +1211,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove fdb entries
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1184,7 +1225,8 @@ class SRv6Manager:
         return response
 
     def create_ip_tunnel_interface(self, server_ip, server_port, ifname,
-                                   local_addr='', remote_addr='', tunnel_type='ipip'):
+                                   local_addr='', remote_addr='',
+                                   tunnel_type='ipip'):
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity
@@ -1211,7 +1253,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Add ip tunnel
             response = srv6_stub.Create(srv6_request)
             # Create the response
@@ -1237,7 +1280,8 @@ class SRv6Manager:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Remove ip tunnel
             response = srv6_stub.Remove(srv6_request)
             # Create the response
@@ -1248,7 +1292,6 @@ class SRv6Manager:
         channel.close()
         # Return the response
         return response
-        
 
 
 class NetworkEventsListener:
@@ -1257,8 +1300,10 @@ class NetworkEventsListener:
         self.SECURE = secure
         if secure is True:
             if certificate is None:
-                print('Error: "certificate" variable cannot be None '
-                      'in secure mode')
+                print(
+                    'Error: "certificate" variable cannot be None in secure '
+                    'mode'
+                )
                 sys.exit(-2)
             self.CERTIFICATE = certificate
 
@@ -1279,8 +1324,9 @@ class NetworkEventsListener:
                 certificate = f.read()
             # Then create the SSL credentials and establish the channel
             grpc_client_credentials = grpc.ssl_channel_credentials(certificate)
-            channel = grpc.secure_channel(ip_address,
-                                          grpc_client_credentials)
+            channel = grpc.secure_channel(
+                ip_address, grpc_client_credentials
+            )
         else:
             channel = grpc.insecure_channel(ip_address)
         return (network_events_listener_pb2_grpc
@@ -1292,7 +1338,8 @@ class NetworkEventsListener:
         try:
             # Get the reference of the stub
             srv6_stub, channel = self.get_grpc_session(
-                server_ip, server_port)
+                server_ip, server_port
+            )
             # Listen for Netlink notifications
             for event in srv6_stub.Listen(request):
                 # Parse the event
@@ -1305,54 +1352,72 @@ class NetworkEventsListener:
                     _event['interface'] = dict()
                     _event['type'] = 'INTF_UP'
                     # Extract interface index
-                    _event['interface']['index'] = int(event.interface.index)
+                    _event['interface']['index'] = int(
+                        event.interface.index
+                    )
                     # Extract interface name
-                    _event['interface']['name'] = text_type(event.interface.name)
+                    _event['interface']['name'] = text_type(
+                        event.interface.name
+                    )
                     # Extract interface MAC address
                     _event['interface']['macaddr'] = text_type(
-                        event.interface.macaddr)
+                        event.interface.macaddr
+                    )
                 elif event.type == EVENT_TYPES['INTF_DOWN']:
                     # Interface DOWN event
                     _event['interface'] = dict()
                     _event['type'] = 'INTF_DOWN'
                     # Extract interface index
-                    _event['interface']['index'] = int(event.interface.index)
+                    _event['interface']['index'] = int(
+                        event.interface.index
+                    )
                     # Extract interface name
-                    _event['interface']['name'] = text_type(event.interface.name)
+                    _event['interface']['name'] = text_type(
+                        event.interface.name
+                    )
                     # Extract interface MAC address
                     _event['interface']['macaddr'] = text_type(
-                        event.interface.macaddr)
+                        event.interface.macaddr
+                    )
                 elif event.type == EVENT_TYPES['INTF_DEL']:
                     # Interface DEL event
                     _event['interface'] = dict()
                     _event['type'] = 'INTF_DEL'
                     # Extract interface index
-                    _event['interface']['index'] = int(event.interface.index)
+                    _event['interface']['index'] = int(
+                        event.interface.index
+                    )
                 elif event.type == EVENT_TYPES['NEW_ADDR']:
                     # NEW address event
                     _event['interface'] = dict()
                     _event['type'] = 'NEW_ADDR'
                     # Extract interface index
-                    _event['interface']['index'] = int(event.interface.index)
+                    _event['interface']['index'] = int(
+                        event.interface.index
+                    )
                     # Extract address
                     _event['interface']['ipaddr'] = text_type(
-                        event.interface.ipaddr)
+                        event.interface.ipaddr
+                    )
                 elif event.type == EVENT_TYPES['DEL_ADDR']:
                     # DEL address event
                     _event['interface'] = dict()
                     _event['type'] = 'DEL_ADDR'
                     # Extract interface index
-                    _event['interface']['index'] = int(event.interface.index)
+                    _event['interface']['index'] = int(
+                        event.interface.index
+                    )
                     # Extract address
                     _event['interface']['ipaddr'] = text_type(
-                        event.interface.ipaddr)
+                        event.interface.ipaddr
+                    )
                 # Pass the event to the caller
                 yield _event
-        except grpc.RpcError as e:
+        except grpc.RpcError:  # as e:
             # Let's close the session
             channel.close()
             # Return the response
-            response = parse_grpc_error(e)
+            # response = parse_grpc_error(e)
             return None
         # Let's close the session
         channel.close()
@@ -1363,8 +1428,8 @@ if __name__ == "__main__":
     # Test Netlink messages
     srv6_manager = SRv6Manager()
     # Create a thread for each router and subscribe netlink notifications
-    #routers = ["2000::1", "2000::2", "2000::3"]
-    #thread_pool = []
+    # routers = ["2000::1", "2000::2", "2000::3"]
+    # thread_pool = []
     # for router in routers:
     #    thread = Thread(target=srv6_manager
     #                    .createNetlinkNotificationsSubscription,
@@ -1381,14 +1446,14 @@ if __name__ == "__main__":
     srv6_manager.addfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')
     srv6_manager.create_ipaddr('10.0.14.45',12345, '10.100.0.1/24', 'vxlan100', '')
     srv6_manager.create_ipaddr('10.0.16.49',12345, '10.100.0.2/24', 'vxlan100', '')
-    
+
     srv6_manager.create_vrf_device('10.0.14.45', 12345, 'vrf1', 1, ['vxlan100', 'ewED1-eth1'])
     srv6_manager.create_vrf_device('10.0.16.49', 12345, 'vrf1', 1, ['vxlan100', 'ewED2-eth1'])
 
     srv6_manager.create_iproute('10.0.14.45', 12345,  destination='192.168.38.0', dst_len=24, gateway='10.100.0.2', table=1)
-    srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''
+    srv6_manager.create_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, gateway='10.100.0.1', table=1)'''  # noqa: E501
     # ---- tunnel cancellation test
     '''srv6_manager.delVxLAN('10.0.14.45', 12345, 'vxlan100')
     srv6_manager.remove_vrf_device('10.0.14.45', 12345,  'vrf1')
     srv6_manager.remove_iproute('10.0.16.49', 12345, destination='192.168.32.0', dst_len=24, table=1)
-    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')'''
+    srv6_manager.delfdbentries('10.0.16.49', 12345, 'vxlan100', '10.0.14.45')'''  # noqa: E501

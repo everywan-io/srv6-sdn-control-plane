@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano - (CNIT and University of Rome "Tor Vergata")
+# Copyright (C) 2018 Carmine Scarpitta, Pier Luigi Ventre, Stefano Salsano -
+# (CNIT and University of Rome "Tor Vergata")
 #
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
@@ -25,45 +26,28 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
-from sshutil.cmd import SSHCommand
-import sys
 import logging
-import telnetlib
-import socket
-import json
-import time
-import os
-import random
-from socket import AF_INET
-from socket import AF_INET6
-# ipaddress dependencies
-from ipaddress import IPv4Interface
-from ipaddress import IPv6Interface
-from ipaddress import AddressValueError
-# NetworkX dependencies
-import networkx as nx
-from networkx.readwrite import json_graph
 
 # Reserved GRE keys
 RESERVED_GRE_KEYS = []
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Path of the proto files
-#PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
+# PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
 
-###########################################################
+# ###########################################################
 
 
 # Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+# script_path = os.path.dirname(os.path.abspath(__file__))
+# PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-#if PROTO_FOLDER == '':
+# if PROTO_FOLDER == '':
 #    print('Error: Set PROTO_FOLDER variable in nb_grpc_client.py')
 #    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
+# if not os.path.exists(PROTO_FOLDER):
 #    print('Error: PROTO_FOLDER variable in nb_grpc_client.py '
 #          'points to a non existing folder\n')
 #    sys.exit(-2)
@@ -81,12 +65,9 @@ RESERVED_TABLEIDS.append(LOCAL_SID_TABLE)
 
 WAIT_TOPOLOGY_INTERVAL = 1
 
-# SRv6 dependencies
-from srv6_generators import SIDAllocator
 
 # Logger reference
 logger = logging.getLogger(__name__)
-
 
 
 # GRE key Allocator
@@ -147,6 +128,7 @@ class GREKeyAllocator:
             # The VPN has not an associated GRE key
             return -1
 
+
 class ControllerStateGRE:
     """This class maintains the state of the SRv6 controller and provides some
        methods to handle it
@@ -154,7 +136,7 @@ class ControllerStateGRE:
 
     def __init__(self, controller_state):
         # Create Table IDs allocator
-        #self.tableid_allocator = controller_state.tableid_allocator
+        # self.tableid_allocator = controller_state.tableid_allocator
         self.tableid_allocator = None
         # Create GRE keys allocator
         self.gre_key_allocator = GREKeyAllocator()
@@ -181,8 +163,12 @@ class ControllerStateGRE:
 
     # Get a new GRE key
     def get_new_gre_key(self, vpn_name, tenantid, local_router, remote_router):
-        return self.gre_key_allocator.get_new_gre_key(vpn_name, tenantid, local_router, remote_router)
+        return self.gre_key_allocator.get_new_gre_key(
+            vpn_name, tenantid, local_router, remote_router
+        )
 
     # Get a new table ID
     def get_gre_key(self, vpn_name, local_router, remote_router):
-        return self.gre_key_allocator.get_gre_key(vpn_name, local_router, remote_router)
+        return self.gre_key_allocator.get_gre_key(
+            vpn_name, local_router, remote_router
+        )

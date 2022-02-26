@@ -5,8 +5,6 @@ from __future__ import print_function
 # General imports
 import configparser
 import time
-import os
-import sys
 import json
 import threading
 import logging
@@ -15,16 +13,22 @@ from argparse import ArgumentParser
 from threading import Thread
 from threading import Lock
 # ipaddress dependencies
-from ipaddress import IPv6Interface, IPv4Address
+from ipaddress import IPv6Interface
 # NetworkX dependencies
 import networkx as nx
 from networkx.readwrite import json_graph
 import srv6_sdn_control_plane.srv6_controller_utils as utils
 # SRv6 dependencies
-from srv6_sdn_control_plane.interface_discovery.interface_discovery import interface_discovery
-from srv6_sdn_control_plane.topology.ti_extraction import draw_topo
-from srv6_sdn_control_plane.topology.ti_extraction import connect_and_extract_topology
-from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import NetworkEventsListener
+from srv6_sdn_control_plane.interface_discovery.interface_discovery import (
+    interface_discovery
+)
+from srv6_sdn_control_plane.topology.ti_extraction import (
+    draw_topo,
+    connect_and_extract_topology
+)
+from srv6_sdn_control_plane.southbound.grpc.sb_grpc_client import (
+    NetworkEventsListener
+)
 from srv6_sdn_control_plane.northbound.grpc import nb_grpc_server
 from srv6_sdn_controller_state import srv6_sdn_controller_state
 # pymerang dependencies
@@ -162,8 +166,10 @@ class SRv6Controller(object):
             # print('*** ospf6d password: %s' % self.ospf6d_pwd)
             if self.topo_extraction:
                 print('*** Topology Information Extraction: enabled')
-                print('*** Topology Information Extraction period: %s' %
-                      self.period)
+                print(
+                    '*** Topology Information Extraction period: %s' %
+                    self.period
+                )
                 print('*** Topology file: %s' % self.topology_file)
                 print('*** topology_graph: %s' % self.topology_graph)
             else:
@@ -411,8 +417,7 @@ class SRv6Controller(object):
             # Topology has not changed
             return False
         # Add the IP address to the interface
-        self.topoInfo['interfaces'][routerid][ifindex]['ipaddr'] \
-            .append(ipaddr)
+        self.topoInfo['interfaces'][routerid][ifindex]['ipaddr'].append(ipaddr)
         # Topology has changed
         return True
 
@@ -433,8 +438,7 @@ class SRv6Controller(object):
             # Topology has not changed
             return False
         # Remove the IP address from the interface
-        self.topoInfo['interfaces'][routerid][ifindex]['ipaddr'] \
-            .remove(ipaddr)
+        self.topoInfo['interfaces'][routerid][ifindex]['ipaddr'].remove(ipaddr)
         # Topology has changed
         return True
 
@@ -452,7 +456,8 @@ class SRv6Controller(object):
             return False
         # Discover the interfaces
         interfaces = interface_discovery(
-            router, self.grpc_client_port, verbose=True)
+            router, self.grpc_client_port, verbose=True
+        )
         # Update topology information
         self.topoInfo['interfaces'][routerid] = interfaces
         # Return True if the operation completed successfully
@@ -464,11 +469,13 @@ class SRv6Controller(object):
     # Return true if the topology has changed
     def handle_interface_up_event(self, routerid, ifindex, ifname, macaddr):
         topo_changed = False
-        if self.create_router_interface(routerid=routerid,
-                                        ifindex=ifindex,
-                                        ifname=ifname,
-                                        macaddr=macaddr,
-                                        state='UP'):
+        if self.create_router_interface(
+            routerid=routerid,
+            ifindex=ifindex,
+            ifname=ifname,
+            macaddr=macaddr,
+            state='UP'
+        ):
             topo_changed = True
         # Return True if the topology has changed, False otherwise
         return topo_changed
@@ -478,11 +485,13 @@ class SRv6Controller(object):
     def handle_interface_down_event(self, routerid, ifindex, ifname, macaddr):
         topo_changed = False
         # The interface does not exist, let's create a new one
-        if self.create_router_interface(routerid=routerid,
-                                        ifindex=ifindex,
-                                        ifname=ifname,
-                                        macaddr=macaddr,
-                                        state='DOWN'):
+        if self.create_router_interface(
+            routerid=routerid,
+            ifindex=ifindex,
+            ifname=ifname,
+            macaddr=macaddr,
+            state='DOWN'
+        ):
             topo_changed = True
         # Return True if the topology has changed, False otherwise
         return topo_changed
@@ -538,25 +547,33 @@ class SRv6Controller(object):
         router = srv6_sdn_controller_state.get_router_mgmtip(
             deviceid=routerid)
         if router is None:
-            logging.warning('Error in listen_network_events(): '
-                            'Cannot find an address for the router %s'
-                            % router)
+            logging.warning(
+                'Error in listen_network_events(): '
+                'Cannot find an address for the router %s',
+                router
+            )
             return
         if self.VERBOSE:
             print('*** Listening network events from router %s' % router)
         if self.sb_interface == 'gRPC':
             # Wait for next network event notification and process it
-            for event in self.eventsListener.listen(router, self.grpc_client_port):
+            for event in self.eventsListener.listen(
+                router, self.grpc_client_port
+            ):
                 if self.VERBOSE:
-                    print('*** Received a new network event from router %s:\n%s'
-                          % (routerid, event))
+                    print(
+                        '*** Received a new network event from router %s:\n%s'
+                        % (routerid, event)
+                    )
                 if event['type'] == 'CONNECTION_ESTABLISHED':
                     # 'Connection established' message
                     # Run interface discovery to get missing information
                     # In the future, we don't need to run the interface
                     # discovery procedure anymore, since the SRv6 controller
                     # listens for network events from this node
-                    if not self.discover_and_update_router_interfaces(routerid):
+                    if not self.discover_and_update_router_interfaces(
+                        routerid
+                    ):
                         # If the gRPC server on the node does not respond,
                         # abort and retry later
                         return
@@ -581,8 +598,9 @@ class SRv6Controller(object):
                     # Extract interface MAC address
                     macaddr = interface['macaddr']
                     # Handle interface up event
-                    topo_changed = self.handle_interface_up_event(routerid, ifindex,
-                                                                  ifname, macaddr)
+                    topo_changed = self.handle_interface_up_event(
+                        routerid, ifindex, ifname, macaddr
+                    )
                 elif event['type'] == 'INTF_DOWN':
                     # Interface DOWN event
                     interface = event['interface']
@@ -593,8 +611,9 @@ class SRv6Controller(object):
                     # Extract interface MAC address
                     macaddr = interface['macaddr']
                     # Handle interface down event
-                    topo_changed = self.handle_interface_down_event(routerid, ifindex,
-                                                                    ifname, macaddr)
+                    topo_changed = self.handle_interface_down_event(
+                        routerid, ifindex, ifname, macaddr
+                    )
                 elif event['type'] == 'INTF_DEL':
                     # Interface DEL event
                     interface = event['interface']
@@ -602,7 +621,8 @@ class SRv6Controller(object):
                     ifindex = interface['index']
                     # Handle interface down event
                     topo_changed = self.handle_interface_del_event(
-                        routerid, ifindex)
+                        routerid, ifindex
+                    )
                 elif event['type'] == 'NEW_ADDR':
                     # New address event
                     interface = event['interface']
@@ -611,8 +631,9 @@ class SRv6Controller(object):
                     # Extract address
                     ipaddr = interface['ipaddr']
                     # Handle new address event
-                    topo_changed = self.handle_new_addr_event(routerid,
-                                                              ifindex, ipaddr)
+                    topo_changed = self.handle_new_addr_event(
+                        routerid, ifindex, ipaddr
+                    )
                 elif event['type'] == 'DEL_ADDR':
                     # Del address event
                     interface = event['interface']
@@ -621,8 +642,9 @@ class SRv6Controller(object):
                     # Extract address
                     ipaddr = interface['ipaddr']
                     # Handle interface del event
-                    topo_changed = self.handle_del_addr_event(routerid,
-                                                              ifindex, ipaddr)
+                    topo_changed = self.handle_del_addr_event(
+                        routerid, ifindex, ipaddr
+                    )
                 # Build, dump and draw topology, if it has changed
                 if topo_changed:
                     if self.VERBOSE:
@@ -650,9 +672,11 @@ class SRv6Controller(object):
             if not self.check_network_events_listener(routerid):
                 # The thread which handles the events listening is not active
                 # Start a new thread events listener in a new thread
-                thread = Thread(name=routerid,
-                                target=self.listen_network_events,
-                                args=(routerid, ))
+                thread = Thread(
+                    name=routerid,
+                    target=self.listen_network_events,
+                    args=(routerid, )
+                )
                 thread.daemon = True
                 # and update the mapping
                 self.listenerThreads[routerid] = thread
@@ -673,8 +697,12 @@ class SRv6Controller(object):
                 # Convert links
                 json_topology['links'] = [
                     {
-                        'source_id': json_topology['nodes'][link['source']]['id'],
-                        'target_id': json_topology['nodes'][link['target']]['id'],
+                        'source_id': json_topology['nodes'][
+                            link['source']
+                        ]['id'],
+                        'target_id': json_topology['nodes'][
+                            link['target']
+                        ]['id'],
                         'source': link['source'],
                         'target': link['target'],
                         'source_ip': link['source_ip'],
@@ -683,7 +711,8 @@ class SRv6Controller(object):
                         'target_intf': link['target_intf'],
                         'net': link['net']
                     }
-                    for link in json_topology['links']]
+                    for link in json_topology['links']
+                ]
                 # Convert nodes
                 json_topology['nodes'] = [
                     {
@@ -712,28 +741,39 @@ class SRv6Controller(object):
             print(('*** Routers: %s' % list(self.topoInfo['routers'].keys())))
             print(('*** Nets: %s' % list(self.topoInfo['nets'].keys())))
         # Topology graph
-        #G = nx.Graph()
+        # G = nx.Graph()
         # Build topology graph
         with self.topo_graph_lock:
             # Remove all nodes and edges from the graph
             self.G.clear()
             # Build nodes list
             # Add routers to the graph
-            for routerid, router_info in list(self.topoInfo['routers'].items()):
+            for routerid, router_info in list(
+                self.topoInfo['routers'].items()
+            ):
                 # Extract loopback net
                 loopbacknet = router_info.get('loopbacknet')
                 # Extract loopback IP
                 loopbackip = router_info.get('loopbackip')
                 # Extract management IP
                 managementip = srv6_sdn_controller_state.get_router_mgmtip(
-                    deviceid=routerid)
+                    deviceid=routerid
+                )
                 # Extract router interfaces
                 interfaces = self.topoInfo['interfaces'].get(routerid)
                 # Add the node to the graph
-                self.G.add_node(routerid, routerid=routerid, fillcolor='red',
-                                style='filled', shape='ellipse',
-                                loopbacknet=loopbacknet, loopbackip=loopbackip,
-                                managementip=managementip, interfaces=interfaces, type='router')
+                self.G.add_node(
+                    routerid,
+                    routerid=routerid,
+                    fillcolor='red',
+                    style='filled',
+                    shape='ellipse',
+                    loopbacknet=loopbacknet,
+                    loopbackip=loopbackip,
+                    managementip=managementip,
+                    interfaces=interfaces,
+                    type='router'
+                )
             # Build edges list
             for net, routerids in list(self.topoInfo['nets'].items()):
                 if len(routerids) == 2:
@@ -751,7 +791,8 @@ class SRv6Controller(object):
                         continue
                     lhs_ifname = lhs_intf.get('ifname')
                     lhs_ip = utils.findIPv6AddrInNet(
-                        lhs_intf.get('ipaddr'), net)
+                        lhs_intf.get('ipaddr'), net
+                    )
                     # Get interface name and IP address
                     # corresponding to the right router
                     rhs_intf = self.get_interface_facing_on_net(edge[1], net)
@@ -761,12 +802,20 @@ class SRv6Controller(object):
                         continue
                     rhs_ifname = rhs_intf.get('ifname')
                     rhs_ip = utils.findIPv6AddrInNet(
-                        rhs_intf.get('ipaddr'), net)
+                        rhs_intf.get('ipaddr'), net
+                    )
                     # Add edge to the graph
                     # This is a transit network, set the net as label
-                    self.G.add_edge(*edge, label=net, fontsize=9, net=net,
-                                    source_ip=rhs_ip, source_intf=rhs_ifname,
-                                    target_ip=lhs_ip, target_intf=lhs_ifname)
+                    self.G.add_edge(
+                        *edge,
+                        label=net,
+                        fontsize=9,
+                        net=net,
+                        source_ip=rhs_ip,
+                        source_intf=rhs_ifname,
+                        target_ip=lhs_ip,
+                        target_intf=lhs_ifname
+                    )
                 elif len(routerids) == 1:
                     # Stub networks
                     # Link between a router and a stub network
@@ -779,15 +828,28 @@ class SRv6Controller(object):
                         continue
                     lhs_ifname = lhs_intf.get('ifname')
                     lhs_ip = utils.findIPv6AddrInNet(
-                        lhs_intf.get('ipaddr'), net)
+                        lhs_intf.get('ipaddr'), net
+                    )
                     # Add a node representing the net to the graph
-                    self.G.add_node(net, fillcolor='cyan', style='filled',
-                                    shape='box', type='stub_network')
+                    self.G.add_node(
+                        net,
+                        fillcolor='cyan',
+                        style='filled',
+                        shape='box',
+                        type='stub_network'
+                    )
                     # Add edge to the graph
                     # This is a stub network, no label on the edge
-                    self.G.add_edge(*edge, label='', fontsize=9, net=net,
-                                    source_ip=None, source_intf=None,
-                                    target_ip=lhs_ip, target_intf=lhs_intf)
+                    self.G.add_edge(
+                        *edge,
+                        label='',
+                        fontsize=9,
+                        net=net,
+                        source_ip=None,
+                        source_intf=None,
+                        target_ip=lhs_ip,
+                        target_intf=lhs_intf
+                    )
         # Set the topology changed flag
         self.topology_changed_flag.set()
 
@@ -801,7 +863,8 @@ class SRv6Controller(object):
                 # No graph to draw
                 continue
             # Wait for minimum interval between two topology dumps
-            wait = self.last_dump_timestamp + self.min_interval_between_topo_dumps - time.time()
+            wait = self.last_dump_timestamp + \
+                self.min_interval_between_topo_dumps - time.time()
             if wait > 0:
                 time.sleep(wait)
             with self.topo_graph_lock:
@@ -858,9 +921,9 @@ class SRv6Controller(object):
         stop = False
         while not stop:
             # Extract the topology from the routers
-            routers, stub_nets, transit_nets = \
-                connect_and_extract_topology(self.nodes, OSPF_DB_PATH,
-                                             self.ospf6d_pwd, True)
+            routers, stub_nets, transit_nets = connect_and_extract_topology(
+                self.nodes, OSPF_DB_PATH, self.ospf6d_pwd, True
+            )
             nets = utils.merge_two_dicts(stub_nets, transit_nets)
             # Update the topology information
             if self.update_topology_info(routers, nets):
@@ -871,7 +934,7 @@ class SRv6Controller(object):
             self.start_network_events_listeners()
             # Wait 'period' seconds between two extractions
             try:
-                time.sleep(period)
+                time.sleep(self.period)
             except KeyboardInterrupt:
                 if self.VERBOSE:
                     print('*** Stopping Topology Information Extraction')
@@ -886,26 +949,30 @@ class SRv6Controller(object):
             server_ip=self.pymerang_server_ip,
             server_port=self.pymerang_server_port,
             keep_alive_interval=self.keep_alive_interval,
-            secure=self.sb_secure, key=self.sb_server_key,
+            secure=self.sb_secure,
+            key=self.sb_server_key,
             certificate=self.sb_server_certificate,
-            nb_interface_ref=self.nb_interface_ref)
+            nb_interface_ref=self.nb_interface_ref
+        )
         server.serve()
 
-    def start_nb_server(self, grpc_server_ip, grpc_server_port, grpc_client_port,
-                        nb_secure, server_key, server_certificate, sb_secure,
-                        client_certificate, southbound_interface, topo_graph,
-                        vpn_dict, devices, vpn_file, controller_state,
-                        verbose):
+    def start_nb_server(self, grpc_server_ip, grpc_server_port,
+                        grpc_client_port, nb_secure, server_key,
+                        server_certificate, sb_secure, client_certificate,
+                        southbound_interface, topo_graph, vpn_dict, devices,
+                        vpn_file, controller_state, verbose):
         nb_server, nb_interface_ref = nb_grpc_server.create_server(
             grpc_server_ip=grpc_server_ip,
             grpc_server_port=grpc_server_port,
             grpc_client_port=grpc_client_port,
-            nb_secure=nb_secure, server_key=server_key,
+            nb_secure=nb_secure,
+            server_key=server_key,
             server_certificate=server_certificate,
             sb_secure=sb_secure,
             client_certificate=client_certificate,
             southbound_interface=southbound_interface,
-            topo_graph=topo_graph, vpn_dict=vpn_dict,
+            topo_graph=topo_graph,
+            vpn_dict=vpn_dict,
             devices=devices,
             vpn_file=vpn_file,
             controller_state=controller_state,
@@ -934,7 +1001,8 @@ class SRv6Controller(object):
             # Start a new thread events listener in a new thread
             thread = Thread(
                 target=self.start_nb_server,
-                kwargs=({
+                kwargs=(
+                    {
                         'grpc_server_ip': self.grpc_server_ip,
                         'grpc_server_port': self.grpc_server_port,
                         'grpc_client_port': self.grpc_client_port,
@@ -950,8 +1018,8 @@ class SRv6Controller(object):
                         'vpn_file': None,
                         'devices': None,
                         'controller_state': None
-                        }
-                        )
+                    }
+                )
             )
             thread.daemon = True
             thread.start()
@@ -981,113 +1049,211 @@ def parseArguments():
     # Get parser
     parser = ArgumentParser(description='SRv6 Controller')
     # Node IP-PORTs mapping
-    parser.add_argument('--ips', action='store', dest='nodes',
-                        help='IP of the routers from '
-                        'which the topology has to be extracted, '
-                        'comma-separated IP-PORT maps '
-                        '(i.e. 2000::1-2606,2000::2-2606,2000::3-2606')
+    parser.add_argument(
+        '--ips',
+        action='store',
+        dest='nodes',
+        help='IP of the routers from which the topology has to be extracted, '
+        'comma-separated IP-PORT maps '
+        '(i.e. 2000::1-2606,2000::2-2606,2000::3-2606)'
+    )
     # Topology Information Extraction period
-    parser.add_argument('-p', '--period', dest='period',
-                        type=int, default=DEFAULT_TOPO_EXTRACTION_PERIOD,
-                        help='Topology information extraction period')
+    parser.add_argument(
+        '-p', '--period',
+        dest='period',
+        type=int,
+        default=DEFAULT_TOPO_EXTRACTION_PERIOD,
+        help='Topology information extraction period'
+    )
     # Path of topology file
-    parser.add_argument('--topology', dest='topo_file', action='store',
-                        default=DEFAULT_TOPOLOGY_FILE, help='File where '
-                        'the topology extracted has to be saved')
+    parser.add_argument(
+        '--topology',
+        dest='topo_file',
+        action='store',
+        default=DEFAULT_TOPOLOGY_FILE,
+        help='File where the topology extracted has to be saved'
+    )
     # Path of topology graph
-    parser.add_argument('--topo-graph', dest='topo_graph', action='store',
-                        default=None, help='File where the topology '
-                        'graph image has to be saved')
+    parser.add_argument(
+        '--topo-graph',
+        dest='topo_graph',
+        action='store',
+        default=None,
+        help='File where the topology graph image has to be saved'
+    )
     # Enable debug logs
-    parser.add_argument('-d', '--debug', action='store_true',
-                        help='Activate debug logs')
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_true',
+        help='Activate debug logs'
+    )
     # Password used to log in to ospf6d daemon
-    parser.add_argument('--password', action='store_true',
-                        dest='password', default=DEFAULT_OSPF6D_PASSWORD,
-                        help='Password used to log in to ospf6d daemon')
+    parser.add_argument(
+        '--password',
+        action='store_true',
+        dest='password',
+        default=DEFAULT_OSPF6D_PASSWORD,
+        help='Password used to log in to ospf6d daemon'
+    )
     # Verbose mode
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        dest='verbose', default=False,
-                        help='Enable verbose mode')
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        dest='verbose',
+        default=False,
+        help='Enable verbose mode'
+    )
     # Enable topology information extraction
-    parser.add_argument('-t', '--topo-extraction', action='store_true',
-                        dest='topo_extraction', default=False,
-                        help='Enable topology information extraction')
+    parser.add_argument(
+        '-t',
+        '--topo-extraction',
+        action='store_true',
+        dest='topo_extraction',
+        default=False,
+        help='Enable topology information extraction'
+    )
     # Southbound interface
-    parser.add_argument('--sb-interface', action='store',
-                        dest='sb_interface', default=DEFAULT_SB_INTERFACE,
-                        help='Select a southbound interface '
-                        'from this list: %s' % SUPPORTED_SB_INTERFACES)
+    parser.add_argument(
+        '--sb-interface',
+        action='store',
+        dest='sb_interface',
+        default=DEFAULT_SB_INTERFACE,
+        help='Select a southbound interface from this list: %s'
+        % SUPPORTED_SB_INTERFACES
+    )
     # Northbound interface
-    parser.add_argument('--nb-interface', action='store',
-                        dest='nb_interface', default=DEFAULT_NB_INTERFACE,
-                        help='Select a northbound interface '
-                        'from this list: %s' % SUPPORTED_NB_INTERFACES)
+    parser.add_argument(
+        '--nb-interface',
+        action='store',
+        dest='nb_interface',
+        default=DEFAULT_NB_INTERFACE,
+        help='Select a northbound interface from this list: %s'
+        % SUPPORTED_NB_INTERFACES
+    )
     # IP address of the northbound gRPC server
-    parser.add_argument('--grpc-server-ip', dest='grpc_server_ip',
-                        action='store', default=DEFAULT_GRPC_SERVER_IP,
-                        help='IP of the northbound gRPC server')
+    parser.add_argument(
+        '--grpc-server-ip',
+        dest='grpc_server_ip',
+        action='store',
+        default=DEFAULT_GRPC_SERVER_IP,
+        help='IP of the northbound gRPC server'
+    )
     # Port of the northbound gRPC server
-    parser.add_argument('--grpc-server-port', dest='grpc_server_port',
-                        action='store', default=DEFAULT_GRPC_SERVER_PORT,
-                        help='Port of the northbound gRPC server')
+    parser.add_argument(
+        '--grpc-server-port',
+        dest='grpc_server_port',
+        action='store',
+        default=DEFAULT_GRPC_SERVER_PORT,
+        help='Port of the northbound gRPC server'
+    )
     # Port of the northbound gRPC client
-    parser.add_argument('--grpc-client-port', dest='grpc_client_port',
-                        action='store', default=DEFAULT_GRPC_CLIENT_PORT,
-                        help='Port of the northbound gRPC client')
+    parser.add_argument(
+        '--grpc-client-port',
+        dest='grpc_client_port',
+        action='store',
+        default=DEFAULT_GRPC_CLIENT_PORT,
+        help='Port of the northbound gRPC client'
+    )
     # IP address of the pymerang server
-    parser.add_argument('--pymerang-server-ip', dest='pymerang_server_ip',
-                        action='store', default=DEFAULT_PYMERANG_SERVER_IP,
-                        help='IP of the pymerang server')
+    parser.add_argument(
+        '--pymerang-server-ip',
+        dest='pymerang_server_ip',
+        action='store',
+        default=DEFAULT_PYMERANG_SERVER_IP,
+        help='IP of the pymerang server'
+    )
     # Port of the pymerang server
-    parser.add_argument('--pymerang-server-port', dest='pymerang_server_port',
-                        action='store', default=DEFAULT_PYMERANG_SERVER_PORT,
-                        help='Port of the pymerang server')
+    parser.add_argument(
+        '--pymerang-server-port',
+        dest='pymerang_server_port',
+        action='store',
+        default=DEFAULT_PYMERANG_SERVER_PORT,
+        help='Port of the pymerang server'
+    )
     # Enable secure mode for the northbound interface
-    parser.add_argument('-s', '--nb-secure', action='store_true',
-                        dest='nb_secure',
-                        default=DEFAULT_SECURE, help='Activate secure mode '
-                        'for the northbound interface')
+    parser.add_argument(
+        '-s',
+        '--nb-secure',
+        action='store_true',
+        dest='nb_secure',
+        default=DEFAULT_SECURE,
+        help='Activate secure mode for the northbound interface'
+    )
     # Enable secure mode for the southboun interface
-    parser.add_argument('-x', '--sb-secure', action='store_true',
-                        dest='sb_secure',
-                        default=DEFAULT_SECURE, help='Activate secure mode '
-                        'for the southbound interface')
+    parser.add_argument(
+        '-x',
+        '--sb-secure',
+        action='store_true',
+        dest='sb_secure',
+        default=DEFAULT_SECURE,
+        help='Activate secure mode for the southbound interface'
+    )
     # Server certificate
-    parser.add_argument('--nb-server-cert', dest='nb_server_cert',
-                        action='store', default=DEFAULT_CERTIFICATE,
-                        help='Northbound server certificate file')
+    parser.add_argument(
+        '--nb-server-cert',
+        dest='nb_server_cert',
+        action='store',
+        default=DEFAULT_CERTIFICATE,
+        help='Northbound server certificate file'
+    )
     # Server key
-    parser.add_argument('--nb-server-key', dest='nb_server_key',
-                        action='store', default=DEFAULT_KEY,
-                        help='Northbound server key file')
+    parser.add_argument(
+        '--nb-server-key',
+        dest='nb_server_key',
+        action='store',
+        default=DEFAULT_KEY,
+        help='Northbound server key file'
+    )
     # Server certificate
-    parser.add_argument('--sb-server-cert', dest='sb_server_cert',
-                        action='store', default=DEFAULT_CERTIFICATE,
-                        help='Southbound server certificate file')
+    parser.add_argument(
+        '--sb-server-cert',
+        dest='sb_server_cert',
+        action='store',
+        default=DEFAULT_CERTIFICATE,
+        help='Southbound server certificate file'
+    )
     # Server key
-    parser.add_argument('--sb-server-key', dest='sb_server_key',
-                        action='store', default=DEFAULT_KEY,
-                        help='Southbound server key file')
+    parser.add_argument(
+        '--sb-server-key',
+        dest='sb_server_key',
+        action='store',
+        default=DEFAULT_KEY,
+        help='Southbound server key file'
+    )
     # Client certificate
-    parser.add_argument('--client-cert', dest='client_cert',
-                        action='store', default=DEFAULT_CERTIFICATE,
-                        help='Client certificate file')
+    parser.add_argument(
+        '--client-cert',
+        dest='client_cert',
+        action='store',
+        default=DEFAULT_CERTIFICATE,
+        help='Client certificate file'
+    )
     # Port of the northbound gRPC client
-    parser.add_argument('--min-interval-dumps',
-                        dest='min_interval_between_topo_dumps',
-                        action='store',
-                        default=DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS,
-                        help='Minimum interval between two consecutive dumps')
+    parser.add_argument(
+        '--min-interval-dumps',
+        dest='min_interval_between_topo_dumps',
+        action='store',
+        default=DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS,
+        help='Minimum interval between two consecutive dumps'
+    )
     # Config file
-    parser.add_argument('-c', '--config-file', dest='config_file',
-                        action='store', default=None,
-                        help='Path of the configuration file')
+    parser.add_argument(
+        '-c',
+        '--config-file',
+        dest='config_file',
+        action='store',
+        default=None,
+        help='Path of the configuration file'
+    )
     # Config file
-    parser.add_argument('--keep-alive-interval', dest='keep_alive_interval',
-                        action='store', default=DEFAULT_KEEP_ALIVE_INTERVAL,
-                        help='Interval between two consecutive '
-                        'keep alive messages')
+    parser.add_argument(
+        '--keep-alive-interval',
+        dest='keep_alive_interval',
+        action='store',
+        default=DEFAULT_KEEP_ALIVE_INTERVAL,
+        help='Interval between two consecutive keep alive messages'
+    )
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -1135,7 +1301,8 @@ def parse_config_file(config_file):
         exit()
     # Topology Information Extraction period
     args.period = config['DEFAULT'].get(
-        'period', DEFAULT_TOPO_EXTRACTION_PERIOD)
+        'period', DEFAULT_TOPO_EXTRACTION_PERIOD
+    )
     # Path of topology file
     args.topo_file = config['DEFAULT'].get('topo_file', DEFAULT_TOPOLOGY_FILE)
     # Path of topology graph
@@ -1150,49 +1317,61 @@ def parse_config_file(config_file):
     args.topo_extraction = config['DEFAULT'].get('topo_extraction', False)
     # Southbound interface
     args.sb_interface = config['DEFAULT'].get(
-        'sb_interface', DEFAULT_SB_INTERFACE)
+        'sb_interface', DEFAULT_SB_INTERFACE
+    )
     # Northbound interface
     args.nb_interface = config['DEFAULT'].get(
-        'nb_interface', DEFAULT_NB_INTERFACE)
+        'nb_interface', DEFAULT_NB_INTERFACE
+    )
     # IP address of the northbound gRPC server
     args.grpc_server_ip = config['DEFAULT'].get(
-        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP
+    )
     # Port of the northbound gRPC server
     args.grpc_server_port = config['DEFAULT'].get(
-        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
+        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT
+    )
     # Port of the northbound gRPC client
     args.grpc_client_port = config['DEFAULT'].get(
-        'grpc_client_port', DEFAULT_GRPC_CLIENT_PORT)
+        'grpc_client_port', DEFAULT_GRPC_CLIENT_PORT
+    )
     # IP address of the pymerang server
     args.pymerang_server_ip = config['DEFAULT'].get(
-        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP
+    )
     # Port of the pymerang server
     args.pymerang_server_port = config['DEFAULT'].get(
-        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
+        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT
+    )
     # Enable secure mode for the northbound interface
     args.nb_secure = config['DEFAULT'].get('nb_secure', DEFAULT_SECURE)
     # Enable secure mode for the southbound interface
     args.sb_secure = config['DEFAULT'].get('sb_secure', DEFAULT_SECURE)
     # Server certificate
     args.nb_server_cert = config['DEFAULT'].get(
-        'nb_server_cert', DEFAULT_CERTIFICATE)
+        'nb_server_cert', DEFAULT_CERTIFICATE
+    )
     # Server key
     args.nb_server_key = config['DEFAULT'].get('nb_server_key', DEFAULT_KEY)
     # Server certificate
     args.sb_server_cert = config['DEFAULT'].get(
-        'sb_server_cert', DEFAULT_CERTIFICATE)
+        'sb_server_cert', DEFAULT_CERTIFICATE
+    )
     # Server key
     args.sb_server_key = config['DEFAULT'].get('sb_server_key', DEFAULT_KEY)
     # Client certificate
     args.client_cert = config['DEFAULT'].get(
-        'client_cert', DEFAULT_CERTIFICATE)
+        'client_cert', DEFAULT_CERTIFICATE
+    )
     # Port of the northbound gRPC client
-    args.min_interval_between_topo_dumps = \
-        config['DEFAULT'].get('min_interval_between_topo_dumps',
-                              DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS)
+    args.min_interval_between_topo_dumps = config['DEFAULT'].get(
+        'min_interval_between_topo_dumps',
+        DEFAULT_MIN_INTERVAL_BETWEEN_TOPO_DUMPS
+    )
     # Keep-alive interval
     args.keep_alive_interval = config['DEFAULT'].get(
-        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL
+    )
     # Done, return
     return args
 
@@ -1207,8 +1386,7 @@ def _main():
     topo_file = args.topo_file
     # Get topology graph image filename
     topo_graph = args.topo_graph
-    if topo_graph is not None and \
-            not topo_graph.endswith('.svg'):
+    if topo_graph is not None and not topo_graph.endswith('.svg'):
         # Add file extension
         topo_graph = '%s.%s' % (topo_graph, 'svg')
     # Nodes
@@ -1271,11 +1449,17 @@ def _main():
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
     if sb_interface not in SUPPORTED_SB_INTERFACES:
-        utils.print_and_die('Error: %s interface not yet supported or invalid\n'
-                            'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
+        utils.print_and_die(
+            'Error: %s interface not yet supported or invalid\n'
+            'Supported southbound interfaces: %s' %
+            (sb_interface, SUPPORTED_SB_INTERFACES)
+        )
     if nb_interface not in SUPPORTED_NB_INTERFACES:
-        utils.print_and_die('Error: %s interface not yet supported or invalid\n'
-                            'Supported northbound interfaces: %s' % (nb_interface, SUPPORTED_NB_INTERFACES))
+        utils.print_and_die(
+            'Error: %s interface not yet supported or invalid\n'
+            'Supported northbound interfaces: %s' %
+            (nb_interface, SUPPORTED_NB_INTERFACES)
+        )
     # Create a new SRv6 controller
     srv6_controller = SRv6Controller(
         nodes=nodes,
