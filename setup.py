@@ -1,5 +1,5 @@
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup
 # To use a consistent encoding
 from codecs import open
 from os import path
@@ -17,23 +17,29 @@ with open(path.join(here, 'VERSION')) as version_file:
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
 setup(
-    name='srv6-sdn-control-plane',  
+    name='srv6-sdn-control-plane',
     version=version,
     description='SRv6 SDN Control Plane',  # Required
     long_description=long_description,
     long_description_content_type='text/markdown',  # Optional (see note above)
-    entry_points={'console_scripts': ['srv6_controller = srv6_sdn_control_plane.srv6_controller:_main']},
+    entry_points={
+        'console_scripts': [
+            'srv6_controller = srv6_sdn_control_plane.srv6_controller:_main'
+        ]
+    },
     url='',  # Optional
-    packages=['srv6_sdn_control_plane',
-              'srv6_sdn_control_plane.interface_discovery',
-              'srv6_sdn_control_plane.topology',
-              'srv6_sdn_control_plane.northbound',
-              'srv6_sdn_control_plane.northbound.grpc',
-              'srv6_sdn_control_plane.southbound',
-              'srv6_sdn_control_plane.southbound.grpc',
-              'srv6_sdn_control_plane.southbound.netconf',
-              'srv6_sdn_control_plane.southbound.rest',
-              'srv6_sdn_control_plane.southbound.ssh'],  # Required
+    packages=[
+        'srv6_sdn_control_plane',
+        'srv6_sdn_control_plane.interface_discovery',
+        'srv6_sdn_control_plane.topology',
+        'srv6_sdn_control_plane.northbound',
+        'srv6_sdn_control_plane.northbound.grpc',
+        'srv6_sdn_control_plane.southbound',
+        'srv6_sdn_control_plane.southbound.grpc',
+        'srv6_sdn_control_plane.southbound.netconf',
+        'srv6_sdn_control_plane.southbound.rest',
+        'srv6_sdn_control_plane.southbound.ssh'
+    ],  # Required
     install_requires=[
         'setuptools',
         'grpcio>=1.19.0',
@@ -50,10 +56,10 @@ setup(
         'pycparser>=2.20',
         'bcrypt>=3.1.7',
         'pynacl>=1.4.0',
-        #'rollbackcontext==0.1.post2',
+        # 'rollbackcontext==0.1.post2',
         'rollbackcontext'
     ],
     dependency_links=[
-        'git+https://github.com/cscarpitta/rollbackcontext@porting-to-python3#egg=rollbackcontext'
+        'git+https://github.com/cscarpitta/rollbackcontext@porting-to-python3#egg=rollbackcontext'  # noqa E501
     ]
 )
