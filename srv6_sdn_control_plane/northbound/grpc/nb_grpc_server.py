@@ -51,7 +51,10 @@ from srv6_sdn_controller_state import (
     srv6_sdn_controller_state as storage_helper
 )
 from srv6_sdn_proto.status_codes_pb2 import Status, NbStatusCode, SbStatusCode
-from srv6_sdn_control_plane.srv6_controller_utils import OverlayType
+from srv6_sdn_control_plane.srv6_controller_utils import (
+    OverlayType,
+    InterfaceType
+)
 from srv6_sdn_proto.srv6_vpn_pb2 import TenantReply, OverlayServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import InventoryServiceReply
 from srv6_sdn_proto.srv6_vpn_pb2 import GetSIDListsReply
@@ -487,9 +490,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 lan_interfaces_counter = 0
                 for interface in interfaces:
                     # Update counters
-                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                    if interface.type == InterfaceType.WAN:
                         wan_interfaces_counter += 1
-                    elif interface.type == srv6_controller_utils.InterfaceType.LAN:
+                    elif interface.type == InterfaceType.LAN:
                         lan_interfaces_counter += 1
                     # Check if the interface exists
                     if interface.name not in devices[deviceid]['interfaces']:
@@ -517,7 +520,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             status=Status(code=STATUS_BAD_REQUEST, reason=err)
                         )
                     # Cannot set IP address and subnets for the WAN interfaces
-                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                    if interface.type == InterfaceType.WAN:
                         if len(interface.ipv4_addrs) > 0 or \
                                 len(interface.ipv6_addrs) > 0:
                             err = (
@@ -546,11 +549,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                     # Validate IP addresses
                     for ipaddr in interface.ipv4_addrs:
-                        if not srv6_controller_utils.validate_ipv4_address(ipaddr):
+                        if not srv6_controller_utils.validate_ipv4_address(
+                            ipaddr
+                        ):
                             err = (
                                 'Invalid configuration for device %s\n'
-                                'Invalid IPv4 address %s for the interface %s' %
-                                (deviceid, ipaddr, interface.name)
+                                'Invalid IPv4 address %s for the interface %s'
+                                % (deviceid, ipaddr, interface.name)
                             )
                             logging.warning(err)
                             return OverlayServiceReply(
@@ -559,10 +564,13 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 )
                             )
                     for ipaddr in interface.ipv6_addrs:
-                        if not srv6_controller_utils.validate_ipv6_address(ipaddr):
+                        if not srv6_controller_utils.validate_ipv6_address(
+                            ipaddr
+                        ):
                             err = (
                                 'Invalid configuration for device %s\n'
-                                'Invalid IPv6 address %s for the interface %s' %
+                                'Invalid IPv6 address %s for the '
+                                'interface %s' %
                                 (deviceid, ipaddr, interface.name)
                             )
                             logging.warning(err)
@@ -575,7 +583,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     for subnet in interface.ipv4_subnets:
                         gateway = subnet.gateway
                         subnet = subnet.subnet
-                        if not srv6_controller_utils.validate_ipv4_address(subnet):
+                        if not srv6_controller_utils.validate_ipv4_address(
+                            subnet
+                        ):
                             err = (
                                 'Invalid configuration for device %s\n'
                                 'Invalid IPv4 subnet %s for the interface %s' %
@@ -592,8 +602,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     .validate_ipv4_address(gateway)):
                                 err = (
                                     'Invalid configuration for device %s\n'
-                                    'Invalid IPv4 gateway %s for the subnet %s '
-                                    'on the interface %s' %
+                                    'Invalid IPv4 gateway %s for the '
+                                    'subnet %s on the interface %s' %
                                     (deviceid, gateway, subnet, interface.name)
                                 )
                                 logging.warning(err)
@@ -605,7 +615,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     for subnet in interface.ipv6_subnets:
                         gateway = subnet.gateway
                         subnet = subnet.subnet
-                        if not srv6_controller_utils.validate_ipv6_address(subnet):
+                        if not srv6_controller_utils.validate_ipv6_address(
+                            subnet
+                        ):
                             err = (
                                 'Invalid configuration for device %s\n'
                                 'Invalid IPv6 subnet %s for the interface %s' %
@@ -623,8 +635,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             ):
                                 err = (
                                     'Invalid configuration for device %s\n'
-                                    'Invalid IPv6 gateway %s for the subnet %s '
-                                    'on the interface %s' %
+                                    'Invalid IPv6 gateway %s for the '
+                                    'subnet %s on the interface %s' %
                                     (deviceid, gateway, subnet, interface.name)
                                 )
                                 logging.warning(err)
@@ -726,7 +738,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     interfaces[interface.name]['name'] = interface.name
                     if interface.type != '':
                         interfaces[interface.name]['type'] = interface.type
-                    if interface.type == srv6_controller_utils.InterfaceType.WAN:
+                    if interface.type == InterfaceType.WAN:
                         if len(interface.ipv4_addrs) > 0 or \
                                 len(interface.ipv6_addrs) > 0:
                             logging.warning(
@@ -740,7 +752,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     else:
                         if len(interface.ipv4_addrs) > 0:
                             addrs = list()
-                            for addr in interfaces[interface.name]['ipv4_addrs']:
+                            for addr in interfaces[
+                                interface.name
+                            ]['ipv4_addrs']:
                                 addrs.append(addr)
                                 response = self.srv6_manager.remove_ipaddr(
                                     devices[deviceid]['mgmtip'],
@@ -783,13 +797,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     # If the operation has failed,
                                     # report an error message
                                     logging.warning(
-                                        'Cannot assign the private VPN IP address '
-                                        'to the interface'
+                                        'Cannot assign the private VPN IP '
+                                        'address to the interface'
                                     )
                                     err = status_codes_pb2.STATUS_INTERNAL_ERROR
-                                interfaces[interface.name]['ipv4_addrs'].append(
-                                    ipv4_addr
-                                )
+                                interfaces[interface.name][
+                                    'ipv4_addrs'].append(ipv4_addr)
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
@@ -805,7 +818,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         if len(interface.ipv6_addrs) > 0:
                             addrs = list()
                             nets = list()
-                            for addr in interfaces[interface.name]['ipv6_addrs']:
+                            for addr in interfaces[
+                                interface.name
+                            ]['ipv6_addrs']:
                                 addrs.append(addr)
                                 nets.append(str(IPv6Interface(addr).network))
                                 response = self.srv6_manager.remove_ipaddr(
@@ -855,8 +870,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     # If the operation has failed,
                                     # report an error message
                                     logging.warning(
-                                        'Cannot assign the private VPN IP address '
-                                        'to the interface'
+                                        'Cannot assign the private VPN IP '
+                                        'address to the interface'
                                     )
                                     err = status_codes_pb2.STATUS_INTERNAL_ERROR
                                 # Add reverse action to the rollback stack
@@ -872,9 +887,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     deviceid=deviceid,
                                     tenantid=tenantid
                                 )
-                                interfaces[interface.name]['ipv6_addrs'].append(
-                                    ipv6_addr
-                                )
+                                interfaces[
+                                    interface.name
+                                ]['ipv6_addrs'].append(ipv6_addr)
                         interfaces[interface.name]['ipv4_subnets'] = list()
                         for subnet in interface.ipv4_subnets:
                             gateway = subnet.gateway
@@ -948,7 +963,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     wan_ip = None
                     wan_ifaces = None
                     for interface in device['interfaces']:
-                        if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
+                        if interface['type'] == InterfaceType.WAN and \
                                 len(interface['ipv6_addrs']) > 0:
                             wan_ip = interface['ipv6_addrs'][0].split('/')[0]
                             wan_ifaces = [interface['name']]
@@ -1264,7 +1279,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     interface_name = _slice.interface_name
                     # Add the slice to the slices set
                     slices.append(
-                        {'deviceid': deviceid, 'interface_name': interface_name}
+                        {
+                            'deviceid': deviceid,
+                            'interface_name': interface_name
+                        }
                     )
                     # Add the device to the devices set
                     _devices.add(deviceid)
@@ -1308,7 +1326,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     )
                 # Validate the overlay type
                 logging.debug('Validating the overlay type: %s' % overlay_type)
-                if not srv6_controller_utils.validate_overlay_type(overlay_type):
+                if not srv6_controller_utils.validate_overlay_type(
+                    overlay_type
+                ):
                     # If the overlay type is invalid, return an error message
                     err = 'Invalid overlay type: %s' % overlay_type
                     logging.warning(err)
@@ -1317,7 +1337,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     )
                 # Validate the overlay name
                 logging.debug('Validating the overlay name: %s' % overlay_name)
-                if not srv6_controller_utils.validate_overlay_name(overlay_name):
+                if not srv6_controller_utils.validate_overlay_name(
+                    overlay_name
+                ):
                     # If the overlay name is invalid, return an error message
                     err = 'Invalid overlay name: %s' % overlay_name
                     logging.warning(err)
@@ -1403,8 +1425,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # Check if the devices have at least a WAN interface
                     wan_found = False
                     for interface in devices[deviceid]['interfaces']:
-                        if interface['type'] == \
-                                srv6_controller_utils.InterfaceType.WAN:
+                        if interface['type'] == InterfaceType.WAN:
                             wan_found = True
                     if not wan_found:
                         # No WAN interfaces found on the device
@@ -1470,7 +1491,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                     # Check if the interface type is LAN
                     if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                            srv6_controller_utils.InterfaceType.LAN:
+                            InterfaceType.LAN:
                         # The interface type is not LAN
                         err = (
                             'Cannot add non-LAN interface to the overlay: %s '
@@ -1670,14 +1691,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     and not can_use_ipv4_addr_for_wan
                 ):
                     err = (
-                        'Cannot establish a full-mesh between all the WAN interfaces'
+                        'Cannot establish a full-mesh between all the WAN '
+                        'interfaces'
                     )
                     logging.error(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err))
                 if tunnel_name == 'SRv6' and not can_use_ipv6_addr_for_wan:
                     err = (
-                        'IPv6 transport not available: cannot create a SRv6 overlay'
+                        'IPv6 transport not available: cannot create a SRv6 '
+                        'overlay'
                     )
                     logging.error(err)
                     return OverlayServiceReply(
@@ -1704,9 +1727,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                         if incoming_sr_transparency == 'op':
                             err = (
-                                'Device %s has incoming SR Transparency set to OP. '
-                                'SRv6 overlays are not supported for OP.' %
-                                (deviceid)
+                                'Device %s has incoming SR Transparency set '
+                                'to OP. SRv6 overlays are not supported for '
+                                'OP.' % deviceid
                             )
                             logging.error(err)
                             return OverlayServiceReply(
@@ -1716,9 +1739,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                         if outgoing_sr_transparency == 'op':
                             err = (
-                                'Device %s has outgoing SR Transparency set to OP. '
-                                'SRv6 overlays are not supported for OP.' %
-                                (deviceid)
+                                'Device %s has outgoing SR Transparency set '
+                                'to OP. SRv6 overlays are not supported for '
+                                'OP.' % deviceid
                             )
                             logging.error(err)
                             return OverlayServiceReply(
@@ -1780,8 +1803,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 )
                 if status_code != STATUS_OK:
                     err = (
-                        'Cannot initialize overlay data (overlay %s, tenant %s)' %
-                        (overlay_name, tenantid)
+                        'Cannot initialize overlay data '
+                        '(overlay %s, tenant %s)'
+                        % (overlay_name, tenantid)
                     )
                     logging.warning(err)
                     # # Remove overlay DB status
@@ -1948,9 +1972,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 # # Remove overlay DB status
@@ -2399,8 +2423,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # Check if the devices have at least a WAN interface
                     wan_found = False
                     for interface in devices[deviceid]['interfaces']:
-                        if interface['type'] == \
-                                srv6_controller_utils.InterfaceType.WAN:
+                        if interface['type'] == InterfaceType.WAN:
                             wan_found = True
                     if not wan_found:
                         # No WAN interfaces found on the device
@@ -2441,7 +2464,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                     # Check if the interface type is LAN
                     if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                            srv6_controller_utils.InterfaceType.LAN:
+                            InterfaceType.LAN:
                         # The interface type is not LAN
                         err = (
                             'Cannot add non-LAN interface to the overlay: %s '
@@ -2676,9 +2699,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                         if incoming_sr_transparency == 'op':
                             err = (
-                                'Device %s has incoming SR Transparency set to OP. '
-                                'SRv6 overlays are not supported for OP.' %
-                                (deviceid)
+                                'Device %s has incoming SR Transparency set '
+                                'to OP. SRv6 overlays are not supported for '
+                                'OP.' % deviceid
                             )
                             logging.error(err)
                             return OverlayServiceReply(
@@ -2688,9 +2711,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                         if outgoing_sr_transparency == 'op':
                             err = (
-                                'Device %s has outgoing SR Transparency set to OP. '
-                                'SRv6 overlays are not supported for OP.' %
-                                (deviceid)
+                                'Device %s has outgoing SR Transparency set '
+                                'to OP. SRv6 overlays are not supported for '
+                                'OP.' % deviceid
                             )
                             logging.error(err)
                             return OverlayServiceReply(
@@ -2698,12 +2721,23 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     code=STATUS_BAD_REQUEST, reason=err
                                 )
                             )
-                        # if incoming_sr_transparency == 't1' and is_srh_forced:
-                        #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
-                        #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                        # if (
+                        #     incoming_sr_transparency == 't1'
+                        #     and is_srh_forced
+                        # ):
+                        #     err = (
+                        #         'Device %s has incoming SR Transparency set '
+                        #         'to T1 and force-srh set. Cannot use an SRH '
+                        #         'for device with incoming Transparency T1.'
+                        #         % deviceid
+                        #     )
                         #     logging.error(err)
                         #     return OverlayServiceReply(
-                        #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        #         status=Status(
+                        #             code=STATUS_BAD_REQUEST,
+                        #             reason=err
+                        #         )
+                        #     )
                 # All the devices must belong to the same tenant
                 for device in devices.values():
                     if device['tenantid'] != tenantid:
@@ -2766,7 +2800,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             deviceid=deviceid,
                             tenantid=tenantid
                         )
-                    # Check if we have already configured the overlay on the device
+                    # Check if we have already configured the overlay on the
+                    # device
                     if deviceid in incoming_devices:
                         # Init overlay on the devices
                         status_code = tunnel_mode.init_overlay(
@@ -2840,9 +2875,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return OverlayServiceReply(
@@ -2962,8 +2997,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # Check tenant ID
                 if tenantid != overlay['tenantid']:
                     # If the overlay does not exist, return an error message
-                    err = 'The overlay %s does not belong to the '
-                    'tenant %s' % (overlayid, tenantid)
+                    err = (
+                        'The overlay %s does not belong to the '
+                        'tenant %s' % (overlayid, tenantid)
+                    )
                     logging.warning(err)
                     return OverlayServiceReply(
                         status=Status(code=STATUS_BAD_REQUEST, reason=err)
@@ -2985,7 +3022,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     interface_name = _slice.interface_name
                     # Add the slice to the incoming slices set
                     incoming_slices.append(
-                        {'deviceid': deviceid, 'interface_name': interface_name}
+                        {
+                            'deviceid': deviceid,
+                            'interface_name': interface_name
+                        }
                     )
                     # Add the device to the incoming devices set
                     # if the overlay has not been initiated on it
@@ -3025,7 +3065,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     interface_name = _slice['interface_name']
                     # Let's check if the router exists
                     if deviceid not in devices:
-                        # If the device does not exist, return an error message
+                        # If the device does not exist, return an error
+                        # message
                         err = 'Device not found %s' % deviceid
                         logging.warning(err)
                         return OverlayServiceReply(
@@ -3033,7 +3074,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                     # Check if the device is connected
                     if not devices[deviceid]['connected']:
-                        # If the device is not connected, return an error message
+                        # If the device is not connected, return an error
+                        # message
                         err = 'The device %s is not connected' % deviceid
                         logging.warning(err)
                         return OverlayServiceReply(
@@ -3056,7 +3098,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         return OverlayServiceReply(
                             status=Status(code=STATUS_BAD_REQUEST, reason=err)
                         )
-                    # Let's check if the interface is assigned to the given overlay
+                    # Let's check if the interface is assigned to the given
+                    # overlay
                     if _slice not in overlay['slices']:
                         # The interface is not assigned to the overlay,
                         # return an error message
@@ -3104,9 +3147,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return OverlayServiceReply(
@@ -3169,9 +3212,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         )
                         if status_code != STATUS_OK:
                             err = (
-                                'Cannot destroy overlay (overlay %s, device %s '
-                                'tenant %s)' %
-                                (overlay_name, deviceid, tenantid)
+                                'Cannot destroy overlay '
+                                '(overlay %s, device %s tenant %s)'
+                                % (overlay_name, deviceid, tenantid)
                             )
                             logging.warning(err)
                             return OverlayServiceReply(
@@ -3440,15 +3483,17 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 interface['name']
             ]['ipv6_addrs'] = interface['ipv6_addrs']
         for interface in device['interfaces']:
-            if interface['type'] == srv6_controller_utils.InterfaceType.WAN or \
-                    interface['type'] == srv6_controller_utils.InterfaceType.UNKNOWN:
+            if interface['type'] == InterfaceType.WAN or \
+                    interface['type'] == InterfaceType.UNKNOWN:
                 logging.warning(
                     'Cannot set IP address of WAN interface. Skipping'
                 )
                 continue
             if len(interface['ipv4_addrs']) > 0:
                 addrs = list()
-                for addr in default_interfaces[interface['name']]['ipv4_addrs']:
+                for addr in default_interfaces[
+                    interface['name']
+                ]['ipv4_addrs']:
                     addrs.append(addr)
                 response = self.srv6_manager.remove_many_ipaddr(
                     device['mgmtip'],
@@ -3488,7 +3533,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             if len(interface['ipv6_addrs']) > 0:
                 addrs = list()
                 nets = list()
-                for addr in default_interfaces[interface['name']]['ipv6_addrs']:
+                for addr in default_interfaces[
+                    interface['name']
+                ]['ipv6_addrs']:
                     addrs.append(addr)
                     nets.append(str(IPv6Interface(addr).network))
                 response = self.srv6_manager.remove_many_ipaddr(
@@ -3551,7 +3598,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             wan_ip = None
             wan_ifaces = None
             for interface in device['interfaces']:
-                if interface['type'] == srv6_controller_utils.InterfaceType.WAN and \
+                if interface['type'] == InterfaceType.WAN and \
                         len(interface['ipv6_addrs']) > 0:
                     wan_ip = interface['ipv6_addrs'][0].split('/')[0]
                     wan_ifaces = [interface['name']]
@@ -3618,7 +3665,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
 
     def overlay_reconciliation(self, deviceid, tenantid):
         logging.info(
-            'Overlay Reconcliation started: deviceid %s, tenantid %s', deviceid, tenantid
+            'Overlay Reconcliation started: deviceid %s, tenantid %s',
+            deviceid,
+            tenantid
         )
         overlays = storage_helper.get_overlays_containing_device(
             deviceid=deviceid, tenantid=tenantid
@@ -3722,9 +3771,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return
@@ -3738,9 +3787,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return
@@ -3755,9 +3804,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return
@@ -3772,9 +3821,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             )
                             if status_code != STATUS_OK:
                                 err = (
-                                    'Cannot create tunnel (overlay %s site1 %s '
-                                    'site2 %s, tenant %s)' %
-                                    (overlay_name, site1, site2, tenantid)
+                                    'Cannot create tunnel (overlay %s '
+                                    'site1 %s site2 %s, tenant %s)'
+                                    % (overlay_name, site1, site2, tenantid)
                                 )
                                 logging.warning(err)
                                 return
@@ -3784,7 +3833,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     'Reconciliation of overlays completed successfully\n\n'
                 )
         logging.debug(
-            'Overlay Reconcliation completed: deviceid %s, tenantid %s', deviceid, tenantid
+            'Overlay Reconcliation completed: deviceid %s, tenantid %s',
+            deviceid,
+            tenantid
         )
         # Create the response
         return STATUS_OK
