@@ -1250,7 +1250,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 self.stamp_controller.remove_stamp_node(
                     node_id=deviceid, tenantid=tenantid
                 )
-            except Exception as err:
+            except Exception:  # as err:
                 # TODO replace with a more specific exception
                 self.stamp_controller.storage.remove_stamp_node(
                     node_id=deviceid, tenantid=tenantid
@@ -1745,12 +1745,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 _slice['deviceid'], tenantid
                             )
                         )
-                        is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
-                            _slice['deviceid'], tenantid
-                        )
-                        is_srh_forced = storage_helper.is_srh_forced(
-                            _slice['deviceid'], tenantid
-                        )
+                        # is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
+                        #     _slice['deviceid'], tenantid
+                        # )
+                        # is_srh_forced = storage_helper.is_srh_forced(
+                        #     _slice['deviceid'], tenantid
+                        # )
                         if incoming_sr_transparency == 'op':
                             err = (
                                 'Device %s has incoming SR Transparency set '
@@ -2742,12 +2742,12 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 _slice['deviceid'], tenantid
                             )
                         )
-                        is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
-                            _slice['deviceid'], tenantid
-                        )
-                        is_srh_forced = storage_helper.is_srh_forced(
-                            _slice['deviceid'], tenantid
-                        )
+                        # is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
+                        #     _slice['deviceid'], tenantid
+                        # )
+                        # is_srh_forced = storage_helper.is_srh_forced(
+                        #     _slice['deviceid'], tenantid
+                        # )
                         if incoming_sr_transparency == 'op':
                             err = (
                                 'Device %s has incoming SR Transparency set '
