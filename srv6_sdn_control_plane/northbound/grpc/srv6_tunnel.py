@@ -850,7 +850,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             num_tunnels = (
                 storage_helper.dec_and_get_tunnels_counter(
                     overlayid, tenantid, l_slice['deviceid'], r_slice)
-                )
+            )
             # Add reverse action to the rollback stack
             rollback.push(
                 func=storage_helper.inc_and_get_tunnels_counter,
@@ -1939,7 +1939,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # If ip6tnl is forced, the SID list can only contain one SID
             if (
                 storage_helper.is_ip6tnl_forced(deviceid, tenantid)
-                and len(self.controller_state_srv6.get_sid_list(
+                and len(
+                    self.controller_state_srv6.get_sid_list(
                         deviceid, tenantid, tableid)
                 ) > 1
             ):
