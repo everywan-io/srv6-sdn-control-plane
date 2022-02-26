@@ -208,7 +208,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     status=Status(code=STATUS_BAD_REQUEST, reason=err)
                 )
             # Configure the tenant
-            vxlan_port = vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
+            vxlan_port = (
+                vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
+            )
             storage_helper.configure_tenant(
                 tenantid, tenant_info, vxlan_port
             )
@@ -677,8 +679,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     deviceid = device.id
                     # Configure information
                     try:
-                        stamp_node = self.stamp_controller.storage.get_stamp_node(
-                            node_id=deviceid, tenantid=tenantid
+                        stamp_node = (
+                            self.stamp_controller.storage.get_stamp_node(
+                                node_id=deviceid, tenantid=tenantid
+                            )
                         )
                         if stamp_node is not None:
                             self.stamp_controller.remove_stamp_node(
@@ -687,7 +691,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             # Add reverse action to the rollback stack
                             rollback.push(
                                 func=exec_or_mark_device_inconsitent,
-                                rollback_func=self.stamp_controller.add_stamp_node,
+                                rollback_func=(
+                                    self.stamp_controller.add_stamp_node
+                                ),
                                 node_id=stamp_node.node_id,
                                 node_name=stamp_node.node_name,
                                 grpc_ip=stamp_node.grpc_ip,
@@ -696,7 +702,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 sender_port=stamp_node.sender_udp_port,
                                 reflector_port=stamp_node.reflector_udp_port,
                                 interfaces=stamp_node.interfaces,
-                                stamp_source_ipv6_address=stamp_node.stamp_source_ipv6_address,
+                                stamp_source_ipv6_address=(
+                                    stamp_node.stamp_source_ipv6_address
+                                ),
                                 is_sender=stamp_node.is_sender,
                                 is_reflector=stamp_node.is_reflector,
                                 deviceid=deviceid,
@@ -770,7 +778,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                         'Cannot remove the public addresses '
                                         'from the interface'
                                     )
-                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    err = (
+                                        status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    )
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
@@ -800,7 +810,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                         'Cannot assign the private VPN IP '
                                         'address to the interface'
                                     )
-                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    err = (
+                                        status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    )
                                 interfaces[interface.name][
                                     'ipv4_addrs'].append(ipv4_addr)
                                 # Add reverse action to the rollback stack
@@ -838,11 +850,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                         'Cannot remove the public addresses '
                                         'from the interface'
                                     )
-                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    err = (
+                                        status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    )
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=self.srv6_manager.create_ipaddr,
+                                    rollback_func=(
+                                        self.srv6_manager.create_ipaddr
+                                    ),
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=addr,
@@ -873,11 +889,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                         'Cannot assign the private VPN IP '
                                         'address to the interface'
                                     )
-                                    err = status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    err = (
+                                        status_codes_pb2.STATUS_INTERNAL_ERROR
+                                    )
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=self.srv6_manager.remove_ipaddr,
+                                    rollback_func=(
+                                        self.srv6_manager.remove_ipaddr
+                                    ),
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=ipv6_addr,
@@ -1230,7 +1250,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 self.stamp_controller.remove_stamp_node(
                     node_id=deviceid, tenantid=tenantid
                 )
-            except Exception as err:  # TODO replace with a more specific exception
+            except Exception as err:
+                # TODO replace with a more specific exception
                 self.stamp_controller.storage.remove_stamp_node(
                     node_id=deviceid, tenantid=tenantid
                 )
@@ -1490,8 +1511,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             status=Status(code=STATUS_BAD_REQUEST, reason=err)
                         )
                     # Check if the interface type is LAN
-                    if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                            InterfaceType.LAN:
+                    if devices[deviceid]['interfaces'][
+                        interface_name
+                    ]['type'] != InterfaceType.LAN:
                         # The interface type is not LAN
                         err = (
                             'Cannot add non-LAN interface to the overlay: %s '
@@ -1713,11 +1735,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # cannot be created
                 if tunnel_name == 'SRv6':
                     for _slice in slices:
-                        incoming_sr_transparency = storage_helper.get_incoming_sr_transparency(
-                            _slice['deviceid'], tenantid
+                        incoming_sr_transparency = (
+                            storage_helper.get_incoming_sr_transparency(
+                                _slice['deviceid'], tenantid
+                            )
                         )
-                        outgoing_sr_transparency = storage_helper.get_outgoing_sr_transparency(
-                            _slice['deviceid'], tenantid
+                        outgoing_sr_transparency = (
+                            storage_helper.get_outgoing_sr_transparency(
+                                _slice['deviceid'], tenantid
+                            )
                         )
                         is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
                             _slice['deviceid'], tenantid
@@ -1749,12 +1775,23 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                     code=STATUS_BAD_REQUEST, reason=err
                                 )
                             )
-                        # if incoming_sr_transparency == 't1' and is_srh_forced:
-                        #     err = ('Device %s has incoming SR Transparency set to T1 and force-srh set. '
-                        #            'Cannot use an SRH for device with incoming Transparency T1.' % (deviceid))
+                        # if (
+                        #     incoming_sr_transparency == 't1'
+                        #     and is_srh_forced
+                        # ):
+                        #     err = (
+                        #         'Device %s has incoming SR Transparency '
+                        #         'set to T1 and force-srh set. '
+                        #         'Cannot use an SRH for device with incoming '
+                        #         'Transparency T1.' % deviceid
+                        #     )
                         #     logging.error(err)
                         #     return OverlayServiceReply(
-                        #         status=Status(code=STATUS_BAD_REQUEST, reason=err))
+                        #         status=Status(
+                        #             code=STATUS_BAD_REQUEST,
+                        #             reason=err
+                        #         )
+                        #     )
                 # All the devices must belong to the same tenant
                 for device in devices.values():
                     if device['tenantid'] != tenantid:
@@ -1811,7 +1848,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     # # Remove overlay DB status
                     # if storage_helper.remove_overlay(
                     #         overlayid, tenantid) is not True:
-                    #     logging.error('Cannot remove overlay. Inconsistent data')
+                    #     logging.error('Cannot remove overlay. '
+                    #                   'Inconsistent data')
                     return OverlayServiceReply(
                         status=Status(code=status_code, reason=err)
                     )
@@ -1835,7 +1873,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if counter == 0:
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.dec_and_get_tunnel_mode_counter,
+                            func=(
+                                storage_helper.dec_and_get_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -1853,7 +1893,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             # if storage_helper.remove_overlay(
                             #         overlayid, tenantid) is not True:
                             #     logging.error(
-                            #         'Cannot remove overlay. Inconsistent data')
+                            #         'Cannot remove overlay. '
+                            #         'Inconsistent data')
                             return OverlayServiceReply(
                                 status=Status(code=status_code, reason=err)
                             )
@@ -1882,7 +1923,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         # Success
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.dec_and_get_tunnel_mode_counter,
+                            func=(
+                                storage_helper.dec_and_get_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -1909,7 +1952,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             # if storage_helper.remove_overlay(
                             #         overlayid, tenantid) is not True:
                             #     logging.error(
-                            #         'Cannot remove overlay. Inconsistent data')
+                            #         'Cannot remove overlay. '
+                            #         'Inconsistent data')
                             return OverlayServiceReply(
                                 status=Status(code=status_code, reason=err)
                             )
@@ -1981,7 +2025,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 # if storage_helper.remove_overlay(
                                 #         overlayid, tenantid) is not True:
                                 #     logging.error(
-                                #         'Cannot remove overlay. Inconsistent data')
+                                #         'Cannot remove overlay. '
+                                #         'Inconsistent data'
+                                #     )
                                 return OverlayServiceReply(
                                     status=Status(code=status_code, reason=err)
                                 )
@@ -2463,8 +2509,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                             status=Status(code=STATUS_BAD_REQUEST, reason=err)
                         )
                     # Check if the interface type is LAN
-                    if devices[deviceid]['interfaces'][interface_name]['type'] != \
-                            InterfaceType.LAN:
+                    if devices[deviceid]['interfaces'][
+                        interface_name
+                    ]['type'] != InterfaceType.LAN:
                         # The interface type is not LAN
                         err = (
                             'Cannot add non-LAN interface to the overlay: %s '
@@ -2685,11 +2732,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 # cannot be created
                 if tunnel_name == 'SRv6':
                     for _slice in incoming_slices:
-                        incoming_sr_transparency = storage_helper.get_incoming_sr_transparency(
-                            _slice['deviceid'], tenantid
+                        incoming_sr_transparency = (
+                            storage_helper.get_incoming_sr_transparency(
+                                _slice['deviceid'], tenantid
+                            )
                         )
-                        outgoing_sr_transparency = storage_helper.get_outgoing_sr_transparency(
-                            _slice['deviceid'], tenantid
+                        outgoing_sr_transparency = (
+                            storage_helper.get_outgoing_sr_transparency(
+                                _slice['deviceid'], tenantid
+                            )
                         )
                         is_ip6tnl_forced = storage_helper.is_ip6tnl_forced(
                             _slice['deviceid'], tenantid
@@ -2765,7 +2816,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if counter == 0:
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.dec_and_get_tunnel_mode_counter,
+                            func=(
+                                storage_helper.dec_and_get_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -2795,7 +2848,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         # Success
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.dec_and_get_tunnel_mode_counter,
+                            func=(
+                                storage_helper.dec_and_get_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -3237,7 +3292,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     if counter == 0:
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.get_and_inc_tunnel_mode_counter,
+                            func=(
+                                storage_helper.get_and_inc_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -3267,7 +3324,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         # Success
                         # Add reverse action to the rollback stack
                         rollback.push(
-                            func=storage_helper.get_and_inc_tunnel_mode_counter,
+                            func=(
+                                storage_helper.get_and_inc_tunnel_mode_counter
+                            ),
                             tunnel_name=tunnel_name,
                             deviceid=deviceid,
                             tenantid=tenantid
@@ -3708,8 +3767,10 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         tunnel_name, deviceid, tenantid
                     )
                     if counter == 0:
-                        status_code = tunnel_mode.init_tunnel_mode_reconciliation(
-                            deviceid, tenantid, tunnel_info
+                        status_code = (
+                            tunnel_mode.init_tunnel_mode_reconciliation(
+                                deviceid, tenantid, tunnel_info
+                            )
                         )
                         if status_code != STATUS_OK:
                             err = (
@@ -3741,13 +3802,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         return
                 # Add the interface to the overlay
                 if deviceid == _deviceid:
-                    status_code = tunnel_mode.add_slice_to_overlay_reconciliation(
-                        overlayid,
-                        overlay_name,
-                        deviceid,
-                        interface_name,
-                        tenantid,
-                        tunnel_info
+                    status_code = (
+                        tunnel_mode.add_slice_to_overlay_reconciliation(
+                            overlayid,
+                            overlay_name,
+                            deviceid,
+                            interface_name,
+                            tenantid,
+                            tunnel_info
+                        )
                     )
                     if status_code != STATUS_OK:
                         err = (
@@ -3761,13 +3824,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 for site2 in configured_slices:
                     if site1['deviceid'] != site2['deviceid']:
                         if site1['deviceid'] == deviceid:
-                            status_code = tunnel_mode.create_tunnel_reconciliation_l(
-                                overlayid,
-                                overlay_name,
-                                overlay_type,
-                                site1, site2,
-                                tenantid,
-                                tunnel_info
+                            status_code = (
+                                tunnel_mode.create_tunnel_reconciliation_l(
+                                    overlayid,
+                                    overlay_name,
+                                    overlay_type,
+                                    site1, site2,
+                                    tenantid,
+                                    tunnel_info
+                                )
                             )
                             if status_code != STATUS_OK:
                                 err = (
@@ -3777,13 +3842,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 )
                                 logging.warning(err)
                                 return
-                            status_code = tunnel_mode.create_tunnel_reconciliation_r(
-                                overlayid,
-                                overlay_name,
-                                overlay_type,
-                                site2, site1,
-                                tenantid,
-                                tunnel_info
+                            status_code = (
+                                tunnel_mode.create_tunnel_reconciliation_r(
+                                    overlayid,
+                                    overlay_name,
+                                    overlay_type,
+                                    site2, site1,
+                                    tenantid,
+                                    tunnel_info
+                                )
                             )
                             if status_code != STATUS_OK:
                                 err = (
@@ -3794,13 +3861,15 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 logging.warning(err)
                                 return
                         if site2['deviceid'] == deviceid:
-                            status_code = tunnel_mode.create_tunnel_reconciliation_l(
-                                overlayid,
-                                overlay_name,
-                                overlay_type,
-                                site2, site1,
-                                tenantid,
-                                tunnel_info
+                            status_code = (
+                                tunnel_mode.create_tunnel_reconciliation_l(
+                                    overlayid,
+                                    overlay_name,
+                                    overlay_type,
+                                    site2, site1,
+                                    tenantid,
+                                    tunnel_info
+                                )
                             )
                             if status_code != STATUS_OK:
                                 err = (
@@ -3810,14 +3879,16 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 )
                                 logging.warning(err)
                                 return
-                            status_code = tunnel_mode.create_tunnel_reconciliation_r(
-                                overlayid,
-                                overlay_name,
-                                overlay_type,
-                                site1,
-                                site2,
-                                tenantid,
-                                tunnel_info
+                            status_code = (
+                                tunnel_mode.create_tunnel_reconciliation_r(
+                                    overlayid,
+                                    overlay_name,
+                                    overlay_type,
+                                    site1,
+                                    site2,
+                                    tenantid,
+                                    tunnel_info
+                                )
                             )
                             if status_code != STATUS_OK:
                                 err = (
