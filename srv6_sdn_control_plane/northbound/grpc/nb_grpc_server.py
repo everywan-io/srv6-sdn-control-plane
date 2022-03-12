@@ -1698,19 +1698,26 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 can_use_ipv6_addr_for_wan = True
                 can_use_ipv4_addr_for_wan = True
                 for _slice in slices:
+                    # Get WAN interface
+                    wan_interface = storage_helper.get_wan_interfaces(
+                        deviceid=_slice['deviceid'],
+                        tenantid=tenantid
+                    )[0]
+                    # Check if WAN interface has IPv6 connectivity
                     addrs = storage_helper.get_ext_ipv6_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv6_addr_for_wan = False
+                    # Check if WAN interface has IPv4 connectivity
                     addrs = storage_helper.get_ext_ipv4_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv4_addr_for_wan = False
                 if (
                     not can_use_ipv6_addr_for_wan
@@ -2696,19 +2703,26 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 can_use_ipv6_addr_for_wan = True
                 can_use_ipv4_addr_for_wan = True
                 for _slice in slices + incoming_slices:
+                    # Get WAN interface
+                    wan_interface = storage_helper.get_wan_interfaces(
+                        deviceid=_slice['deviceid'],
+                        tenantid=tenantid
+                    )[0]
+                    # Check if WAN interface has IPv6 connectivity
                     addrs = storage_helper.get_ext_ipv6_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv6_addr_for_wan = False
+                    # Check if WAN interface has IPv4 connectivity
                     addrs = storage_helper.get_ext_ipv4_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv4_addr_for_wan = False
                 if (
                     not can_use_ipv6_addr_for_wan
