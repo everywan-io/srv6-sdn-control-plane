@@ -43,10 +43,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         self.overlays = db.overlays
 
     def add_slice_to_overlay(self, overlayid, overlay_name,
-                             routerid, interface_name, tenantid, overlay_info):
+                             deviceid, interface_name, tenantid, overlay_info):
         # Get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -79,7 +79,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Create routes for subnets
         # get subnet for local and remote site
         subnets = storage_helper.get_ip_subnets(
-            routerid, tenantid, interface_name
+            deviceid, tenantid, interface_name
         )
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -106,23 +106,23 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info):
+                      l_slice, r_slice, tenantid, overlay_info):
         # get devices ID
-        id_remote_site = remote_site['deviceid']
-        id_local_site = local_site['deviceid']
+        id_remote_site = r_slice['deviceid']
+        id_local_site = l_slice['deviceid']
         # get management IP address for local and remote site
         mgmt_ip_local_site = storage_helper.get_router_mgmtip(
-            local_site['deviceid'], tenantid
+            l_slice['deviceid'], tenantid
         )
         mgmt_ip_remote_site = storage_helper.get_router_mgmtip(
-            remote_site['deviceid'], tenantid
+            r_slice['deviceid'], tenantid
         )
         # get subnet for local and remote site
         lan_sub_remote_sites = storage_helper.get_ip_subnets(
-            id_remote_site, tenantid, remote_site['interface_name']
+            id_remote_site, tenantid, r_slice['interface_name']
         )
         lan_sub_local_sites = storage_helper.get_ip_subnets(
-            id_local_site, tenantid, local_site['interface_name']
+            id_local_site, tenantid, l_slice['interface_name']
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -403,10 +403,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def init_overlay(self, overlayid, overlay_name,
-                     overlay_type, tenantid, routerid, overlay_info):
+                     overlay_type, tenantid, deviceid, overlay_info):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # Get vxlan port set by user
         vxlan_port_site = storage_helper.get_tenant_vxlan_port(
@@ -425,7 +425,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface
         wan_intf_site = storage_helper.get_wan_interfaces(
-            routerid, tenantid
+            deviceid, tenantid
         )[0]
         # get VNI for the overlay
         vni = storage_helper.get_vni(overlay_name, tenantid)
@@ -434,12 +434,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
             vtep_ip_site = storage_helper.get_vtep_ipv6(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
             vtep_ip_site = storage_helper.get_vtep_ip(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET
         # transport protocol
@@ -523,31 +523,31 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def init_tunnel_mode(self, routerid, tenantid, overlay_info):
+    def init_tunnel_mode(self, deviceid, tenantid, overlay_info):
         # get VTEP IP address for site1
         vtep_ip_site = storage_helper.get_vtep_ip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         if vtep_ip_site == -1:
             vtep_ip_site = storage_helper.get_new_vtep_ip(
-                routerid, tenantid
+                deviceid, tenantid
             )
         vtep_ipv6_site = storage_helper.get_vtep_ipv6(
-            routerid, tenantid
+            deviceid, tenantid
         )
         if vtep_ipv6_site == -1:
             vtep_ipv6_site = storage_helper.get_new_vtep_ipv6(
-                routerid, tenantid
+                deviceid, tenantid
             )
         # Success
         return NbStatusCode.STATUS_OK
 
-    def remove_slice_from_overlay(self, overlayid, overlay_name, routerid,
+    def remove_slice_from_overlay(self, overlayid, overlay_name, deviceid,
                                   interface_name, tenantid, overlay_info,
                                   ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # retrive table ID
         tableid = storage_helper.get_tableid(
@@ -566,7 +566,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         #
         # get subnet for local and remote site
         subnets = storage_helper.get_ip_subnets(
-            routerid, tenantid, interface_name
+            deviceid, tenantid, interface_name
         )
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -611,11 +611,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def remove_tunnel(self, overlayid, overlay_name, overlay_type,
-                      local_site, remote_site, tenantid, overlay_info,
+                      l_slice, r_slice, tenantid, overlay_info,
                       ignore_errors=False):
         # get devices ID
-        id_local_site = local_site['deviceid']
-        id_remote_site = remote_site['deviceid']
+        id_local_site = l_slice['deviceid']
+        id_remote_site = r_slice['deviceid']
         # get VNI
         vni = storage_helper.get_vni(
             overlay_name, tenantid
@@ -657,10 +657,10 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
         # get local and remote subnet
         lan_sub_local_sites = storage_helper.get_ip_subnets(
-            id_local_site, tenantid, local_site['interface_name']
+            id_local_site, tenantid, l_slice['interface_name']
         )
         lan_sub_remote_sites = storage_helper.get_ip_subnets(
-            id_remote_site, tenantid, remote_site['interface_name']
+            id_remote_site, tenantid, r_slice['interface_name']
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -869,11 +869,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def destroy_overlay(self, overlayid, overlay_name,
-                        overlay_type, tenantid, routerid, overlay_info,
+                        overlay_type, tenantid, deviceid, overlay_info,
                         ignore_errors=False):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # get VNI
         vni = storage_helper.get_vni(overlay_name, tenantid)
@@ -893,12 +893,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
             vtep_ip_site = storage_helper.get_vtep_ipv6(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
             vtep_ip_site = storage_helper.get_vtep_ip(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET
         # get VTEP IP address
@@ -967,11 +967,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def destroy_tunnel_mode(self, routerid, tenantid, overlay_info,
+    def destroy_tunnel_mode(self, deviceid, tenantid, overlay_info,
                             ignore_errors=False):
         # release VTEP IP address if no more VTEP on the EDGE device
-        storage_helper.release_vtep_ip(routerid, tenantid)
-        storage_helper.release_vtep_ipv6(routerid, tenantid)
+        storage_helper.release_vtep_ip(deviceid, tenantid)
+        storage_helper.release_vtep_ipv6(deviceid, tenantid)
         # Success
         return NbStatusCode.STATUS_OK
 
@@ -979,11 +979,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         raise NotImplementedError
 
     def add_slice_to_overlay_reconciliation(self, overlayid, overlay_name,
-                                            routerid, interface_name, tenantid,
+                                            deviceid, interface_name, tenantid,
                                             overlay_info):
         # Get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -1016,7 +1016,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Create routes for subnets
         # get subnet for local and remote site
         subnets = storage_helper.get_ip_subnets(
-            routerid, tenantid, interface_name
+            deviceid, tenantid, interface_name
         )
         for subnet in subnets:
             gateway = subnet['gateway']
@@ -1043,18 +1043,18 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel_reconciliation_l(self, overlayid, overlay_name,
-                                       overlay_type, local_site, remote_site,
+                                       overlay_type, l_slice, r_slice,
                                        tenantid, overlay_info):
         # get devices ID
-        id_remote_site = remote_site['deviceid']
-        id_local_site = local_site['deviceid']
+        id_remote_site = r_slice['deviceid']
+        id_local_site = l_slice['deviceid']
         # get management IP address for local and remote site
         mgmt_ip_local_site = storage_helper.get_router_mgmtip(
-            local_site['deviceid'], tenantid
+            l_slice['deviceid'], tenantid
         )
         # get subnet for local and remote site
         lan_sub_remote_sites = storage_helper.get_ip_subnets(
-            id_remote_site, tenantid, remote_site['interface_name']
+            id_remote_site, tenantid, r_slice['interface_name']
         )
         # get table ID
         tableid = storage_helper.get_tableid(
@@ -1209,17 +1209,17 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         return NbStatusCode.STATUS_OK
 
     def create_tunnel_reconciliation_r(self, overlayid, overlay_name,
-                                       overlay_type, local_site, remote_site,
+                                       overlay_type, l_slice, r_slice,
                                        tenantid, overlay_info):
         # Nothing to do
         return NbStatusCode.STATUS_OK
 
     def init_overlay_reconciliation(self, overlayid, overlay_name,
-                                    overlay_type, tenantid, routerid,
+                                    overlay_type, tenantid, deviceid,
                                     overlay_info):
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
-            routerid, tenantid
+            deviceid, tenantid
         )
         # Get vxlan port set by user
         vxlan_port_site = storage_helper.get_tenant_vxlan_port(
@@ -1238,7 +1238,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         vrf_name = 'vrf-%s' % (tableid)
         # get WAN interface
         wan_intf_site = storage_helper.get_wan_interfaces(
-            routerid, tenantid
+            deviceid, tenantid
         )[0]
         # get VNI for the overlay
         vni = storage_helper.get_vni(overlay_name, tenantid)
@@ -1247,12 +1247,12 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # get VTEP IP address
         if overlay_type == OverlayType.IPv6Overlay:
             vtep_ip_site = storage_helper.get_vtep_ipv6(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET6
         else:
             vtep_ip_site = storage_helper.get_vtep_ip(
-                routerid, tenantid
+                deviceid, tenantid
             )
             vtep_ip_family = AF_INET
         # transport protocol
@@ -1319,7 +1319,7 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         # Success
         return NbStatusCode.STATUS_OK
 
-    def init_tunnel_mode_reconciliation(self, routerid, tenantid,
+    def init_tunnel_mode_reconciliation(self, deviceid, tenantid,
                                         overlay_info):
         # Success
         return NbStatusCode.STATUS_OK
