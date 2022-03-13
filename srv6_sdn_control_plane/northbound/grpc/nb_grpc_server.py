@@ -344,7 +344,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 )
             elif num != 0:
                 err = (
-                    'Cannot unregister the device. '
+                    'Cannot disable the device. '
                     'The device has %s (tenant %s) has tunnels registered' %
                     (deviceid, tenantid)
                 )
