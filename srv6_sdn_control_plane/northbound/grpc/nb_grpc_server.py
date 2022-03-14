@@ -344,7 +344,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 )
             elif num != 0:
                 err = (
-                    'Cannot unregister the device. '
+                    'Cannot disable the device. '
                     'The device has %s (tenant %s) has tunnels registered' %
                     (deviceid, tenantid)
                 )
@@ -784,7 +784,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=storage_helper.create_ipaddr,
+                                    rollback_func=(
+                                        self.srv6_manager.create_ipaddr
+                                    ),
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=addr,
@@ -818,7 +820,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                                 # Add reverse action to the rollback stack
                                 rollback.push(
                                     func=exec_or_mark_device_inconsitent,
-                                    rollback_func=storage_helper.remove_ipaddr,
+                                    rollback_func=(
+                                        self.srv6_manager.remove_ipaddr
+                                    ),
                                     server_ip=devices[deviceid]['mgmtip'],
                                     server_port=self.grpc_client_port,
                                     ip_addr=ipv4_addr,
@@ -1694,19 +1698,26 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 can_use_ipv6_addr_for_wan = True
                 can_use_ipv4_addr_for_wan = True
                 for _slice in slices:
+                    # Get WAN interface
+                    wan_interface = storage_helper.get_wan_interfaces(
+                        deviceid=_slice['deviceid'],
+                        tenantid=tenantid
+                    )[0]
+                    # Check if WAN interface has IPv6 connectivity
                     addrs = storage_helper.get_ext_ipv6_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv6_addr_for_wan = False
+                    # Check if WAN interface has IPv4 connectivity
                     addrs = storage_helper.get_ext_ipv4_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv4_addr_for_wan = False
                 if (
                     not can_use_ipv6_addr_for_wan
@@ -2692,19 +2703,26 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 can_use_ipv6_addr_for_wan = True
                 can_use_ipv4_addr_for_wan = True
                 for _slice in slices + incoming_slices:
+                    # Get WAN interface
+                    wan_interface = storage_helper.get_wan_interfaces(
+                        deviceid=_slice['deviceid'],
+                        tenantid=tenantid
+                    )[0]
+                    # Check if WAN interface has IPv6 connectivity
                     addrs = storage_helper.get_ext_ipv6_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv6_addr_for_wan = False
+                    # Check if WAN interface has IPv4 connectivity
                     addrs = storage_helper.get_ext_ipv4_addresses(
                         deviceid=_slice['deviceid'],
                         tenantid=tenantid,
-                        interface_name=_slice['interface_name']
+                        interface_name=wan_interface
                     )
-                    if addrs is None:
+                    if addrs is None or len(addrs) == 0:
                         can_use_ipv4_addr_for_wan = False
                 if (
                     not can_use_ipv6_addr_for_wan
