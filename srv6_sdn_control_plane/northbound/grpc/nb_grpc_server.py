@@ -1005,6 +1005,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                         stamp_source_ipv6_address=wan_ip,
                         is_sender=True,
                         is_reflector=True,
+                        tenantid=tenantid
                     )
                     # Add reverse action to the rollback stack
                     rollback.push(
@@ -1159,9 +1160,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
         if tenant_exists is None:
             err = 'Error while connecting to the controller state'
             logging.error(err)
-            return TenantReply(
-                status=Status(code=STATUS_INTERNAL_SERVER_ERROR, reason=err)
-            )
+            STATUS_INTERNAL_SERVER_ERROR, err
         elif tenant_exists is False:
             # If tenant ID is invalid, return an error message
             err = 'Tenant not found: %s' % tenantid
@@ -1208,6 +1207,34 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             logging.warning(err)
             return STATUS_BAD_REQUEST, err
         # All checks passed
+        #
+        # Remove curent STAMP information
+        if ENABLE_STAMP_SUPPORT:
+            logging.info('Removing current STAMP information\n\n')
+            # Configure information
+            try:
+                stamp_node = (
+                    self.stamp_controller.storage.get_stamp_node(
+                        node_id=deviceid, tenantid=tenantid
+                    )
+                )
+                if stamp_node is not None:
+                    self.stamp_controller.remove_stamp_node(
+                        node_id=deviceid,
+                    )
+            except NodeIdNotFoundError:
+                logging.debug(
+                    f'STAMP Node {deviceid} does not exist. '
+                    'Nothing to do.'
+                )
+            except STAMPSessionsExistError:
+                err = (
+                    f'STAMP Node {deviceid} is participating in one '
+                    'or more STAMP sessions. Delete all existing '
+                    'sessions before changing device configuration.'
+                )
+                logging.error(err)
+                return STATUS_BAD_REQUEST, err
         # Let's unregister the device
         #
         # Send shutdown command to device
@@ -3697,7 +3724,8 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     stamp_source_ipv6_address=wan_ip,
                     is_sender=True,
                     is_reflector=True,
-                    initialize=False
+                    initialize=False,
+                    tenantid=tenantid
                 )
             # Configure information
             self.stamp_controller.init_stamp_node(node_id=device['deviceid'])
