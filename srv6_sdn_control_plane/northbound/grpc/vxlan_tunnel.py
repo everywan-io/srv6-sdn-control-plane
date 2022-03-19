@@ -545,6 +545,23 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def remove_slice_from_overlay(self, overlayid, overlay_name, deviceid,
                                   interface_name, tenantid, overlay_info,
                                   ignore_errors=False):
+        if not storage_helper.is_device_connected(
+            deviceid=deviceid, tenantid=tenantid
+        ):
+            # The device is not connected, we skip it and we schedule a reboot
+            #
+            # Change device state to reboot required
+            success = storage_helper.change_device_state(
+                deviceid=deviceid,
+                tenantid=tenantid,
+                new_state=(
+                    storage_helper.DeviceState.REBOOT_REQUIRED
+                )
+            )
+            if success is False or success is None:
+                logging.error('Error changing the device state')
+                return NbStatusCode.STATUS_INTERNAL_ERROR
+            return NbStatusCode.STATUS_OK
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             deviceid, tenantid
@@ -642,19 +659,23 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
         if transport_proto == 'ipv6':
             wan_ip_local_site = storage_helper.get_ext_ipv6_addresses(
                 id_local_site, tenantid, wan_intf_local_site
-            )[0].split("/")[0]
+            )
             wan_ip_remote_site = storage_helper.get_ext_ipv6_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
-            )[0].split("/")[0]
+            )
         elif transport_proto == 'ipv4':
             wan_ip_local_site = storage_helper.get_ext_ipv4_addresses(
                 id_local_site, tenantid, wan_intf_local_site
-            )[0].split("/")[0]
+            )
             wan_ip_remote_site = storage_helper.get_ext_ipv4_addresses(
                 id_remote_site, tenantid, wan_intf_remote_site
-            )[0].split("/")[0]
+            )
         else:
             return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+        if wan_ip_local_site is not None and len(wan_ip_local_site) > 0:
+            wan_ip_local_site = wan_ip_local_site[0].split("/")[0]
+        if wan_ip_remote_site is not None and len(wan_ip_remote_site) > 0:
+            wan_ip_remote_site = wan_ip_remote_site[0].split("/")[0]
         # get local and remote subnet
         lan_sub_local_sites = storage_helper.get_ip_subnets(
             id_local_site, tenantid, l_slice['interface_name']
@@ -708,20 +729,36 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 lan_sub_local_site = lan_sub_local_site['subnet']
                 if lan_sub_local_site in tunnel_remote.get('reach_subnets'):
                     # remove route in remote site
-                    response = self.srv6_manager.remove_iproute(
-                        mgmt_ip_remote_site,
-                        self.grpc_client_port,
-                        destination=lan_sub_local_site,
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove route to %s in %s',
-                            lan_sub_local_site,
-                            mgmt_ip_remote_site
+                    if storage_helper.is_device_connected(
+                        deviceid=id_remote_site, tenantid=tenantid
+                    ):
+                        response = self.srv6_manager.remove_iproute(
+                            mgmt_ip_remote_site,
+                            self.grpc_client_port,
+                            destination=lan_sub_local_site,
+                            table=tableid
                         )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error
+                            # message
+                            logger.warning(
+                                'Cannot remove route to %s in %s',
+                                lan_sub_local_site,
+                                mgmt_ip_remote_site
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    else:
+                        # Change device state to reboot required
+                        success = storage_helper.change_device_state(
+                            deviceid=id_remote_site,
+                            tenantid=tenantid,
+                            new_state=(
+                                storage_helper.DeviceState.REBOOT_REQUIRED
+                            )
+                        )
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return NbStatusCode.STATUS_INTERNAL_ERROR
                     # update local dictionary
                     tunnel_remote.get('reach_subnets').remove(
                         lan_sub_local_site
@@ -733,21 +770,38 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             for lan_sub_remote_site in lan_sub_remote_sites:
                 lan_sub_remote_site = lan_sub_remote_site['subnet']
                 if lan_sub_remote_site in tunnel_local.get('reach_subnets'):
-                    # remove route in local site
-                    response = self.srv6_manager.remove_iproute(
-                        mgmt_ip_local_site,
-                        self.grpc_client_port,
-                        destination=lan_sub_remote_site,
-                        table=tableid
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove route to %s in %s',
-                            lan_sub_remote_site,
-                            mgmt_ip_local_site
+                    # remove route in remote site
+                    if storage_helper.is_device_connected(
+                        deviceid=id_local_site, tenantid=tenantid
+                    ):
+                        # remove route in local site
+                        response = self.srv6_manager.remove_iproute(
+                            mgmt_ip_local_site,
+                            self.grpc_client_port,
+                            destination=lan_sub_remote_site,
+                            table=tableid
                         )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error
+                            # message
+                            logger.warning(
+                                'Cannot remove route to %s in %s',
+                                lan_sub_remote_site,
+                                mgmt_ip_local_site
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    else:
+                        # Change device state to reboot required
+                        success = storage_helper.change_device_state(
+                            deviceid=id_local_site,
+                            tenantid=tenantid,
+                            new_state=(
+                                storage_helper.DeviceState.REBOOT_REQUIRED
+                            )
+                        )
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return NbStatusCode.STATUS_INTERNAL_ERROR
                     # update local dictionary
                     tunnel_local.get('reach_subnets').remove(
                         lan_sub_remote_site
@@ -777,20 +831,36 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 # Check if there is the fdb entry in local site for remote site
                 if tunnel_local.get('fdb_entry_config') is True:
                     # remove FDB entry in local site
-                    response = self.srv6_manager.delfdbentries(
-                        mgmt_ip_local_site,
-                        self.grpc_client_port,
-                        ifindex=vtep_name,
-                        dst=wan_ip_remote_site
-                    )
-                    if response != SbStatusCode.STATUS_SUCCESS:
-                        # If the operation has failed, report an error message
-                        logger.warning(
-                            'Cannot remove FDB entry %s in %s',
-                            wan_ip_remote_site,
-                            mgmt_ip_local_site
+                    if storage_helper.is_device_connected(
+                        deviceid=id_local_site, tenantid=tenantid
+                    ):
+                        response = self.srv6_manager.delfdbentries(
+                            mgmt_ip_local_site,
+                            self.grpc_client_port,
+                            ifindex=vtep_name,
+                            dst=wan_ip_remote_site
                         )
-                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                        if response != SbStatusCode.STATUS_SUCCESS:
+                            # If the operation has failed, report an error
+                            # message
+                            logger.warning(
+                                'Cannot remove FDB entry %s in %s',
+                                wan_ip_remote_site,
+                                mgmt_ip_local_site
+                            )
+                            return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    else:
+                        # Change device state to reboot required
+                        success = storage_helper.change_device_state(
+                            deviceid=id_local_site,
+                            tenantid=tenantid,
+                            new_state=(
+                                storage_helper.DeviceState.REBOOT_REQUIRED
+                            )
+                        )
+                        if success is False or success is None:
+                            logging.error('Error changing the device state')
+                            return NbStatusCode.STATUS_INTERNAL_ERROR
                     # update local dictionary
                     tunnel_local['fdb_entry_config'] = False
         # If there are no more overlay on the devices
@@ -871,6 +941,23 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
     def destroy_overlay(self, overlayid, overlay_name,
                         overlay_type, tenantid, deviceid, overlay_info,
                         ignore_errors=False):
+        if not storage_helper.is_device_connected(
+            deviceid=deviceid, tenantid=tenantid
+        ):
+            # The device is not connected, we skip it and we schedule a reboot
+            #
+            # Change device state to reboot required
+            success = storage_helper.change_device_state(
+                deviceid=deviceid,
+                tenantid=tenantid,
+                new_state=(
+                    storage_helper.DeviceState.REBOOT_REQUIRED
+                )
+            )
+            if success is False or success is None:
+                logging.error('Error changing the device state')
+                return NbStatusCode.STATUS_INTERNAL_ERROR
+            return NbStatusCode.STATUS_OK
         # get device management IP address
         mgmt_ip_site = storage_helper.get_router_mgmtip(
             deviceid, tenantid
