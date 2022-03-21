@@ -1220,7 +1220,7 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 )
                 if stamp_node is not None:
                     self.stamp_controller.remove_stamp_node(
-                        node_id=deviceid,
+                        node_id=deviceid, tenantid=tenantid
                     )
             except NodeIdNotFoundError:
                 logging.debug(
