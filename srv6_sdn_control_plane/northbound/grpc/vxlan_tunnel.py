@@ -808,21 +808,37 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     )
             # Check if there is the fdb entry in remote site for local site
             if tunnel_remote.get('fdb_entry_config') is True:
-                # remove FDB entry in remote site
-                response = self.srv6_manager.delfdbentries(
-                    mgmt_ip_remote_site,
-                    self.grpc_client_port,
-                    ifindex=vtep_name,
-                    dst=wan_ip_local_site
-                )
-                if response != SbStatusCode.STATUS_SUCCESS:
-                    # If the operation has failed, report an error message
-                    logger.warning(
-                        'Cannot remove FDB entry %s in %s',
-                        wan_ip_local_site,
-                        mgmt_ip_remote_site
+                # remove route in remote site
+                if storage_helper.is_device_connected(
+                    deviceid=id_remote_site, tenantid=tenantid
+                ):
+                    # remove FDB entry in remote site
+                    response = self.srv6_manager.delfdbentries(
+                        mgmt_ip_remote_site,
+                        self.grpc_client_port,
+                        ifindex=vtep_name,
+                        dst=wan_ip_local_site
                     )
-                    return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                    if response != SbStatusCode.STATUS_SUCCESS:
+                        # If the operation has failed, report an error message
+                        logger.warning(
+                            'Cannot remove FDB entry %s in %s',
+                            wan_ip_local_site,
+                            mgmt_ip_remote_site
+                        )
+                        return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
+                else:
+                    # Change device state to reboot required
+                    success = storage_helper.change_device_state(
+                        deviceid=id_remote_site,
+                        tenantid=tenantid,
+                        new_state=(
+                            storage_helper.DeviceState.REBOOT_REQUIRED
+                        )
+                    )
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return NbStatusCode.STATUS_INTERNAL_ERROR
                 # update local dictionary
                 tunnel_remote['fdb_entry_config'] = False
             # Check if there are no more remote subnets
