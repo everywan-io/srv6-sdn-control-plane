@@ -2142,8 +2142,6 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 logging.warning(err)
                 return STATUS_BAD_REQUEST, err
             overlay = overlays[0]
-            # Get the tenant ID
-            tenantid = overlay['tenantid']
             # Check tenant ID
             if tenantid != overlay['tenantid']:
                 # If the overlay does not exist, return an error message
