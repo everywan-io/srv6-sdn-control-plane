@@ -3726,7 +3726,9 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                     tenantid=tenantid
                 )
             # Configure information
-            self.stamp_controller.init_stamp_node(node_id=device['deviceid'])
+            self.stamp_controller.init_stamp_node(
+                node_id=device['deviceid'], tenantid=tenantid
+            )
 
             stamp_sessions = self.stamp_controller.storage.get_stamp_sessions(
                 tenantid=tenantid
