@@ -131,7 +131,7 @@ class NorthboundInterface:
             channel = grpc.insecure_channel(ip_address)
         return srv6_vpn_pb2_grpc.NorthboundInterfaceStub(channel), channel
 
-    def configure_tenant(self, tenantid, tenant_info='', vxlan_port=-1):
+    def configure_tenant(self, tenantid, tenant_info='', vxlan_port=0):
         # Create request
         request = srv6_vpn_pb2.Tenant()
         request.tenantid = tenantid
