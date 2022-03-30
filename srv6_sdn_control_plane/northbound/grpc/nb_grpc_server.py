@@ -46,6 +46,7 @@ from srv6_sdn_proto import srv6_vpn_pb2
 from srv6_sdn_control_plane import srv6_controller_utils
 from srv6_sdn_control_plane.northbound.grpc import tunnel_utils
 from srv6_sdn_control_plane.southbound.grpc import sb_grpc_client
+from srv6_sdn_control_plane.northbound.grpc.exceptions import BadRequestError, InternalServerError
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_controller_state import (
     srv6_sdn_controller_state as storage_helper
@@ -162,63 +163,134 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
             '*** Supported tunnel modes: %s' % self.supported_tunnel_modes
         )
 
-    """ Configure a tenant """
+    def configure_tenant(self, tenantid, tenant_info=None, vxlan_port=None):
+        """
+        Configure an existing tenant. VXLAN port can be set only when the
+        tenant is configured for the first time.
 
-    def ConfigureTenant(self, request, context):
-        logging.debug('Configure tenant request received: %s' % request)
+        Parameters
+        ----------
+        tenantid : str
+            The ID of the tenant.
+        tenant_info : tenant_info, optional
+            A description or name for the tenant, if None the tenant ID will
+            be used also as tenant_info, by default None.
+        vxlan_port : int, optional
+            Port number to be used for VXLAN tunnels or None to use the
+            default VXLAN port (4789), by default None.
+
+        Raises
+        ------
+        BadRequestError
+            If tenant ID or VXLAN port is invalid, tenant does not exist,
+            or you are trying to change the VXLAN port for a already
+            configured tenant.
+        InternalServerError
+            If an error occurred while trying to update the database.
+        """
+
         with RollbackContext() as rollback:
-            # Extract tenant ID
-            tenantid = request.tenantid
-            # Extract tenant info
-            tenant_info = request.tenant_info
-            tenant_info = tenant_info if tenant_info != '' else None
-            # Extract VXLAN port
-            vxlan_port = request.config.vxlan_port
-            vxlan_port = vxlan_port if vxlan_port != -1 else None
-            # Parmeters validation
-            #
+
             # Validate tenant ID
-            logging.debug('Validating the tenant ID: %s' % tenantid)
+            logging.debug(f'Validating the tenant ID: {tenantid}')
             if not srv6_controller_utils.validate_tenantid(tenantid):
-                # If tenant ID is invalid, return an error message
-                err = 'Invalid tenant ID: %s' % tenantid
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err)
-                )
+                raise BadRequestError(f'Invalid tenant ID: {tenantid}')
+
+            # Get the tenant
+            logging.debug(f'Getting current tenant configuration: {tenantid}')
+            tenant = storage_helper.get_tenant(tenantid=tenantid)
+            if tenant is None:
+                raise BadRequestError(f'Tenant not found: {tenantid}')
+
+            # If the tenant is not yet configured and VXLAN port and tenant
+            # info has not been provided, we need to choose default values for
+            # these params
+            is_tenant_configured = tenant.get('configured', False)
+            if not is_tenant_configured:
+                if vxlan_port is None:
+                    vxlan_port = DEFAULT_VXLAN_PORT
+                if tenant_info is None:
+                    tenant_info = tenantid
+
             # Validate VXLAN port
-            if not srv6_controller_utils.validate_port(vxlan_port):
-                # If VXLAN port is invalid, return an error message
-                err = (
-                    'Invalid VXLAN port %s for the tenant: %s'
-                    % (vxlan_port, tenantid)
+            if (
+                vxlan_port is not None
+                and not srv6_controller_utils.validate_port(vxlan_port)
+            ):
+                raise BadRequestError(
+                    f'Invalid VXLAN port {vxlan_port} for the '
+                    f'tenant: {tenantid}'
                 )
-                logging.warning(err)
-                return OverlayServiceReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err)
+
+            # Extract the current VXLAN port number
+            tenant_config = tenant.get('config', None)
+            current_vxlan_port = None
+            if tenant_config is not None:
+                current_vxlan_port = tenant_config.get('vxlan_port', None)
+
+            # VXLAN port cannot be changed if the tenant is already configured
+            if (
+                is_tenant_configured and vxlan_port is not None
+                and vxlan_port != current_vxlan_port
+            ):
+                raise BadRequestError(
+                    'Cannot change the VXLAN port for a configured tenant'
                 )
-            # Check if the tenant is configured
-            is_config = storage_helper.is_tenant_configured(
-                tenantid
-            )
-            if is_config and vxlan_port is not None:
-                err = 'Cannot change the VXLAN port for a configured tenant'
-                logging.error(err)
-                return TenantReply(
-                    status=Status(code=STATUS_BAD_REQUEST, reason=err)
-                )
+
             # Configure the tenant
-            vxlan_port = (
-                vxlan_port if vxlan_port is not None else DEFAULT_VXLAN_PORT
-            )
-            storage_helper.configure_tenant(
-                tenantid, tenant_info, vxlan_port
-            )
-            # TODO handle rollback?
+            if not storage_helper.configure_tenant(
+                tenantid=tenantid,
+                tenant_info=tenant_info,
+                vxlan_port=vxlan_port
+            ):
+                raise InternalServerError(
+                    'Cannot change tenant configuration in db'
+                )
+
             # Success, commit all performed operations
             rollback.commitAll()
-        # Response
-        return TenantReply(status=Status(code=STATUS_OK, reason='OK'))
+
+    def ConfigureTenant(self, request, context):
+        """
+        Configure a tenant.
+        """
+
+        logging.debug('Configure tenant request received: %s' % request)
+
+        # Extract tenant ID
+        tenantid = request.tenantid
+
+        # Extract tenant info and resolve default
+        tenant_info = request.tenant_info
+        tenant_info = tenant_info if tenant_info != '' else None
+
+        # Extract VXLAN port and resolve default
+        vxlan_port = request.config.vxlan_port
+        vxlan_port = vxlan_port if vxlan_port != 0 else None
+
+        # Configure the device
+        code = STATUS_OK
+        reason = 'OK'
+        try:
+            logging.debug(
+                f'Trying to configure tenant, tenantid: {tenantid}, '
+                f'tenant_info: {tenant_info}, vxlan_port: {vxlan_port}')
+            self.configure_tenant(
+                tenantid=tenantid,
+                tenant_info=tenant_info,
+                vxlan_port=vxlan_port
+            )
+        except BadRequestError as err:
+            code = STATUS_BAD_REQUEST
+            reason = str(err)
+            logging.error(f'Configure tenant failed with error: {reason}')
+        except InternalServerError as err:
+            code = STATUS_INTERNAL_SERVER_ERROR
+            reason = str(err)
+            logging.error(f'Configure tenant failed with error: {reason}')
+        finally:
+            # Return success or failure response to the caller
+            return TenantReply(status=Status(code=code, reason=reason))
 
     """ Remove a tenant """
 
