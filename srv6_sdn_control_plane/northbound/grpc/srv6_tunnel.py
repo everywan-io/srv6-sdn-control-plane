@@ -3186,7 +3186,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     remote_addr=sid_list[0],
                     tunnel_type=tunnel_type
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot create the IP Tunnel interface. Tunnel already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
                         'Cannot create the IP Tunnel interface: %s', response
                     )
@@ -3236,7 +3240,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     device=ip6tnl_tx_ifname,
                     family=AF_INET6
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot assign the IP address to the tunnel interface. Address already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed,
                     # report an error message
                     logging.warning(
@@ -3313,7 +3321,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         remote_addr=sid_list[-1],
                         tunnel_type='ip6ip6'
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot create the tunnel interface. Tunnel already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         logger.warning(
                             'Cannot create the IP Tunnel interface: %s',
                             response
@@ -3367,7 +3379,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         device=ip6tnl_tx_ifname,
                         family=AF_INET6
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot assign the IP address to the tunnel interface. Address already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed,
                         # report an error message
                         logging.warning(
@@ -3400,7 +3416,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         out_interface=ip6tnl_tx_ifname,
                         table=tableid
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot set the route. Route already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning(
                             'Cannot set route for %s in %s ',
@@ -3438,7 +3458,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             segments=sid_list[:-1],
                             encapmode='encap'
                         )
-                        if response != SbStatusCode.STATUS_SUCCESS:
+                        if response == SbStatusCode.STATUS_FILE_EXISTS:
+                           logger.warning(
+                               'Cannot create the SRv6 Explicit Path. Path already exists. Skipping'
+                           )
+                        elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
                             # message
                             logger.warning(
@@ -3469,7 +3493,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             out_interface=ip6tnl_tx_ifname,
                             table=tableid
                         )
-                        if response != SbStatusCode.STATUS_SUCCESS:
+                        if response == SbStatusCode.STATUS_FILE_EXISTS:
+                            logger.warning(
+                                'Cannot create the route. Route already exists. Skipping'
+                            )
+                        elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
                             # message
                             logger.warning(
@@ -3502,7 +3530,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             segments=sid_list,
                             encapmode='encap'
                         )
-                        if response != SbStatusCode.STATUS_SUCCESS:
+                        if response == SbStatusCode.STATUS_FILE_EXISTS:
+                            logger.warning(
+                                'Cannot create the SRv6 path. Path already exists. Skipping'
+                            )
+                        elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
                             # message
                             logger.warning(
@@ -3683,7 +3715,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     remote_addr=l_device_wan_ipaddr.split('/')[0],
                     tunnel_type=tunnel_type
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot create the tunnel. Tunnel already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
                         'Cannot create the IP Tunnel interface: %s', response
                     )
@@ -3739,7 +3775,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     device=ip6tnl_rx_ifname,
                     family=AF_INET6
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot assign the IP address. Address already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed,
                     # report an error message
                     logging.warning(
@@ -3818,7 +3858,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         remote_addr=l_device_wan_ipaddr.split('/')[0],
                         tunnel_type='ip6ip6'
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot create the tunnel. Tunnel already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         logger.warning(
                             'Cannot create the IP Tunnel interface: %s',
                             response
@@ -3865,7 +3909,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         device=ip6tnl_rx_ifname,
                         family=AF_INET6
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot assign ip. IP already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed,
                         # report an error message
                         logging.warning(
@@ -3950,7 +3998,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     table=srv6_controller_utils.LOCAL_SID_TABLE,
                     destination=sid_family
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot create the IP rule. IP rule already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
                         'Cannot create the IP rule for destination %s: %s',
                         sid_family,
@@ -3982,7 +4034,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     type='blackhole',
                     table=srv6_controller_utils.LOCAL_SID_TABLE
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot create the IP route. Route already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
                         'Cannot create the blackhole route: %s', response
                     )
@@ -4058,7 +4114,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 name=overlay_name,
                 table=tableid
             )
-            if response != SbStatusCode.STATUS_SUCCESS:
+            if response == SbStatusCode.STATUS_FILE_EXISTS:
+                logger.warning(
+                   'Cannot create the VRF. VRF already exists. Skipping'
+                )
+            elif response != SbStatusCode.STATUS_SUCCESS:
                 logger.warning(
                     'Cannot create the VRF %s: %s' % (overlay_name, response)
                 )
@@ -4119,7 +4179,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     table=tableid
                 )
             )
-            if response != SbStatusCode.STATUS_SUCCESS:
+            if response == SbStatusCode.STATUS_FILE_EXISTS:
+                logger.warning(
+                    'Cannot create the seg6local route. Route already exists. Skipping'
+                )
+            elif response != SbStatusCode.STATUS_SUCCESS:
                 logger.warning(
                     'Cannot create the SRv6 Local Processing function: %s',
                     response
@@ -4170,7 +4234,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     device=dev,
                     family=AF_INET6
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logger.warning(
+                        'Cannot create the proxy ndp. Proxy already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, return an error message
                     logger.warning('Cannot add proxy NDP: %s', response)
                     return NbStatusCode.STATUS_INTERNAL_SERVER_ERROR
@@ -4294,7 +4362,11 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         out_interface=interface_name,
                         table=tableid
                     )
-                    if response != SbStatusCode.STATUS_SUCCESS:
+                    if response == SbStatusCode.STATUS_FILE_EXISTS:
+                        logger.warning(
+                            'Cannot create the route. Route already exists. Skipping'
+                        )
+                    elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
                         logger.warning(
                             'Cannot set route for %s (gateway %s) in %s ',
