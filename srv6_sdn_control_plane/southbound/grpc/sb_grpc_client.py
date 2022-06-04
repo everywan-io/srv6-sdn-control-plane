@@ -869,7 +869,9 @@ class SRv6Manager:
         return response
 
     def remove_many_ipaddr(self, server_ip, server_port, addrs,
-                           device, nets=[], family=-1):
+                           device, nets=None, family=-1):
+        if nets is None:
+            nets = []
         # Create message request
         srv6_request = srv6_manager_pb2.SRv6ManagerRequest()
         # Set the type of the carried entity

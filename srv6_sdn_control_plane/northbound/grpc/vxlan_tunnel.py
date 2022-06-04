@@ -1133,7 +1133,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     out_interface=interface_name,
                     table=tableid
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logging.warning(
+                        'Cannot set route. Route already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
                         'Cannot set route for %s (gateway %s) in %s ',
@@ -1234,7 +1238,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 ifindex=vtep_name,
                 dst=wan_ip_remote_site
             )
-            if response != SbStatusCode.STATUS_SUCCESS:
+            if response == SbStatusCode.STATUS_FILE_EXISTS:
+                logging.warning(
+                    'Cannot set FDB entry. FDB entry already exists. Skipping'
+                )
+            elif response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning(
                     'Cannot add FDB entry %s for VTEP %s in %s',
@@ -1256,7 +1264,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     gateway=vtep_ip_remote_site.split("/")[0],
                     table=tableid
                 )
-                if response != SbStatusCode.STATUS_SUCCESS:
+                if response == SbStatusCode.STATUS_FILE_EXISTS:
+                    logging.warning(
+                        'Cannot set route. Route already exists. Skipping'
+                    )
+                elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
                         'Cannot set route for %s in %s ',
@@ -1372,7 +1384,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             vxlan_port=vxlan_port_site,
             vxlan_group='::' if transport_proto == 'ipv6' else '0.0.0.0'
         )
-        if response != SbStatusCode.STATUS_SUCCESS:
+        if response == SbStatusCode.STATUS_FILE_EXISTS:
+            logging.warning('Cannot create VTEP. VTEP already exists.Skipping')
+        elif response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot create VTEP %s in %s',
@@ -1388,7 +1402,11 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             device=vtep_name, net='',
             family=vtep_ip_family
         )
-        if response != SbStatusCode.STATUS_SUCCESS:
+        if response == SbStatusCode.STATUS_FILE_EXISTS:
+            logging.warning(
+                'Cannot set IP for vtep. IP already exists. Skipping'
+            )
+        elif response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot set IP %s for VTEP %s in %s',
@@ -1405,7 +1423,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             table=tableid,
             interfaces=[vtep_name]
         )
-        if response != SbStatusCode.STATUS_SUCCESS:
+        if response == SbStatusCode.STATUS_FILE_EXISTS:
+            logging.warning('Cannot create vrf. VRF already exists.Skipping')
+        elif response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(
                 'Cannot create VRF %s in %s',
