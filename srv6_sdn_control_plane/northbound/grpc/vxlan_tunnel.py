@@ -1134,7 +1134,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     table=tableid
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
-                    logging.warning('Cannot set route. Route already exists.Skipping')
+                    logging.warning(
+                        'Cannot set route. Route already exists. Skipping'
+                    )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
@@ -1237,7 +1239,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                 dst=wan_ip_remote_site
             )
             if response == SbStatusCode.STATUS_FILE_EXISTS:
-                logging.warning('Cannot set FDB entry. FDB entry already exists.Skipping')
+                logging.warning(
+                    'Cannot set FDB entry. FDB entry already exists. Skipping'
+                )
             elif response != SbStatusCode.STATUS_SUCCESS:
                 # If the operation has failed, report an error message
                 logger.warning(
@@ -1261,7 +1265,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
                     table=tableid
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
-                    logging.warning('Cannot set route. Route already exists.Skipping')
+                    logging.warning(
+                        'Cannot set route. Route already exists. Skipping'
+                    )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, report an error message
                     logger.warning(
@@ -1397,7 +1403,9 @@ class VXLANTunnel(tunnel_mode.TunnelMode):
             family=vtep_ip_family
         )
         if response == SbStatusCode.STATUS_FILE_EXISTS:
-            logging.warning('Cannot set IP for vtep. IP already exists.Skipping')
+            logging.warning(
+                'Cannot set IP for vtep. IP already exists. Skipping'
+            )
         elif response != SbStatusCode.STATUS_SUCCESS:
             # If the operation has failed, report an error message
             logger.warning(

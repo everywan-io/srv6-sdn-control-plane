@@ -3188,7 +3188,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot create the IP Tunnel interface. Tunnel already exists. Skipping'
+                        'Cannot create the IP Tunnel interface. Tunnel '
+                        'already exists. Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
@@ -3242,7 +3243,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot assign the IP address to the tunnel interface. Address already exists. Skipping'
+                        'Cannot assign the IP address to the tunnel '
+                        'interface. Address already exists. Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed,
@@ -3323,7 +3325,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     )
                     if response == SbStatusCode.STATUS_FILE_EXISTS:
                         logger.warning(
-                            'Cannot create the tunnel interface. Tunnel already exists. Skipping'
+                            'Cannot create the tunnel interface. Tunnel '
+                            'already exists. Skipping'
                         )
                     elif response != SbStatusCode.STATUS_SUCCESS:
                         logger.warning(
@@ -3381,7 +3384,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     )
                     if response == SbStatusCode.STATUS_FILE_EXISTS:
                         logger.warning(
-                            'Cannot assign the IP address to the tunnel interface. Address already exists. Skipping'
+                            'Cannot assign the IP address to the tunnel '
+                            'interface. Address already exists. Skipping'
                         )
                     elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed,
@@ -3418,7 +3422,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     )
                     if response == SbStatusCode.STATUS_FILE_EXISTS:
                         logger.warning(
-                            'Cannot set the route. Route already exists. Skipping'
+                            'Cannot set the route. Route already exists. '
+                            'Skipping'
                         )
                     elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
@@ -3459,9 +3464,10 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                             encapmode='encap'
                         )
                         if response == SbStatusCode.STATUS_FILE_EXISTS:
-                           logger.warning(
-                               'Cannot create the SRv6 Explicit Path. Path already exists. Skipping'
-                           )
+                            logger.warning(
+                               'Cannot create the SRv6 Explicit Path. Path '
+                               'already exists. Skipping'
+                            )
                         elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
                             # message
@@ -3495,7 +3501,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         )
                         if response == SbStatusCode.STATUS_FILE_EXISTS:
                             logger.warning(
-                                'Cannot create the route. Route already exists. Skipping'
+                                'Cannot create the route. Route already '
+                                'exists. Skipping'
                             )
                         elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
@@ -3532,7 +3539,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                         )
                         if response == SbStatusCode.STATUS_FILE_EXISTS:
                             logger.warning(
-                                'Cannot create the SRv6 path. Path already exists. Skipping'
+                                'Cannot create the SRv6 path. Path already '
+                                'exists. Skipping'
                             )
                         elif response != SbStatusCode.STATUS_SUCCESS:
                             # If the operation has failed, report an error
@@ -3717,7 +3725,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot create the tunnel. Tunnel already exists. Skipping'
+                        'Cannot create the tunnel. Tunnel already exists. '
+                        'Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
@@ -3777,7 +3786,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot assign the IP address. Address already exists. Skipping'
+                        'Cannot assign the IP address. Address already '
+                        'exists. Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed,
@@ -3860,7 +3870,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     )
                     if response == SbStatusCode.STATUS_FILE_EXISTS:
                         logger.warning(
-                            'Cannot create the tunnel. Tunnel already exists. Skipping'
+                            'Cannot create the tunnel. Tunnel already exists. '
+                            'Skipping'
                         )
                     elif response != SbStatusCode.STATUS_SUCCESS:
                         logger.warning(
@@ -4000,7 +4011,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot create the IP rule. IP rule already exists. Skipping'
+                        'Cannot create the IP rule. IP rule already exists. '
+                        'Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
@@ -4036,7 +4048,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot create the IP route. Route already exists. Skipping'
+                        'Cannot create the IP route. Route already exists. '
+                        'Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     logger.warning(
@@ -4181,7 +4194,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             )
             if response == SbStatusCode.STATUS_FILE_EXISTS:
                 logger.warning(
-                    'Cannot create the seg6local route. Route already exists. Skipping'
+                    'Cannot create the seg6local route. Route already exists. '
+                    'Skipping'
                 )
             elif response != SbStatusCode.STATUS_SUCCESS:
                 logger.warning(
@@ -4236,7 +4250,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 )
                 if response == SbStatusCode.STATUS_FILE_EXISTS:
                     logger.warning(
-                        'Cannot create the proxy ndp. Proxy already exists. Skipping'
+                        'Cannot create the proxy ndp. Proxy already exists. '
+                        'Skipping'
                     )
                 elif response != SbStatusCode.STATUS_SUCCESS:
                     # If the operation has failed, return an error message
@@ -4364,7 +4379,8 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                     )
                     if response == SbStatusCode.STATUS_FILE_EXISTS:
                         logger.warning(
-                            'Cannot create the route. Route already exists. Skipping'
+                            'Cannot create the route. Route already exists. '
+                            'Skipping'
                         )
                     elif response != SbStatusCode.STATUS_SUCCESS:
                         # If the operation has failed, report an error message
