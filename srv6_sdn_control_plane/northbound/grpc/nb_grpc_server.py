@@ -1235,6 +1235,29 @@ class NorthboundInterface(srv6_vpn_pb2_grpc.NorthboundInterfaceServicer):
                 )
                 logging.error(err)
                 return STATUS_BAD_REQUEST, err
+            except grpc.RpcError:
+                if ignore_errors:
+                    err = (
+                        'Unregister STAMP information failed. Setting reboot '
+                        'required flag.'
+                    )
+                    logging.warning(err)
+                    # Change device state to reboot required
+                    success = storage_helper.change_device_state(
+                        deviceid=deviceid,
+                        tenantid=tenantid,
+                        new_state=storage_helper.DeviceState.REBOOT_REQUIRED
+                    )
+                    if success is False or success is None:
+                        logging.error('Error changing the device state')
+                        return status_codes_pb2.STATUS_INTERNAL_ERROR
+                else:
+                    err = (
+                        'Cannot unregister the device. '
+                        'Error while unregistering STAMP information'
+                    )
+                    logging.error(err)
+                    return STATUS_INTERNAL_SERVER_ERROR, err
         # Let's unregister the device
         #
         # Send shutdown command to device
