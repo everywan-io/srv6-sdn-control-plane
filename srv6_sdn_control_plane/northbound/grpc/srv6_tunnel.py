@@ -140,7 +140,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 dest_slice=r_slice
             )
             # If the uni tunnel already exists, we have done
-            if num_tunnels > 1:
+            if num_tunnels is not None and num_tunnels > 1:
                 logger.debug(
                     'Skip tunnel %s %s',
                     l_slice['interface_name'],
@@ -844,7 +844,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
             # Check if there are other unidirectional tunnels
             # between the two slices
             # If the uni tunnel already exists, we have done
-            if num_tunnels > 0:
+            if num_tunnels is not None and num_tunnels > 0:
                 # Success, commit all performed operations
                 rollback.commitAll()
                 return NbStatusCode.STATUS_OK
@@ -3055,7 +3055,7 @@ class SRv6Tunnel(tunnel_mode.TunnelMode):
                 dest_slice=r_slice
             )
             # If the uni tunnel already exists, we have done
-            if num_tunnels > 1:
+            if num_tunnels is not None and num_tunnels > 1:
                 logger.debug(
                     'Skip tunnel %s %s',
                     l_slice['interface_name'],
